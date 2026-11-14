@@ -1,0 +1,17 @@
+name: Agy PR review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  agy-review:
+    uses: mctlhq/.github/.github/workflows/agy-review.yml@main
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      conventions: |
+        Focus on: Go concurrency safety, goroutine leaks, context propagation in I/O, error wrapping, fail-closed handling (an unobservable dependency is an error, never an empty result), JWT/JWKS verification and audience checks, HTTP status and header hygiene, MCP tool schema parity, and missing test coverage for changed behavior.

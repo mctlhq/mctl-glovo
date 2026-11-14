@@ -1,0 +1,43 @@
+name: Claude PR review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  claude-review:
+    uses: mctlhq/.github/.github/workflows/claude-review.yml@25478e959d7fdc25dba4f87a15effb5af8254b75
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+      # The pinned review job requests actions: read to see the PR's CI; a
+      # caller's block caps the called job, so it must be granted here too.
+      actions: read
+    with:
+      # dependabot is listed so its PRs get reviewed automatically.
+      # Without it claude-code-action hard-fails with "Workflow initiated
+      # by non-human actor", and since branch protection requires an
+      # approving review, dependabot PRs then sit unmergeable until a
+      # maintainer triggers a review by hand.
+      allowed-bots: "mctl-claude-remote,github-actions,dependabot,mctl-agents,mctl-codex"
+      sensitive-paths: '^internal/(auth|authn|join|mcp|store)/'
+      conventions: |
+        Follow the conventions in this repository's CLAUDE.md (Go style,
+        conventional commits, English only, no emoji).
+
+        Focus on:
+        - Correctness and logic errors; edge cases the change misses.
+        - Security: injection, authentication/authorization, secret
+          handling, unsafe input.
+        - Concurrency: data races, deadlocks, goroutine leaks.
+        - Error handling: ignored errors, missing context, panics.
+        - Test coverage: behaviour changed without a corresponding test.
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
