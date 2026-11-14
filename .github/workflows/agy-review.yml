@@ -1,0 +1,19 @@
+name: Agy PR review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+jobs:
+  agy-review:
+    # Pinned like claude-review: this job holds pull-requests: write, so a
+    # mutable ref would run unreviewed changes to the reusable workflow.
+    uses: mctlhq/.github/.github/workflows/agy-review.yml@8e12ed0663a877e0430161228c521820aa7da036
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      conventions: |
+        Focus on: Go concurrency safety, goroutine leaks, context propagation in I/O, error wrapping, fail-closed handling (an unobservable dependency is an error, never an empty result), JWT/JWKS verification and audience checks, HTTP status and header hygiene, MCP tool schema parity, and missing test coverage for changed behavior.
