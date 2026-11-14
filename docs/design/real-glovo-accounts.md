@@ -1,6 +1,6 @@
 # Design: real Glovo accounts behind glovo.mctl.ai
 
-Status: DRAFT, for owner decision. Nothing here is built or approved.
+Status: DECIDED 2026-11-15 (section 8): C1 and C2. Nothing is built yet.
 Scope decision (owner, 2026-11-15): option C, designed for external users
 from the start, not only for the owner.
 
@@ -104,3 +104,35 @@ install something.
 2. For C1: which cities/addresses must work first?
 3. For C3: acceptable that external users install a local connector?
 4. Who gives the legal read on R1/R4 if C2 is ever considered?
+
+## 8. Decision (owner, 2026-11-15)
+
+Pursue **C1 and C2**. C0 and C3 are not pursued now.
+
+How the two fit together:
+
+- **C1 is the external-user product.** No Glovo credential is stored.
+  `glovo-skill` already separates the calls: store walls, search and store
+  content go to `api.glovoapp.com` without `Authorization` (default
+  `auth = false` in `src/glovo/api.mjs`); baskets, orders, profile and
+  addresses need the user's token. C1 uses only the first group, with an
+  address the user types, and ends in a handoff (list and/or deep link) the
+  user completes in Glovo. R1 still applies in a weaker form (automated
+  reads of a private API from our servers); the partner question stays open.
+- **C2 is owner-only first**, behind its own flag, never on by default.
+  It is opened to anyone else only after: a written legal read on R1 and R4,
+  a security review of the token store, the DPA and privacy notice, and a
+  new owner decision recorded here. Until then the allowlist for C2 is the
+  owner alone, enforced in mctl-api like today's pilot allowlist.
+
+### Phases
+
+| Phase | What | Gate |
+|---|---|---|
+| C1-S0 | Spike: which read endpoints work without an account (stores near an address, catalog, prices, product options); rate behaviour from one IP; response stability. Output: endpoint list + fixtures. | none (read-only, a few calls, no account) |
+| C1-1 | Real catalog tools in mctl-glovo replacing the synthetic catalog for C1 users: search stores by address, list products, get product. Server-side cache with short TTL, global request cap, kill switch. | review + owner GO for prod |
+| C1-2 | Basket in MCTL from real product ids, owner approval as today, then the handoff output. | review + owner GO |
+| C2-0 | Token store design review: Vault transit envelope encryption per user, no clear token in Postgres, logs or traces; link/unlink/revoke; audit lines; breach runbook. | security review |
+| C2-1 | Account linking for the owner only via a local helper (the token never passes through the chat or the model). | owner GO |
+| C2-2 | Owner-only tools: order history, suggestions, real basket edit, every write behind approval. Still no checkout or payment. | owner GO |
+| C2-3 | External users. | legal read + new owner decision |
