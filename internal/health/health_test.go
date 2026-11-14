@@ -15,6 +15,19 @@ func serve(t *testing.T, h *Handler, path string) int {
 	h.Register(mux)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, http.NoBody))
+	if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("%s Cache-Control = %q, want no-store", path, got)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+		t.Errorf("%s Content-Type = %q", path, got)
+	}
+	want := "ok\n"
+	if rec.Code != http.StatusOK {
+		want = "not ready\n"
+	}
+	if got := rec.Body.String(); got != want {
+		t.Errorf("%s body = %q, want %q", path, got, want)
+	}
 	return rec.Code
 }
 

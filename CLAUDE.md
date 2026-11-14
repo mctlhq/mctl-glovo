@@ -25,8 +25,8 @@ the 401 challenge, the audience check) and the basket data.
   environment, from Vault via ExternalSecrets in mctl-gitops.
 
 ## Conventions
-- Go, standard library first. `GOTOOLCHAIN=go1.26.10` if the local toolchain
-  is broken.
+- Go, standard library first. `go.mod` pins Go 1.26.11; if the local brew
+  toolchain is broken, use `GOTOOLCHAIN=go1.26.11`.
 - Conventional commits; every commit carries an `Agent:` trailer
   (`claude`, `codex`, `agy` or `none`).
 - English for code, comments, docs and everything on GitHub. No emoji.

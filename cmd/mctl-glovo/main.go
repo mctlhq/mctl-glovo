@@ -61,6 +61,9 @@ func run(log *slog.Logger) error {
 		return err
 	case <-ctx.Done():
 	}
+	// Restore default signal handling: a second SIGINT/SIGTERM during a hung
+	// shutdown kills the process instead of being swallowed.
+	stop()
 
 	shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
