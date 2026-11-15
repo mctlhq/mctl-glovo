@@ -1,0 +1,17 @@
+{
+  "count": 2,
+  "results": [
+    {
+      "place_id": "p1",
+      "provider": "google",
+      "title": "One",
+      "subtitle": "Area"
+    },
+    {
+      "place_id": "p2",
+      "provider": "google",
+      "title": "Two",
+      "subtitle": "District"
+    }
+  ]
+}

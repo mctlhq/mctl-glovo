@@ -1,0 +1,51 @@
+{
+  "pagination": {
+    "next": {
+      "offset": 24
+    }
+  },
+  "count": 2,
+  "stores": [
+    {
+      "id": "1001",
+      "store_id": "1001",
+      "store_address_id": 2001,
+      "name": "Example Market",
+      "slug": "example-market",
+      "category": "Supermarket",
+      "category_id": 4,
+      "store_class": "grocery",
+      "open": true,
+      "eta": "20-30 min",
+      "distance": "1.2 km",
+      "rating": 94,
+      "votes": 120,
+      "delivery_fee": 1.99,
+      "service_fee": 0.5,
+      "image": "https://glovo.dhmedia.io/image/img-store-1",
+      "logo": "https://img.example.test/logo.png",
+      "url": "https://glovoapp.com/en/es/barcelona/stores/example-market"
+    },
+    {
+      "id": "1002",
+      "store_id": "1002",
+      "store_address_id": 2002,
+      "name": "Sample Pharmacy",
+      "category_id": 3,
+      "store_class": "retail",
+      "open": true,
+      "eta": null
+    }
+  ],
+  "category": {
+    "id": 4,
+    "name": "Groceries"
+  },
+  "widgets": [
+    {
+      "id": "w1",
+      "title": "Featured",
+      "template_id": "T1"
+    }
+  ]
+}

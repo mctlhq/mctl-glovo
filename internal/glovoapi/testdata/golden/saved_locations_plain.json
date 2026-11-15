@@ -1,0 +1,64 @@
+{
+  "count": 3,
+  "current_location": {
+    "country_code": "PT"
+  },
+  "selected": null,
+  "default": {
+    "id": "addr-2",
+    "label": "Office",
+    "address_line": "Work Avenue 2",
+    "country_code": "ES",
+    "city_code": "BCN",
+    "latitude": "41.5",
+    "longitude": "2.18",
+    "selected": false,
+    "default": true,
+    "set_location_args": {
+      "country_code": "ES",
+      "city_code": "BCN",
+      "latitude": "41.5",
+      "longitude": "2.18"
+    }
+  },
+  "matched": null,
+  "saved_locations": [
+    {
+      "id": "addr-1",
+      "label": "Home",
+      "subtitle": "Testville",
+      "address_line": "Example Street 1",
+      "details": "2A",
+      "kind": "APARTMENT",
+      "tag": "HOME",
+      "city": "Testville",
+      "country_code": "ES",
+      "city_code": "BCN",
+      "selected": false,
+      "default": false
+    },
+    {
+      "id": "addr-2",
+      "label": "Office",
+      "address_line": "Work Avenue 2",
+      "country_code": "ES",
+      "city_code": "BCN",
+      "latitude": "41.5",
+      "longitude": "2.18",
+      "selected": false,
+      "default": true,
+      "set_location_args": {
+        "country_code": "ES",
+        "city_code": "BCN",
+        "latitude": "41.5",
+        "longitude": "2.18"
+      }
+    },
+    {
+      "id": "3",
+      "address_line": "No codes",
+      "selected": false,
+      "default": false
+    }
+  ]
+}

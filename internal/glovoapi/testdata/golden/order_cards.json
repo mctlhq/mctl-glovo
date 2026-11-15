@@ -1,0 +1,31 @@
+[
+  {
+    "order_id": "9001",
+    "store": "Example Market",
+    "status": "DELIVERED",
+    "date": 1767225600000,
+    "total": "5,40 EUR",
+    "items": [
+      "2x Test Milk",
+      "1x Test Bread"
+    ],
+    "url": "https://glovoapp.com/en/profile/past-orders/9001"
+  },
+  {
+    "order_id": 9002,
+    "store": "Sample Pizzeria",
+    "date": "2026-01-02T12:00:00Z",
+    "total": "12,00 EUR",
+    "items": [
+      "Test Pizza",
+      "Test Soda",
+      "Test Salad"
+    ],
+    "url": "https://glovoapp.com/en/profile/past-orders/9002"
+  },
+  {
+    "order_id": "code-only",
+    "store": "Code Store",
+    "items": []
+  }
+]

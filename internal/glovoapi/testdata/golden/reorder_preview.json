@@ -1,0 +1,49 @@
+{
+  "order_id": 9001,
+  "store": "Example Market",
+  "native_reorder_allowed": true,
+  "can_go_to_store": true,
+  "has_store_id": true,
+  "has_store_address_id": true,
+  "items_count": 3,
+  "can_prepare_basket": false,
+  "unsupported_reasons": [
+    "missing_product_identifier",
+    "option_payload_requires_live_revalidation"
+  ],
+  "limitation": "Read-only preview only. This order detail does not expose enough stable current product/option identifiers for a lossless basket rebuild.",
+  "items": [
+    {
+      "index": 0,
+      "name": "Test Milk",
+      "quantity": 2,
+      "has_product_identifier": true,
+      "has_selected_options": false,
+      "can_prepare_line": true,
+      "unsupported_reasons": []
+    },
+    {
+      "index": 1,
+      "name": "Test Bread",
+      "quantity": 1,
+      "has_product_identifier": false,
+      "has_selected_options": true,
+      "can_prepare_line": false,
+      "unsupported_reasons": [
+        "missing_product_identifier",
+        "option_payload_requires_live_revalidation"
+      ]
+    },
+    {
+      "index": 2,
+      "name": "Mystery item",
+      "quantity": 1,
+      "has_product_identifier": false,
+      "has_selected_options": false,
+      "can_prepare_line": false,
+      "unsupported_reasons": [
+        "missing_product_identifier"
+      ]
+    }
+  ]
+}

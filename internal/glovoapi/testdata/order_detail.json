@@ -1,0 +1,12 @@
+{
+  "id": 9001, "storeId": 1001, "storeAddressId": 2001, "storeName": "Example Market", "storeSlug": "example-market",
+  "currentStatus": { "type": "DELIVERED", "creationTime": 1767225600000 },
+  "reorderData": { "allowed": true }, "handlingStrategy": { "type": "DELIVERY" }, "canGoToStore": true,
+  "total": { "formatted": "5,40 EUR" },
+  "boughtProducts": [
+    { "name": "Test Milk", "quantity": "2", "price": "2,40 EUR", "customizationsDescription": "Cold", "freeProduct": false, "id": 5001 },
+    { "productName": "Test Bread", "quantity": { "increments": "1,5" }, "price": { "formatted": "3,00 EUR" }, "promotionDescription": "2x1", "freeProduct": true, "options": [ { "x": 1 } ] },
+    { "title": "Mystery item" }
+  ],
+  "pricingBreakdown": { "lines": [ { "type": "TOTAL", "description": "Total", "amount": "5,40 EUR", "note": null }, { "type": "FEE", "finalAmount": "1,00 EUR" } ] }
+}

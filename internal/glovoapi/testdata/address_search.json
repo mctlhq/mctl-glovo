@@ -1,0 +1,9 @@
+{ "data": [
+  { "placeId": "p1", "provider": "google", "title": "One", "subtitle": "Area", "address": "hidden full address" },
+  { "placeId": "p2", "provider": "google", "title": "Two", "secondaryText": "District", "formattedAddress": "hidden formatted" },
+  { "place_id": "p3", "source": "osm", "mainText": "Three" },
+  { "id": "p4", "description": "Four" },
+  { "placeId": "", "title": "No id" },
+  { "placeId": "p6", "provider": "google", "title": "Six" },
+  { "placeId": "p7", "provider": "google", "title": "Seven" }
+] }

@@ -1,0 +1,1 @@
+{ "title": "Restrictions", "restrictions": [ { "id": "r1", "text": "No alcohol" }, { "id": "r2", "description": "Age check", "hyperlink": { "url": "https://example.test/terms" } } ] }

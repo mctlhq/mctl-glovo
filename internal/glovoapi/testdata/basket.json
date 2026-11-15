@@ -1,0 +1,18 @@
+{
+  "basketId": "basket-test-1", "basketVersion": 3, "storeId": 1001, "storeAddressId": 2001,
+  "handlingStrategy": "DELIVERY",
+  "basketPrice": { "final": { "formatted": "5,40 EUR", "major": 5.4 } },
+  "products": [
+    {
+      "ids": { "basketProductId": "bp-test-1", "id": "5001", "externalId": "ext-5001", "storeProductId": "sp-5001" },
+      "name": "Test Milk 1L", "quantity": { "increments": 2 },
+      "price": { "final": { "formatted": "2,40 EUR" } }, "imageUrl": "https://img.example.test/m.png"
+    },
+    {
+      "ids": { "basketProductId": "bp-test-2", "id": "5004", "externalId": "ext-5004", "storeProductId": "sp-5004" },
+      "productName": "Test Pizza", "quantity": { "increments": 1 },
+      "customizations": [ { "name": "Large" }, { "name": "Cheese" } ],
+      "price": { "final": { "major": 3 } }
+    }
+  ]
+}

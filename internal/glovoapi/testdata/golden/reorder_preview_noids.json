@@ -1,0 +1,15 @@
+{
+  "order_id": "x",
+  "store": null,
+  "native_reorder_allowed": false,
+  "can_go_to_store": false,
+  "has_store_id": false,
+  "has_store_address_id": false,
+  "items_count": 0,
+  "can_prepare_basket": false,
+  "unsupported_reasons": [
+    "order_detail_has_no_product_lines"
+  ],
+  "limitation": "Read-only preview only. This order detail does not expose enough stable current product/option identifiers for a lossless basket rebuild.",
+  "items": []
+}

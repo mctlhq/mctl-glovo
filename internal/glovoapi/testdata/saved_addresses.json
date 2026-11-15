@@ -1,0 +1,17 @@
+{
+  "data": {
+    "addresses": [
+      {
+        "entryType": "SAVED_ADDRESS", "title": "Home", "subtitle": "Testville", "apiToken": "must-not-leak",
+        "address": {
+          "id": "addr-1", "addressLine": "Example Street 1", "details": "2A", "kind": "APARTMENT", "tag": "HOME",
+          "cityName": "Testville", "cityCode": "bcn", "countryCode": "es", "latitude": 41.4, "longitude": 2.17,
+          "fields": [ { "type": "POSTAL_CODE", "value": "00000" } ], "apiToken": "must-not-leak"
+        }
+      },
+      { "entryType": "RECENT_ADDRESS", "title": "Recent", "address": { "id": "recent-1", "addressLine": "Recent Street", "cityCode": "BCN", "countryCode": "ES", "latitude": 41.5, "longitude": 2.18 } },
+      { "entryType": "SAVED_ADDRESS", "title": "Office", "isDefault": "true", "address": { "id": "addr-2", "addressLine": "Work Avenue 2", "cityCode": "BCN", "countryCode": "ES", "latitude": 41.5, "longitude": 2.18 } },
+      { "entryType": "SAVED_ADDRESS", "address": { "id": 3, "addressLine": "No codes", "details": "" } }
+    ]
+  }
+}

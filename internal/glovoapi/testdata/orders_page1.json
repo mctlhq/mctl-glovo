@@ -1,0 +1,8 @@
+{
+  "pagination": { "next": { "offset": "cursor-b" } },
+  "orders": [
+    { "orderId": "9001", "content": { "title": "Example Market", "body": [ { "data": "2x Test Milk\n1x Test Bread" }, { "text": "  " } ] }, "footer": { "left": { "data": "5,40 EUR" } }, "status": "DELIVERED", "creationTime": 1767225600000 },
+    { "id": 9002, "storeName": "Sample Pizzeria", "products": [ { "name": "Test Pizza" }, { "productName": "Test Soda" }, { "title": "Test Salad" } ], "total": { "formatted": "12,00 EUR" }, "createdAt": "2026-01-02T12:00:00Z" },
+    { "orderCode": "code-only", "content": { "title": "Code Store" } }
+  ]
+}

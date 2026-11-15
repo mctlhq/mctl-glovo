@@ -1,0 +1,68 @@
+{
+  "kind": "easy_reorder",
+  "count": 2,
+  "sections": [
+    {
+      "type": "CAROUSEL",
+      "title": "Order again",
+      "slug": "easy-reorder",
+      "collection_type": "EasyReorder",
+      "products": [
+        {
+          "id": "1",
+          "product_id": "1",
+          "external_id": "external-1",
+          "store_product_id": "store-product-1",
+          "name": "Whole Milk",
+          "price": "1.50 EUR",
+          "available": true,
+          "description": "1L",
+          "collection_type": "EasyReorder",
+          "ordered_before": true,
+          "source": "easy_reorder"
+        },
+        {
+          "id": "4",
+          "product_id": "4",
+          "external_id": "external-4",
+          "store_product_id": "store-product-4",
+          "name": "Butter",
+          "price": "€3.00",
+          "amount": 3,
+          "available": null,
+          "collection_type": "EasyReorder",
+          "ordered_before": false,
+          "source": "easy_reorder"
+        }
+      ]
+    }
+  ],
+  "products": [
+    {
+      "id": "1",
+      "product_id": "1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "name": "Whole Milk",
+      "price": "1.50 EUR",
+      "available": true,
+      "description": "1L",
+      "collection_type": "EasyReorder",
+      "ordered_before": true,
+      "source": "easy_reorder"
+    },
+    {
+      "id": "4",
+      "product_id": "4",
+      "external_id": "external-4",
+      "store_product_id": "store-product-4",
+      "name": "Butter",
+      "price": "€3.00",
+      "amount": 3,
+      "available": null,
+      "collection_type": "EasyReorder",
+      "ordered_before": false,
+      "source": "easy_reorder"
+    }
+  ]
+}

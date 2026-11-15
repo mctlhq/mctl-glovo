@@ -1,0 +1,51 @@
+{
+  "order_id": 9001,
+  "store": "Example Market",
+  "store_id": 1001,
+  "store_address_id": 2001,
+  "store_slug": "example-market",
+  "status": "DELIVERED",
+  "date": "2026-01-01T00:00:00.000Z",
+  "total": "5,40 EUR",
+  "handling_strategy": "DELIVERY",
+  "native_reorder_allowed": true,
+  "can_go_to_store": true,
+  "refunded": false,
+  "items": [
+    {
+      "name": "Test Milk",
+      "quantity": 2,
+      "price": "2,40 EUR",
+      "customizations": "Cold",
+      "free_product": false,
+      "promotion": null
+    },
+    {
+      "name": "Test Bread",
+      "quantity": 1.5,
+      "price": "3,00 EUR",
+      "customizations": null,
+      "free_product": true,
+      "promotion": "2x1"
+    },
+    {
+      "name": "Mystery item",
+      "quantity": 1,
+      "price": null,
+      "customizations": null,
+      "free_product": false,
+      "promotion": null
+    }
+  ],
+  "pricing_breakdown": [
+    {
+      "type": "TOTAL",
+      "description": "Total",
+      "amount": "5,40 EUR"
+    },
+    {
+      "type": "FEE",
+      "final_amount": "1,00 EUR"
+    }
+  ]
+}
