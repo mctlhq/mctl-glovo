@@ -33,6 +33,9 @@
     {"name": "no_match", "venue": "Favorite Pizza", "city": "BCN", "include_reviews": false, "review_limit": 3,
      "search": {"status": 200, "body": {}}},
     {"name": "search_error", "venue": "Favorite Pizza", "city": "BCN", "include_reviews": false, "review_limit": 3,
-     "search": {"status": 503, "body": {}}}
+     "search": {"status": 503, "body": {}}},
+    {"name": "details_without_reviews_or_attributions", "venue": "Favorite Pizza", "city": "BCN", "include_reviews": true, "review_limit": 3,
+     "search": {"status": 200, "body": {"places": [{"id": "p4", "displayName": {"text": "Favorite Pizza"}, "location": {"latitude": 41.381, "longitude": 2.17}, "attributions": [{"provider": "Example"}]}]}},
+     "details": {"status": 200, "body": {"id": "p4"}}}
   ]
 }

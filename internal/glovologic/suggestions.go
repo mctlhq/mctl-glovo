@@ -3,6 +3,7 @@ package glovologic
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net/url"
 	"sort"
@@ -457,13 +458,23 @@ func optString(v any) string {
 	return jsString(v)
 }
 
+// resolveFailures counts the reads resolveProduct could not make.
+type resolveFailures struct {
+	content int // personalized carousels; optional, as upstream
+	lookup  int // store searches and product views
+}
+
 // resolveProduct is resolveProduct: a live, addable product for the store,
-// or nil. Source failures skip the store, as upstream; malformed data is an
-// *InputError.
-func resolveProduct(ctx context.Context, src SuggestionSource, s *candidateStore, in intent, sleep Sleep) (Object, error) {
+// or nil. A failed read skips the store, as upstream, but is counted in f
+// so the caller can tell an outage from "nothing matched"; malformed data
+// is an *InputError.
+func resolveProduct(ctx context.Context, src SuggestionSource, s *candidateStore, in intent, sleep Sleep, f *resolveFailures) (Object, error) {
 	var easy, top []Object
 	if s.familiar || in.itemMode != "any" {
 		content, err := src.StoreContent(ctx, s.StoreID, jsString(s.StoreAddressID))
+		if err != nil && !isInputError(err) {
+			f.content++
+		}
 		if err == nil {
 			for _, k := range []struct {
 				kind string
@@ -471,6 +482,10 @@ func resolveProduct(ctx context.Context, src SuggestionSource, s *candidateStore
 			}{{"easy_reorder", &easy}, {"top_sellers", &top}} {
 				raw, cerr := content(k.kind, 40)
 				if cerr != nil {
+					if isInputError(cerr) {
+						return nil, cerr
+					}
+					f.content++
 					break
 				}
 				ps, derr := decodeProducts(raw, "store_content."+k.kind)
@@ -512,6 +527,7 @@ func resolveProduct(ctx context.Context, src SuggestionSource, s *candidateStore
 			if isInputError(err) {
 				return nil, err
 			}
+			f.lookup++
 			return nil, nil
 		}
 		candidate = chooseProduct(results, in.query, exclude)
@@ -544,6 +560,7 @@ func resolveProduct(ctx context.Context, src SuggestionSource, s *candidateStore
 		if isInputError(err) {
 			return nil, err
 		}
+		f.lookup++
 		return nil, nil
 	}
 	if detail["add_enabled"] != true {
@@ -691,6 +708,10 @@ type SuggestionCoverage struct {
 	ProductDetailHistoryOrdersForRanking int           `json:"product_detail_history_orders_used_for_ranking"`
 	BenchmarkDetailedOrders              int           `json:"benchmark_detailed_orders"`
 	ProductRankingSource                 string        `json:"product_ranking_source"`
+	// Not in upstream: reads that failed while resolving products. Store
+	// content is optional; lookups are store searches and product views.
+	StoreContentFailures  int `json:"store_content_failures"`
+	ProductLookupFailures int `json:"product_lookup_failures"`
 }
 
 // GoogleQuality summarizes optional Google Maps evidence.
@@ -834,12 +855,20 @@ func GetSuggestions(ctx context.Context, src SuggestionSource, sess SessionState
 		liveRaw   []byte
 		searchErr error
 	)
+	// The live search and the history walk run concurrently on src, as
+	// upstream; a failed history walk cancels the search instead of
+	// waiting out its retries.
+	searchCtx, cancelSearch := context.WithCancel(ctx)
+	defer cancelSearch()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		liveRaw, searchErr = withRetry(ctx, sleep, 2, func() ([]byte, error) { return src.SearchStores(ctx, in.query) })
+		liveRaw, searchErr = withRetry(searchCtx, sleep, 2, func() ([]byte, error) { return src.SearchStores(searchCtx, in.query) })
 	}()
 	discovery, cacheErr := o.Cache.CachedOrderCards(ctx, src, sess.CustomerID, CacheOptions{Refresh: in.historyRefresh, PageDelay: 750 * time.Millisecond, MaxRetries: 4})
+	if cacheErr != nil {
+		cancelSearch()
+	}
 	wg.Wait()
 	if cacheErr != nil {
 		return nil, cacheErr
@@ -868,11 +897,12 @@ func GetSuggestions(ctx context.Context, src SuggestionSource, sess SessionState
 	}
 	candidates := attachHistory(open, history)
 	choices := []Choice{}
+	var failures resolveFailures
 	for _, s := range selectStores(candidates, in) {
 		if len(choices) >= in.maxChoices {
 			break
 		}
-		product, err := resolveProduct(ctx, src, s, in, sleep)
+		product, err := resolveProduct(ctx, src, s, in, sleep, &failures)
 		if err != nil {
 			return nil, err
 		}
@@ -893,6 +923,10 @@ func GetSuggestions(ctx context.Context, src SuggestionSource, sess SessionState
 			PersonalizedEvidence: historyEvidence(s.history),
 			Reasons:              reasonFor(s, product, in),
 		})
+	}
+
+	if len(choices) == 0 && failures.lookup > 0 {
+		return nil, fmt.Errorf("glovologic: no live product could be resolved: %d store searches or product views failed", failures.lookup)
 	}
 
 	useGoogle := in.includeGoogle || in.includeGoogleReviews || in.qualityPreference == "google"
@@ -963,6 +997,8 @@ func GetSuggestions(ctx context.Context, src SuggestionSource, sess SessionState
 			ResolvedLiveProducts:              len(choices),
 			BenchmarkDetailedOrders:           15,
 			ProductRankingSource:              "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model",
+			StoreContentFailures:              failures.content,
+			ProductLookupFailures:             failures.lookup,
 		},
 		Choices:       choices,
 		GoogleQuality: gq,

@@ -391,4 +391,3 @@ func googleReviews(ctx context.Context, client *http.Client, baseURL, apiKey, pl
 	}
 	return reviews, attrs, true
 }
-

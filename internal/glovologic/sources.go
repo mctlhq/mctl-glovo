@@ -69,11 +69,18 @@ type HistorySource interface {
 // ProductRequest identifies a product for getProduct (api.mjs:398). Empty
 // strings are absent parameters.
 type ProductRequest struct {
-	StoreID, StoreAddressID, ProductID, ExternalID       string
+	StoreID, StoreAddressID, ProductID, ExternalID        string
 	CategoryID, CollectionID, CollectionGroupID, SearchID string
 }
 
 // SuggestionSource is everything getSuggestions reads from Glovo.
+//
+// Concurrency: GetSuggestions calls SearchStores from its own goroutine
+// while OrderCards runs on the calling goroutine, so an implementation
+// must be safe for concurrent use by those two calls (shared session or
+// cookie state included). The other methods are called sequentially after
+// both have returned. Every method must honour ctx cancellation: a failed
+// history walk cancels the in-flight SearchStores.
 type SuggestionSource interface {
 	OrderCardSource
 	StoreContentSource
@@ -125,11 +132,15 @@ func withRetry[T any](ctx context.Context, sleep Sleep, maxRetries int, fn func(
 			return v, nil
 		}
 		var inErr *InputError
-		if attempt >= maxRetries || errors.As(err, &inErr) || ctx.Err() != nil {
+		if attempt >= maxRetries || errors.As(err, &inErr) {
 			return v, err
 		}
+		if cerr := ctx.Err(); cerr != nil {
+			return v, errors.Join(cerr, err)
+		}
 		if serr := sleep(ctx, retryDelay(err, attempt)); serr != nil {
-			return v, err
+			// Report the cancellation first; keep the failure that led here.
+			return v, errors.Join(serr, err)
 		}
 	}
 }

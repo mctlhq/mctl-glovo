@@ -20,7 +20,7 @@ const (
 )
 
 // HistoryCache is the order-card cache of history-cache.mjs. The cache file
-// is Dir/history-cache.json; the directory is kept at mode 0700 and the file
+// is Dir/history-cache.json; the directory is created at mode 0700 and the file
 // at 0600, and every write is atomic (temporary file, then rename). An empty
 // Dir disables the cache.
 type HistoryCache struct {
@@ -140,47 +140,76 @@ func validateCache(cache any, hash string) string {
 	return ""
 }
 
-// secureDir creates dir at 0700 and tightens an existing one to 0700.
-func secureDir(dir string) error {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	st, err := os.Stat(dir)
-	if err != nil {
-		return err
-	}
-	if st.Mode().Perm() != 0o700 {
-		return os.Chmod(dir, 0o700) // #nosec G302 -- a directory needs the execute bit
+// ErrUnsafeCache marks a cache directory or file this package refuses to
+// use: a symlink, something other than a directory or regular file, an
+// entry owned by another user, or one readable or writable by group or
+// others. Upstream tightens such paths with chmod; this port never changes
+// the mode of anything it did not create.
+var ErrUnsafeCache = errors.New("glovologic: unsafe history cache path")
+
+func unsafeCache(path, why string) error {
+	return fmt.Errorf("%w: %s %s", ErrUnsafeCache, path, why)
+}
+
+// checkPrivate refuses st unless it is a non-symlink entry of the wanted
+// type, owned by this user, with no group or other permission bits.
+func checkPrivate(path string, st fs.FileInfo, wantDir bool) error {
+	// st comes from Lstat, so a symlink fails both type checks.
+	switch {
+	case wantDir && !st.IsDir():
+		return unsafeCache(path, "is a symlink or not a directory")
+	case !wantDir && !st.Mode().IsRegular():
+		return unsafeCache(path, "is a symlink or not a regular file")
+	case !ownedByMe(st):
+		return unsafeCache(path, "is owned by another user")
+	case st.Mode().Perm()&0o077 != 0:
+		return unsafeCache(path, fmt.Sprintf("has mode %o, want no group or other access", st.Mode().Perm()))
 	}
 	return nil
 }
 
-// loadPrivateJSON is loadPrivateJson (auth/store.mjs).
+// privateDir creates dir at 0700 when it is missing and otherwise only
+// verifies it; an existing directory is never chmodded.
+func privateDir(dir string) error {
+	st, err := os.Lstat(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		st, err = os.Lstat(dir)
+	}
+	if err != nil {
+		return err
+	}
+	return checkPrivate(dir, st, true)
+}
+
+// loadPrivateJSON is loadPrivateJson (auth/store.mjs) without the chmod: a
+// missing file is fs.ErrNotExist, an unsafe one is ErrUnsafeCache.
 func loadPrivateJSON(file string) (any, error) {
-	if err := secureDir(filepath.Dir(file)); err != nil {
+	if err := privateDir(filepath.Dir(file)); err != nil {
 		return nil, err
 	}
-	st, err := os.Stat(file)
+	st, err := os.Lstat(file)
 	if err != nil {
 		return nil, err
 	}
-	if st.Mode().Perm() != 0o600 {
-		if err := os.Chmod(file, 0o600); err != nil {
-			return nil, err
-		}
+	if err := checkPrivate(file, st, false); err != nil {
+		return nil, err
 	}
-	data, err := os.ReadFile(file) // #nosec G304 -- path is the configured cache file
+	data, err := os.ReadFile(file) // #nosec G304 -- path is the configured cache file, checked above
 	if err != nil {
 		return nil, err
 	}
 	return decodeJSON(data)
 }
 
-// savePrivateJSON is savePrivateJson: write a 0600 temporary file in the same
-// directory, then rename it over the target.
+// savePrivateJSON is savePrivateJson: write a 0600 temporary file in the
+// same directory, then rename it over the target. The rename replaces the
+// directory entry, so it never writes through a symlink.
 func savePrivateJSON(file string, value any) error {
 	dir := filepath.Dir(file)
-	if err := secureDir(dir); err != nil {
+	if err := privateDir(dir); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(value, "", "  ")
@@ -197,6 +226,7 @@ func savePrivateJSON(file string, value any) error {
 		_ = os.Remove(name)
 		return e
 	}
+	// CreateTemp already uses 0600; this is the file we just created.
 	if err := tmp.Chmod(0o600); err != nil {
 		return cleanup(err)
 	}
@@ -214,7 +244,7 @@ func savePrivateJSON(file string, value any) error {
 		_ = os.Remove(name)
 		return err
 	}
-	return os.Chmod(file, 0o600)
+	return nil
 }
 
 func metadata(status, mode string, age *int64, d *Discovery, fullPages any, refreshedAt *string) CacheMetadata {
@@ -256,6 +286,8 @@ func (h HistoryCache) CachedOrderCards(ctx context.Context, src OrderCardSource,
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		invalid = "missing"
+	case errors.Is(err, ErrUnsafeCache):
+		return nil, err
 	case err != nil:
 		invalid = "corrupt"
 	default:

@@ -205,8 +205,8 @@ func BuildReorderPlan(order any, candidatesByLine map[int][]Object, maxSearches,
 		}
 	}
 	plan := &ReorderPlan{
-		StoreID:               coalesce(get(order, "storeId"), get(order, "store", "id"), Null),
-		StoreAddressID:        coalesce(get(order, "storeAddressId"), get(order, "store", "addressId"), Null),
+		StoreID:               coalesce(orderStoreID(order), Null),
+		StoreAddressID:        coalesce(orderStoreAddressID(order), Null),
 		ItemsCount:            len(items),
 		ResolvedItems:         resolvedCount,
 		UnresolvedItems:       len(items) - resolvedCount,
@@ -225,6 +225,18 @@ func BuildReorderPlan(order any, candidatesByLine map[int][]Object, maxSearches,
 		plan.NativeReorderAllowed = &allowed
 	}
 	return plan, nil
+}
+
+// orderStoreID and orderStoreAddressID are the fallback chains planReorder
+// searches with (api.mjs:620). The plan reports the same chains, so its
+// store_id and store_address_id always name the store that was searched;
+// upstream's compactReorderPreview stops one step earlier.
+func orderStoreID(order any) any {
+	return coalesce(get(order, "storeId"), get(order, "store", "id"), get(order, "store", "storeId"))
+}
+
+func orderStoreAddressID(order any) any {
+	return coalesce(get(order, "storeAddressId"), get(order, "store", "addressId"), get(order, "store", "storeAddressId"))
 }
 
 // PlanOptions are the glovo_plan_reorder inputs.
@@ -255,8 +267,7 @@ func PlanReorder(ctx context.Context, src ReorderSource, orderID string, o PlanO
 	if err := checkOrderDetail(order, "order"); err != nil {
 		return nil, err
 	}
-	storeID := coalesce(get(order, "storeId"), get(order, "store", "id"), get(order, "store", "storeId"))
-	storeAddressID := coalesce(get(order, "storeAddressId"), get(order, "store", "addressId"), get(order, "store", "storeAddressId"))
+	storeID, storeAddressID := orderStoreID(order), orderStoreAddressID(order)
 	if !truthy(storeID) || !truthy(storeAddressID) {
 		return BuildReorderPlan(order, nil, o.MaxSearches, 0)
 	}

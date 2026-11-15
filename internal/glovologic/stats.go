@@ -399,8 +399,9 @@ func DefaultAnalyzeOptions() AnalyzeOptions {
 
 // AnalyzeOrderHistory is GlovoClient.analyzeOrderHistory (api.mjs:584). A
 // rate-limited detail stops enrichment and is reported; any other detail
-// failure is counted in detail_errors. A detail that was read but is
-// malformed is an *InputError for the whole call.
+// failure is counted in detail_errors. When no detail of the subset could
+// be read at all, the call fails. A detail that was read but is malformed
+// is an *InputError for the whole call.
 func AnalyzeOrderHistory(ctx context.Context, src HistorySource, o AnalyzeOptions) (*HistoryAnalysis, error) {
 	if o.MaxPages < 0 || o.DetailLimit < 0 || o.DetailLimit > 50 ||
 		o.PageDelay < 0 || o.PageDelay > 10*time.Second || o.DetailDelay < 0 || o.DetailDelay > 10*time.Second {
@@ -445,6 +446,12 @@ func AnalyzeOrderHistory(ctx context.Context, src HistorySource, o AnalyzeOption
 				return nil, err
 			}
 		}
+	}
+	// Partial failures are tolerated and counted, as upstream; a subset in
+	// which no detail at all could be read is an outage, not an empty
+	// history.
+	if attempts > 0 && len(details) == 0 && (errCount > 0 || rateLimited) {
+		return nil, fmt.Errorf("glovologic: no order detail could be read (%d failed, rate limited: %t)", errCount, rateLimited)
 	}
 	analysis, err := OrderAnalysisFromDetails(details)
 	if err != nil {

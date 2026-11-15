@@ -172,7 +172,9 @@ func noSleep(context.Context, time.Duration) error { return nil }
 
 type cardSource struct{ raw json.RawMessage }
 
-func (s cardSource) OrderCards(context.Context, CardOptions) (json.RawMessage, error) { return s.raw, nil }
+func (s cardSource) OrderCards(context.Context, CardOptions) (json.RawMessage, error) {
+	return s.raw, nil
+}
 
 func TestGoldenStats(t *testing.T) {
 	f := fixture(t, "stats.json")
@@ -514,7 +516,15 @@ func TestGoldenSuggestions(t *testing.T) {
 		if got.MutatesBasket {
 			t.Errorf("%s: mutates_basket must be false", name)
 		}
-		assertEqual(t, name, plain(t, got), get(want, "cases", name))
+		if got.Coverage.ProductLookupFailures != 0 {
+			t.Errorf("%s: %d product lookups failed on a healthy source", name, got.Coverage.ProductLookupFailures)
+		}
+		// The failure counters are a Go addition; upstream has no field.
+		plainGot := plain(t, got).(map[string]any)
+		cov := plainGot["coverage"].(map[string]any)
+		delete(cov, "store_content_failures")
+		delete(cov, "product_lookup_failures")
+		assertEqual(t, name, plainGot, get(want, "cases", name))
 	}
 
 	_, err = GetSuggestions(context.Background(), &suggestionSource{t: t, f: f, inputs: inputs}, sess, SuggestionInput{Query: "   "}, SuggestOptions{Sleep: noSleep})

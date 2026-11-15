@@ -76,7 +76,9 @@ func TestDecodeDiscoveryFailsClosed(t *testing.T) {
 
 type errCards struct{ err error }
 
-func (s errCards) OrderCards(context.Context, CardOptions) (json.RawMessage, error) { return nil, s.err }
+func (s errCards) OrderCards(context.Context, CardOptions) (json.RawMessage, error) {
+	return nil, s.err
+}
 
 func TestGetOrderStatsPropagatesSourceError(t *testing.T) {
 	boom := errors.New("page 2 failed")
@@ -128,7 +130,7 @@ func TestPlanReorderValidatesOptions(t *testing.T) {
 }
 
 func TestHistoryCacheTreatsWrongTypedOrdersAsCorrupt(t *testing.T) {
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "cache")
 	customer := "synthetic-customer-1"
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	h := HistoryCache{Dir: dir, Now: func() time.Time { return now }}
@@ -181,22 +183,106 @@ func TestHistoryCacheDisabledWithoutCustomer(t *testing.T) {
 	}
 }
 
-func TestHistoryCacheTightensDirMode(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "loose")
-	if err := os.Mkdir(dir, 0o755); err != nil { // #nosec G301 -- deliberately loose, the cache must tighten it
-		t.Fatal(err)
-	}
+func cacheWalk(t *testing.T, dir string) (*CachedDiscovery, error) {
+	t.Helper()
 	customer := "synthetic-customer-1"
 	src := &recordingCards{raw: json.RawMessage(`{"orders":[{"order_id":"1"}],"pages":[{}],"count":1,"stopped_reason":"no_next_cursor"}`)}
-	if _, err := (HistoryCache{Dir: dir}).CachedOrderCards(context.Background(), src, &customer, CacheOptions{}); err != nil {
+	return HistoryCache{Dir: dir}.CachedOrderCards(context.Background(), src, &customer, CacheOptions{})
+}
+
+func wantUnsafe(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, ErrUnsafeCache) {
+		t.Fatalf("want ErrUnsafeCache, got %v", err)
+	}
+}
+
+func TestHistoryCacheCreatesPrivateDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "a", "b")
+	if _, err := cacheWalk(t, dir); err != nil {
 		t.Fatal(err)
 	}
-	di, err := os.Stat(dir)
+	for path, want := range map[string]os.FileMode{dir: 0o700, filepath.Join(dir, cacheFileName): 0o600} {
+		st, err := os.Lstat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Mode().Perm() != want {
+			t.Errorf("%s mode %o, want %o", path, st.Mode().Perm(), want)
+		}
+	}
+}
+
+func TestHistoryCacheRefusesOpenDirWithoutChmod(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "loose")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o755); err != nil { // #nosec G302 -- deliberately loose: the cache must refuse it
+		t.Fatal(err)
+	}
+	_, err := cacheWalk(t, dir)
+	wantUnsafe(t, err)
+	st, err := os.Lstat(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if di.Mode().Perm() != 0o700 {
-		t.Fatalf("dir mode %o, want 700", di.Mode().Perm())
+	if st.Mode().Perm() != 0o755 {
+		t.Fatalf("an existing dir must not be chmodded: mode %o", st.Mode().Perm())
+	}
+	if _, err := os.Lstat(filepath.Join(dir, cacheFileName)); !os.IsNotExist(err) {
+		t.Fatalf("nothing may be written into a refused dir (%v)", err)
+	}
+}
+
+func TestHistoryCacheRefusesSymlinkedDir(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	if err := os.Mkdir(real, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cacheWalk(t, link)
+	wantUnsafe(t, err)
+}
+
+func TestHistoryCacheRefusesSymlinkedOrOpenFile(t *testing.T) {
+	base := t.TempDir()
+	target := filepath.Join(base, "target.json")
+	if err := os.WriteFile(target, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(base, "cache")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, cacheFileName)
+	if err := os.Symlink(target, file); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cacheWalk(t, dir)
+	wantUnsafe(t, err)
+
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(file, 0o644); err != nil { // #nosec G302 -- deliberately loose: the cache must refuse it
+		t.Fatal(err)
+	}
+	_, err = cacheWalk(t, dir)
+	wantUnsafe(t, err)
+	st, err := os.Lstat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Mode().Perm() != 0o644 {
+		t.Fatalf("an existing file must not be chmodded: mode %o", st.Mode().Perm())
 	}
 }
 
@@ -213,4 +299,21 @@ func TestCompactGlobalStoreSearchFailsClosed(t *testing.T) {
 			t.Errorf("%s: want an error", raw)
 		}
 	}
+}
+
+func TestHistoryCacheRefusesWrongEntryTypes(t *testing.T) {
+	base := t.TempDir()
+	notDir := filepath.Join(base, "file-as-dir")
+	if err := os.WriteFile(notDir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cacheWalk(t, notDir)
+	wantUnsafe(t, err)
+
+	dir := filepath.Join(base, "cache")
+	if err := os.MkdirAll(filepath.Join(dir, cacheFileName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err = cacheWalk(t, dir)
+	wantUnsafe(t, err)
 }

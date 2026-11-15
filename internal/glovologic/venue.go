@@ -29,18 +29,18 @@ var MultiscaleVenueModel = VenueModel{
 
 // HoldoutEvidence is VENUE_HOLDOUT_EVIDENCE, the published benchmark.
 type HoldoutEvidence struct {
-	SourceSnapshot       string  `json:"source_snapshot"`
-	UsableOrders         int     `json:"usable_orders"`
-	TrainOrders          int     `json:"train_orders"`
-	ValidationOrders     int     `json:"validation_orders"`
-	FinalTestOrders      int     `json:"final_test_orders"`
-	PrecisionAt5         float64 `json:"precision_at_5"`
-	RecallAt5            float64 `json:"recall_at_5"`
-	NDCGAt5              float64 `json:"ndcg_at_5"`
-	RepeatRecallAt5      float64 `json:"repeat_recall_at_5"`
-	NovelTargetShare     float64 `json:"novel_target_share"`
-	PopularityRecallAt5  float64 `json:"popularity_recall_at_5"`
-	PopularityNDCGAt5    float64 `json:"popularity_ndcg_at_5"`
+	SourceSnapshot      string  `json:"source_snapshot"`
+	UsableOrders        int     `json:"usable_orders"`
+	TrainOrders         int     `json:"train_orders"`
+	ValidationOrders    int     `json:"validation_orders"`
+	FinalTestOrders     int     `json:"final_test_orders"`
+	PrecisionAt5        float64 `json:"precision_at_5"`
+	RecallAt5           float64 `json:"recall_at_5"`
+	NDCGAt5             float64 `json:"ndcg_at_5"`
+	RepeatRecallAt5     float64 `json:"repeat_recall_at_5"`
+	NovelTargetShare    float64 `json:"novel_target_share"`
+	PopularityRecallAt5 float64 `json:"popularity_recall_at_5"`
+	PopularityNDCGAt5   float64 `json:"popularity_ndcg_at_5"`
 }
 
 // VenueHoldoutEvidence is VENUE_HOLDOUT_EVIDENCE.
@@ -227,12 +227,12 @@ func summedDecay(occurrences []int, step int, halfLife float64) float64 {
 }
 
 type rankedRow struct {
-	key                              string
-	displayName                      any
-	count                            int
-	frequency, recency, transition   float64
-	lastOrderAge                     int
-	score                            float64
+	key                            string
+	displayName                    any
+	count                          int
+	frequency, recency, transition float64
+	lastOrderAge                   int
+	score                          float64
 }
 
 func (s *venueState) rankedRows(m VenueModel) []rankedRow {
@@ -457,24 +457,24 @@ func selectWithinOneStandardError(rows []validatedModel) validatedModel {
 // VenueEvaluation is the runVenueEvaluation result.
 type VenueEvaluation struct {
 	Dataset struct {
-		CapturedOrders              int    `json:"captured_orders"`
-		UsableVenueOrders           int    `json:"usable_venue_orders"`
-		ExcludedCancelledOrInvalid  int    `json:"excluded_cancelled_or_invalid"`
-		UniqueVenues                int    `json:"unique_venues"`
-		ProductModel                string `json:"product_model"`
+		CapturedOrders             int    `json:"captured_orders"`
+		UsableVenueOrders          int    `json:"usable_venue_orders"`
+		ExcludedCancelledOrInvalid int    `json:"excluded_cancelled_or_invalid"`
+		UniqueVenues               int    `json:"unique_venues"`
+		ProductModel               string `json:"product_model"`
 	} `json:"dataset"`
 	Split struct {
-		Strategy                  string `json:"strategy"`
-		TrainOrders               int    `json:"train_orders"`
-		ValidationOrders          int    `json:"validation_orders"`
-		FinalTestOrders           int    `json:"final_test_orders"`
-		RollingUpdatesAfterScoring bool  `json:"rolling_updates_after_scoring"`
+		Strategy                   string `json:"strategy"`
+		TrainOrders                int    `json:"train_orders"`
+		ValidationOrders           int    `json:"validation_orders"`
+		FinalTestOrders            int    `json:"final_test_orders"`
+		RollingUpdatesAfterScoring bool   `json:"rolling_updates_after_scoring"`
 	} `json:"split"`
 	Selection struct {
-		Model                  VenueModel   `json:"model"`
-		Validation             VenueMetrics `json:"validation"`
-		Rule                   string       `json:"rule"`
-		SelectionUsedTestData  bool         `json:"selection_used_test_data"`
+		Model                 VenueModel   `json:"model"`
+		Validation            VenueMetrics `json:"validation"`
+		Rule                  string       `json:"rule"`
+		SelectionUsedTestData bool         `json:"selection_used_test_data"`
 	} `json:"selection"`
 	FinalTest struct {
 		Popularity VenueMetrics `json:"popularity"`
