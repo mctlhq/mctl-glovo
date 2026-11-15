@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"regexp"
@@ -88,6 +90,14 @@ type Client struct {
 	sleep           func(context.Context, time.Duration) error
 	newID           func() string
 
+	// Egress. proxyURL, when set, is the only route to baseURL: the
+	// transport is built here and never consults the environment.
+	proxyURL     *url.URL
+	requireProxy bool
+	customHTTP   bool
+	proxyTLS     *tls.Config // tests only: trust roots for the upstream
+	optErr       error
+
 	refreshMu sync.Mutex // serialises refreshes
 	mu        sync.Mutex // guards session
 	session   Session
@@ -99,8 +109,72 @@ type Client struct {
 type Option func(*Client)
 
 // WithHTTPClient sets the HTTP client. The default is a client with a 30s
-// timeout.
-func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.httpClient = h } }
+// timeout. It cannot be combined with WithProxy or WithRequireProxy, because
+// a caller-supplied transport could route around the proxy.
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		if h == nil {
+			c.setOptErr(errors.New("glovoapi: WithHTTPClient: nil client"))
+			return
+		}
+		c.httpClient, c.customHTTP = h, true
+	}
+}
+
+// WithProxy sends every request, token refresh included, through the HTTP
+// forward proxy at proxyURL. The client builds its own transport, a clone of
+// http.DefaultTransport whose Proxy is http.ProxyURL(proxyURL), so
+// HTTPS_PROXY, HTTP_PROXY and NO_PROXY are never consulted and cannot route
+// Glovo traffic around the proxy. A request the proxy cannot carry fails; it
+// is never retried without the proxy.
+//
+// Only "http://host:port" is accepted: the proxy speaks plain HTTP CONNECT
+// and TLS to Glovo stays end to end. Other schemes, userinfo, an empty host,
+// a missing port, a path, a query or a fragment are refused by New.
+func WithProxy(proxyURL *url.URL) Option {
+	return func(c *Client) {
+		if err := validateProxyURL(proxyURL); err != nil {
+			c.setOptErr(err)
+			return
+		}
+		u := *proxyURL
+		c.proxyURL = &u
+	}
+}
+
+// WithRequireProxy makes a client without WithProxy a constructor error, and
+// requires an https base URL so that nothing crosses the proxy in clear
+// text. The cluster service sets it; glovo-home on the owner's machine does
+// not, and talks to Glovo directly.
+func WithRequireProxy() Option { return func(c *Client) { c.requireProxy = true } }
+
+// withProxyTLSConfig sets the TLS config of the proxy transport. Tests use it
+// to trust an httptest TLS upstream.
+func withProxyTLSConfig(cfg *tls.Config) Option { return func(c *Client) { c.proxyTLS = cfg } }
+
+func (c *Client) setOptErr(err error) {
+	if c.optErr == nil {
+		c.optErr = err
+	}
+}
+
+func validateProxyURL(u *url.URL) error {
+	switch {
+	case u == nil:
+		return errors.New("glovoapi: proxy URL is nil")
+	case u.Scheme != "http":
+		return fmt.Errorf("glovoapi: proxy URL scheme must be http, got %q", u.Scheme)
+	case u.User != nil:
+		return errors.New("glovoapi: proxy URL must not carry userinfo")
+	case u.Hostname() == "":
+		return errors.New("glovoapi: proxy URL has no host")
+	case u.Port() == "":
+		return errors.New("glovoapi: proxy URL has no port")
+	case u.Opaque != "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "":
+		return errors.New("glovoapi: proxy URL must be http://host:port with nothing else")
+	}
+	return nil
+}
 
 // WithBaseURL overrides DefaultBaseURL, e.g. for tests.
 func WithBaseURL(u string) Option {
@@ -114,8 +188,10 @@ func WithDefaultLocation(l Location) Option { return func(c *Client) { c.default
 func WithSession(s Session) Option { return func(c *Client) { c.session = s } }
 
 // New returns a client for the session file at sessionPath. It does not read
-// the file; call Reload for that.
-func New(sessionPath string, opts ...Option) *Client {
+// the file; call Reload for that. It fails on an invalid option, on
+// WithProxy or WithRequireProxy combined with WithHTTPClient, and on
+// WithRequireProxy without WithProxy or with a non-https base URL.
+func New(sessionPath string, opts ...Option) (*Client, error) {
 	c := &Client{
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		baseURL:     DefaultBaseURL,
@@ -127,11 +203,95 @@ func New(sessionPath string, opts ...Option) *Client {
 	for _, o := range opts {
 		o(c)
 	}
+	if c.optErr != nil {
+		return nil, c.optErr
+	}
+	if err := c.configureEgress(); err != nil {
+		return nil, err
+	}
 	if c.defaultLocation == nil {
 		c.defaultLocation = DefaultLocationFromEnv(os.Getenv)
 	}
 	c.initBits()
-	return c
+	return c, nil
+}
+
+// ErrProxyRequired is returned by New for a client built with
+// WithRequireProxy but no usable WithProxy.
+var ErrProxyRequired = errors.New("glovoapi: an egress proxy is required and none is configured")
+
+func (c *Client) configureEgress() error {
+	base, err := url.Parse(c.baseURL)
+	if err != nil || base.Host == "" || (base.Scheme != "http" && base.Scheme != "https") || base.User != nil {
+		return errors.New("glovoapi: base URL must be an http(s) origin")
+	}
+	if (c.proxyURL != nil || c.requireProxy) && c.customHTTP {
+		return errors.New("glovoapi: WithHTTPClient cannot be combined with WithProxy or WithRequireProxy")
+	}
+	if c.requireProxy {
+		if c.proxyURL == nil {
+			return ErrProxyRequired
+		}
+		if base.Scheme != "https" {
+			return errors.New("glovoapi: WithRequireProxy needs an https base URL")
+		}
+	}
+	if c.proxyURL != nil {
+		dt, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			return errors.New("glovoapi: http.DefaultTransport is not an *http.Transport")
+		}
+		tr := dt.Clone()
+		tr.Proxy = http.ProxyURL(c.proxyURL)
+		if c.proxyTLS != nil {
+			tr.TLSClientConfig = c.proxyTLS
+		}
+		c.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tr}
+	}
+	// Copy the client so the redirect guard never mutates a caller's value.
+	hc := *c.httpClient
+	hc.CheckRedirect = c.checkRedirect
+	c.httpClient = &hc
+	return nil
+}
+
+// ErrRedirectRefused is returned when a response redirects off the base URL
+// origin, or to a request the mutation allowlist would refuse.
+var ErrRedirectRefused = errors.New("glovoapi: refusing a redirect")
+
+// checkRedirect keeps redirects on the base URL origin and re-applies the
+// path and mutation checks to the redirected request, so that a 307/308
+// cannot carry a POST to an endpoint send would refuse.
+func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("%w: more than 10 redirects", ErrRedirectRefused)
+	}
+	base, err := url.Parse(c.baseURL)
+	if err != nil {
+		return ErrRedirectRefused
+	}
+	u := req.URL
+	if u.Scheme != base.Scheme || u.Host != base.Host || u.User != nil {
+		return fmt.Errorf("%w: off the API origin", ErrRedirectRefused)
+	}
+	p := u.EscapedPath()
+	prefix := strings.TrimRight(base.EscapedPath(), "/")
+	if prefix != "" {
+		if !strings.HasPrefix(p, prefix+"/") {
+			return fmt.Errorf("%w: outside the API base path", ErrRedirectRefused)
+		}
+		p = strings.TrimPrefix(p, prefix)
+	}
+	if u.RawQuery != "" {
+		p += "?" + u.RawQuery
+	}
+	if err := checkPathSegments(p); err != nil {
+		return fmt.Errorf("%w: %v", ErrRedirectRefused, err)
+	}
+	if err := checkMutation(req.Method, p); err != nil {
+		return fmt.Errorf("%w: %v", ErrRedirectRefused, err)
+	}
+	return nil
 }
 
 // initBits generates the per-process identity used when the session has
@@ -404,6 +564,12 @@ func (c *Client) send(ctx context.Context, method, path string, body any, auth b
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// *url.Error repeats the full request URL, customer and basket ids
+		// included; report its cause under the redacted path instead.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
 		return 0, nil, "", fmt.Errorf("%s %s: %w", method, safePath(strings.SplitN(path, "?", 2)[0]), err)
 	}
 	defer func() { _ = resp.Body.Close() }()

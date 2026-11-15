@@ -134,16 +134,23 @@ func writeSessionFile(t *testing.T, s Session) string {
 	return path
 }
 
+func testLocation() Location {
+	return Location{"countryCode": "ES", "cityCode": "BCN", "latitude": "41.3874", "longitude": "2.1686", "accuracy": "0", "languageCode": "en"}
+}
+
 func newTestClient(t *testing.T, f *fakeGlovo, s Session) (*Client, string) {
 	t.Helper()
 	path := writeSessionFile(t, s)
 	ids := 0
 	var idMu sync.Mutex
-	c := New(path,
+	c, err := New(path,
 		WithBaseURL(f.srv.URL),
 		WithHTTPClient(f.srv.Client()),
-		WithDefaultLocation(Location{"countryCode": "ES", "cityCode": "BCN", "latitude": "41.3874", "longitude": "2.1686", "accuracy": "0", "languageCode": "en"}),
+		WithDefaultLocation(testLocation()),
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.now = func() time.Time { return testNow }
 	c.newID = func() string {
 		idMu.Lock()
