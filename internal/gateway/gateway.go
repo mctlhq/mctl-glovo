@@ -82,6 +82,9 @@ func (g *Gateway) Register(mux *http.ServeMux) {
 	meta := g.securityHeaders(http.HandlerFunc(g.handleMeta))
 	mux.Handle("GET /.well-known/oauth-protected-resource", meta)
 	mux.Handle("GET /.well-known/oauth-protected-resource/mcp", meta)
+	// GET also matches HEAD. "/{$}" is the root only; every other unknown
+	// path stays a 404.
+	mux.Handle("GET /{$}", g.securityHeaders(g.hostGuard(http.HandlerFunc(g.handleLanding))))
 	mcpH := g.securityHeaders(g.hostGuard(g.authenticate(g.bindSession(g.cfg.MCP))))
 	mux.Handle("POST /mcp", mcpH)
 	mux.Handle("GET /mcp", mcpH)
