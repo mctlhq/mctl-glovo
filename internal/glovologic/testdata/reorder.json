@@ -1,0 +1,71 @@
+{
+  "orders": {
+    "201": {
+      "id": 201, "storeId": 20, "storeAddressId": 30, "storeName": "Market Uno", "reorderData": {"allowed": true},
+      "boughtProducts": [
+        {"name": "Whole Milk 1L", "quantity": "2", "customizationsDescription": "Cold"},
+        {"name": "Pan de Molde Integral", "quantity": "1"},
+        {"name": "Huevos Camperos", "quantity": "12"},
+        {"name": "Tomate Triturado"},
+        {"name": null, "quantity": "1"}
+      ]
+    },
+    "202": {"id": "202", "store": {"id": "21", "name": "Sin Direccion"}, "boughtProducts": [{"name": "Agua Mineral"}]},
+    "203": null,
+    "204": {
+      "code": "X-204", "storeId": 22, "store": {"addressId": "33"}, "isRemake": true,
+      "products": [{"name": "Arroz Bomba", "quantity": "1"}, {"name": "Aceite de Oliva", "quantity": "2"}]
+    }
+  },
+  "store_content": {
+    "20": {"data": {"body": [
+      {"type": "CAROUSEL", "data": {"title": "Order again", "slug": "easy-reorder", "elements": [
+        {"type": "PRODUCT_TILE", "data": {"id": 1, "externalId": "ext-1", "storeProductId": "sp-1", "name": "Whole Milk 1L", "outOfStock": false, "priceInfo": {"displayText": "1.50 EUR", "amount": 1.5}},
+         "actions": [{"data": {"events": [{"data": {"collectionType": "EasyReorder", "isOrderedBefore": "true"}}]}}]},
+        {"type": "PRODUCT_TILE", "data": {"id": 2, "externalId": "ext-2", "storeProductId": "sp-2", "name": "Pan de Molde Blanco", "priceInfo": {"displayText": "1.20 EUR"}},
+         "actions": [{"data": {"events": [{"data": {"collectionType": "EasyReorder", "isOrderedBefore": "true"}}]}}]},
+        {"type": "PRODUCT_TILE", "data": {"id": 3, "externalId": "ext-3", "storeProductId": "sp-3", "name": "Huevos Frescos M"},
+         "actions": [{"data": {"events": [{"data": {"collectionType": "EasyReorder", "isOrderedBefore": "true"}}]}}]}
+      ]}},
+      {"type": "CAROUSEL", "data": {"title": "Popular", "elements": [
+        {"type": "PRODUCT_TILE", "data": {"id": 9, "externalId": "ext-9", "storeProductId": "sp-9", "name": "Huevos Camperos", "outOfStock": true},
+         "actions": [{"data": {"events": [{"data": {"collectionType": "TopSellers", "isOrderedBefore": "false"}}]}}]}
+      ]}}
+    ]}},
+    "22": {"data": {"body": []}}
+  },
+  "store_search": {
+    "20|Pan de Molde Integral": {"totalProducts": 4, "results": [{"products": [
+      {"id": 11, "externalId": "ext-11", "storeProductId": "sp-11", "name": "Pan de Molde Integral 500g", "price": 1.8},
+      {"id": 12, "externalId": "ext-12", "storeProductId": "sp-12", "name": "PAN DE MOLDE INTEGRAL", "outOfStock": true},
+      {"id": 13, "externalId": "ext-13", "storeProductId": "sp-13", "name": "pan de molde integral", "available": true},
+      {"id": 2, "externalId": "ext-2", "storeProductId": "sp-2", "name": "Pan de Molde Blanco"}
+    ]}]},
+    "20|Huevos Camperos": {"results": [{"products": [
+      {"id": 21, "externalId": "ext-21", "name": "Huevos Camperos L"},
+      {"id": 22, "externalId": "ext-22", "storeProductId": "sp-22", "name": "Huevos camperos XL", "categoryId": 7}
+    ]}]},
+    "20|Tomate Triturado": {"results": [{"products": [
+      {"id": 31, "externalId": "ext-31", "storeProductId": "sp-31", "name": "Tomate triturado 400g"},
+      {"id": 32, "externalId": "ext-32", "storeProductId": "sp-32", "name": "Tomate frito"}
+    ]}]},
+    "22|Arroz Bomba": {"results": [{"products": [
+      {"id": 41, "externalId": "ext-41", "storeProductId": "sp-41", "name": "Arroz Bomba"}
+    ]}]},
+    "22|Aceite de Oliva": {"results": []}
+  },
+  "cases": [
+    {"name": "defaults", "order_id": "201", "max_searches": 5, "candidates_per_line": 3},
+    {"name": "search_limit_one", "order_id": "201", "max_searches": 1, "candidates_per_line": 1},
+    {"name": "no_searches", "order_id": "201", "max_searches": 0, "candidates_per_line": 5},
+    {"name": "missing_address", "order_id": "202", "max_searches": 5, "candidates_per_line": 3},
+    {"name": "null_order", "order_id": "203", "max_searches": 5, "candidates_per_line": 3},
+    {"name": "store_object_ids", "order_id": "204", "max_searches": 5, "candidates_per_line": 2}
+  ],
+  "match_pairs": [
+    ["Whole Milk 1L", "whole milk 1 l"], ["Milk", "Bread"], ["Café Molido", "cafe molido"],
+    ["Pan de Molde", "Pan de Molde Integral"], ["Pan", "Pan Integral"], ["Agua 1,5 L", "agua 1.5l"],
+    ["a b c d e f g h i j k l m n o p", "a x"], ["Tomate", ""], [null, "x"], ["Ñoquis", "noquis frescos"],
+    ["Coca-Cola Zero 33cl", "coca cola zero 33 cl lata"], ["x 2 kg y", "x 2kg"]
+  ]
+}

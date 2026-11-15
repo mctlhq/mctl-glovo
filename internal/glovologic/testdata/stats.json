@@ -1,0 +1,21 @@
+{
+  "discovery": {
+    "orders": [
+      {"order_id": "9", "store": "Pizzeria Sol", "total": "12,50 €", "status": "DELIVERED"},
+      {"order_id": "8", "store": "Pizzeria Sol", "total": "10.00 €", "detail_source": "detail"},
+      {"order_id": "7", "store": "bakery Lune", "total": "Refunded"},
+      {"order_id": 6, "store": "Bakery Lune", "total": 7.2},
+      {"order_id": "5", "store": "", "total": "-3,10 €"},
+      {"order_id": "4", "total": null},
+      {"order_id": "3", "store": "Épicerie Verte", "total": "€ 1.005"},
+      {"order_id": "2", "store": "apple Market", "total": "0.125"},
+      {"order_id": "1", "store": "Apple Market", "total": "0,125"},
+      {"order_id": "0", "store": "Zeta", "total": "1e-7"}
+    ],
+    "pages": [{"cursor": 0, "count": 6, "next_offset": "A"}, {"cursor": "A", "count": 4, "next_offset": null}],
+    "count": 10,
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor"
+  },
+  "money": ["12,50 €", "10.00 €", "Refunded", 7.2, "-3,10 €", null, "€ 1.005", "0,125", "1e-7", "1,2,3", " 4.", "abc 5,5 def", 0, true]
+}

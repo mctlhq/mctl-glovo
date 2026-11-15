@@ -1,0 +1,2300 @@
+{
+ "inputs": {
+  "content": {
+   "store-1|easy_reorder|40": [
+    {
+     "id": "product-1",
+     "product_id": "product-1",
+     "external_id": "external-1",
+     "store_product_id": "store-product-1",
+     "name": "Pizza Margherita",
+     "price": "EUR 12.00",
+     "available": null,
+     "collection_type": "Easy Reorder",
+     "ordered_before": true,
+     "source": "easy_reorder"
+    }
+   ],
+   "store-1|top_sellers|40": [
+    {
+     "id": "product-2",
+     "product_id": "product-2",
+     "external_id": "external-2",
+     "store_product_id": "store-product-2",
+     "name": "Pizza Diavola",
+     "price": "EUR 12.00",
+     "available": null,
+     "collection_type": "Top Sellers",
+     "ordered_before": false,
+     "source": "top_sellers"
+    }
+   ]
+  },
+  "search": {
+   "store-6": [
+    {
+     "id": "product-7",
+     "product_id": "product-7",
+     "external_id": "external-7",
+     "store_product_id": "store-product-7",
+     "name": "Pizza Funghi",
+     "available": null,
+     "category_id": "cat-9"
+    }
+   ]
+  },
+  "views": {
+   "product-1": {
+    "id": "product-1",
+    "product_id": "product-1",
+    "external_id": "external-1",
+    "store_product_id": "store-product-1",
+    "name": "Pizza Margherita",
+    "price": "EUR 12.00",
+    "available": true,
+    "add_enabled": true,
+    "is_variant": null,
+    "variant_selection": "customizations",
+    "option_groups": [
+     {
+      "id": "group-legacy",
+      "groupLegacyId": "group-legacy",
+      "groupId": "group-stable",
+      "groupExternalId": "group-external",
+      "name": "Size",
+      "required": true,
+      "min": 1,
+      "max": null,
+      "options": [
+       {
+        "id": "option-legacy",
+        "legacyId": "option-legacy",
+        "optionId": "option-stable",
+        "externalId": "option-external",
+        "name": "Large"
+       }
+      ]
+     }
+    ],
+    "required_sections": []
+   },
+   "product-2": {
+    "id": "product-2",
+    "product_id": "product-2",
+    "external_id": "external-2",
+    "store_product_id": "store-product-2",
+    "name": "Pizza Diavola",
+    "price": "EUR 12.00",
+    "available": true,
+    "add_enabled": true,
+    "is_variant": null,
+    "variant_selection": "not_exposed",
+    "option_groups": [],
+    "required_sections": []
+   },
+   "product-3": {
+    "id": "product-3",
+    "product_id": "product-3",
+    "external_id": "external-3",
+    "store_product_id": "store-product-3",
+    "name": "Pizza Truffle",
+    "price": "EUR 12.00",
+    "available": true,
+    "add_enabled": true,
+    "is_variant": null,
+    "variant_selection": "not_exposed",
+    "option_groups": [],
+    "required_sections": []
+   },
+   "product-4": {
+    "id": "product-4",
+    "product_id": "product-4",
+    "external_id": "external-4",
+    "store_product_id": "store-product-4",
+    "name": "Pizza Four Cheese",
+    "price": "EUR 12.00",
+    "available": true,
+    "add_enabled": true,
+    "is_variant": null,
+    "variant_selection": "not_exposed",
+    "option_groups": [],
+    "required_sections": []
+   },
+   "product-5": {
+    "id": "product-5",
+    "product_id": "product-5",
+    "external_id": "external-5",
+    "store_product_id": "store-product-5",
+    "name": "Pizza Marinara",
+    "price": "EUR 9.50",
+    "available": true,
+    "add_enabled": true,
+    "is_variant": null,
+    "variant_selection": "not_exposed",
+    "option_groups": [],
+    "required_sections": []
+   },
+   "product-6": {
+    "id": "product-6",
+    "product_id": "product-6",
+    "external_id": "external-6",
+    "store_product_id": "store-product-6",
+    "name": "Calzone",
+    "price": "EUR 12.00",
+    "available": true,
+    "add_enabled": true,
+    "is_variant": null,
+    "variant_selection": "not_exposed",
+    "option_groups": [],
+    "required_sections": []
+   },
+   "product-7": {
+    "id": "product-7",
+    "product_id": "product-7",
+    "external_id": "external-7",
+    "store_product_id": "store-product-7",
+    "name": "Pizza Funghi",
+    "price": "EUR 12.00",
+    "available": true,
+    "add_enabled": true,
+    "is_variant": null,
+    "variant_selection": "not_exposed",
+    "option_groups": [],
+    "required_sections": []
+   },
+   "product-8": {
+    "id": "product-8",
+    "product_id": "product-8",
+    "external_id": "external-8",
+    "store_product_id": "store-product-8",
+    "name": "Pizza Bianca",
+    "price": "EUR 12.00",
+    "available": false,
+    "add_enabled": false,
+    "is_variant": null,
+    "variant_selection": "not_exposed",
+    "option_groups": [],
+    "required_sections": []
+   }
+  }
+ },
+ "global_compact": {
+  "count": 7,
+  "stores": [
+   {
+    "store_id": "store-1",
+    "store_address_id": "address-1",
+    "name": "Favorite Pizza",
+    "slug": "favorite-pizza",
+    "open": true,
+    "rating": 4.6,
+    "votes": 300,
+    "search_position": 1,
+    "products": [
+     {
+      "product_id": "product-1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "category_id": "cat-1",
+      "search_id": "search-1",
+      "name": "Pizza Margherita",
+      "price": "EUR 12.00",
+      "source": "global_search"
+     }
+    ]
+   },
+   {
+    "store_id": "store-2",
+    "store_address_id": "address-2",
+    "name": "New Pizza",
+    "slug": "new-pizza",
+    "open": true,
+    "rating": 4.8,
+    "votes": 800,
+    "search_position": 2,
+    "products": [
+     {
+      "product_id": "product-3",
+      "external_id": "external-3",
+      "store_product_id": "store-product-3",
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "category_id": "cat-1",
+      "search_id": "search-1",
+      "name": "Pizza Truffle",
+      "price": "EUR 12.00",
+      "source": "global_search"
+     }
+    ]
+   },
+   {
+    "store_id": "store-3",
+    "store_address_id": "address-3",
+    "name": "Third Pizza",
+    "slug": "third-pizza",
+    "open": true,
+    "rating": 4.6,
+    "votes": 300,
+    "search_position": 3,
+    "products": [
+     {
+      "product_id": "product-4",
+      "external_id": "external-4",
+      "store_product_id": "store-product-4",
+      "store_id": "store-3",
+      "store_address_id": "address-3",
+      "category_id": "cat-1",
+      "search_id": "search-1",
+      "name": "Pizza Four Cheese",
+      "price": "EUR 12.00",
+      "source": "global_search"
+     }
+    ]
+   },
+   {
+    "store_id": "store-4",
+    "store_address_id": "address-4",
+    "name": "Fourth Pizza",
+    "slug": "fourth-pizza",
+    "open": true,
+    "rating": 92,
+    "votes": 40,
+    "search_position": 4,
+    "products": [
+     {
+      "product_id": "product-5",
+      "external_id": "external-5",
+      "store_product_id": "store-product-5",
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "category_id": "cat-1",
+      "search_id": "search-1",
+      "name": "Pizza Marinara",
+      "price": "EUR 9.50",
+      "source": "global_search"
+     }
+    ]
+   },
+   {
+    "store_id": "store-5",
+    "store_address_id": "address-5",
+    "name": "Closed Pizza",
+    "slug": "closed-pizza",
+    "open": false,
+    "rating": 4.6,
+    "votes": 300,
+    "search_position": 5,
+    "products": [
+     {
+      "product_id": "product-6",
+      "external_id": "external-6",
+      "store_product_id": "store-product-6",
+      "store_id": "store-5",
+      "store_address_id": "address-5",
+      "category_id": "cat-1",
+      "search_id": "search-1",
+      "name": "Calzone",
+      "price": "EUR 12.00",
+      "source": "global_search"
+     }
+    ]
+   },
+   {
+    "store_id": "store-6",
+    "store_address_id": "address-6",
+    "name": "Search Pizza Bar",
+    "slug": "search-pizza-bar",
+    "open": true,
+    "rating": 0,
+    "votes": 0,
+    "search_position": 6,
+    "products": [
+     {
+      "product_id": "product-6",
+      "external_id": "external-6",
+      "store_product_id": "store-product-6",
+      "store_id": "store-6",
+      "store_address_id": "address-6",
+      "category_id": "cat-1",
+      "search_id": "search-1",
+      "name": "Calzone",
+      "price": "EUR 12.00",
+      "source": "global_search"
+     }
+    ]
+   },
+   {
+    "store_id": "store-7",
+    "store_address_id": "address-7",
+    "name": "Bianca Pizza",
+    "slug": "bianca-pizza",
+    "open": true,
+    "rating": 4.6,
+    "votes": 300,
+    "search_position": 7,
+    "products": [
+     {
+      "product_id": "product-8",
+      "external_id": "external-8",
+      "store_product_id": "store-product-8",
+      "store_id": "store-7",
+      "store_address_id": "address-7",
+      "category_id": "cat-1",
+      "search_id": "search-1",
+      "name": "Pizza Bianca",
+      "price": "EUR 12.00",
+      "source": "global_search"
+     }
+    ]
+   }
+  ]
+ },
+ "cases": {
+  "repeat": {
+   "intent": {
+    "mode": "repeat",
+    "query": "pizza",
+    "venue_query": null,
+    "item_mode": "repeat",
+    "known_liked_constraint": false,
+    "quality_preference": "personal",
+    "novelty_tolerance": 0.4,
+    "max_choices": 3,
+    "google_reviews_requested": false,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 6,
+    "resolved_live_products": 3,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "reliable_repeat",
+     "store": {
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "name": "Favorite Pizza",
+      "slug": "favorite-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 1
+     },
+     "product": {
+      "id": "product-1",
+      "product_id": "product-1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "name": "Pizza Margherita",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "customizations",
+      "option_groups": [
+       {
+        "id": "group-legacy",
+        "groupLegacyId": "group-legacy",
+        "groupId": "group-stable",
+        "groupExternalId": "group-external",
+        "name": "Size",
+        "required": true,
+        "min": 1,
+        "max": null,
+        "options": [
+         {
+          "id": "option-legacy",
+          "legacyId": "option-legacy",
+          "optionId": "option-stable",
+          "externalId": "option-external",
+          "name": "Large"
+         }
+        ]
+       }
+      ],
+      "required_sections": [],
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "source": "easy_reorder",
+      "required_option_groups": 1
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 2,
+      "last_order_event_age": 0,
+      "recency_score": 1,
+      "components": {
+       "half_life_5": 1.445,
+       "half_life_20": 1.836,
+       "half_life_80": 1.957,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 2 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Margherita at EUR 12.00.",
+      "1 required option group(s) must be selected before a basket add."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "familiar_alternative",
+     "store": {
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "name": "Fourth Pizza",
+      "slug": "fourth-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 40,
+      "glovo_count_aware_quality": 4.314,
+      "search_position": 4
+     },
+     "product": {
+      "id": "product-5",
+      "product_id": "product-5",
+      "external_id": "external-5",
+      "store_product_id": "store-product-5",
+      "name": "Pizza Marinara",
+      "price": "EUR 9.50",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 1,
+      "last_order_event_age": 2,
+      "recency_score": 0.478,
+      "components": {
+       "half_life_5": 0.66,
+       "half_life_20": 0.901,
+       "half_life_80": 0.974,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 1 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Marinara at EUR 9.50."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "name": "New Pizza",
+      "slug": "new-pizza",
+      "open": true,
+      "glovo_rating": 4.8,
+      "glovo_rating_count": 800,
+      "glovo_count_aware_quality": 4.733,
+      "search_position": 2
+     },
+     "product": {
+      "id": "product-3",
+      "product_id": "product-3",
+      "external_id": "external-3",
+      "store_product_id": "store-product-3",
+      "name": "Pizza Truffle",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Truffle at EUR 12.00."
+     ],
+     "google_maps": null
+    }
+   ],
+   "google_quality": {
+    "requested": false,
+    "available": false,
+    "enriched": 0,
+    "ambiguous_or_unmatched": 0,
+    "failures": 0,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0,
+    "reason": "GOOGLE_MAPS_API_KEY is not configured; Glovo and personalized evidence remain available."
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "different": {
+   "intent": {
+    "mode": "repeat",
+    "query": "pizza",
+    "venue_query": "Favorite Pizza",
+    "item_mode": "different",
+    "known_liked_constraint": true,
+    "quality_preference": "personal",
+    "novelty_tolerance": 0.4,
+    "max_choices": 3,
+    "google_reviews_requested": false,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 1,
+    "resolved_live_products": 1,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "reliable_repeat",
+     "store": {
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "name": "Favorite Pizza",
+      "slug": "favorite-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 1
+     },
+     "product": {
+      "id": "product-2",
+      "product_id": "product-2",
+      "external_id": "external-2",
+      "store_product_id": "store-product-2",
+      "name": "Pizza Diavola",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "source": "top_sellers",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 2,
+      "last_order_event_age": 0,
+      "recency_score": 1,
+      "components": {
+       "half_life_5": 1.445,
+       "half_life_20": 1.836,
+       "half_life_80": 1.957,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 2 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Diavola at EUR 12.00.",
+      "The resolver excluded current Easy Reorder names where that authenticated carousel was available."
+     ],
+     "google_maps": null
+    }
+   ],
+   "google_quality": {
+    "requested": false,
+    "available": false,
+    "enriched": 0,
+    "ambiguous_or_unmatched": 0,
+    "failures": 0,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0,
+    "reason": "GOOGLE_MAPS_API_KEY is not configured; Glovo and personalized evidence remain available."
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "explore_google": {
+   "intent": {
+    "mode": "explore",
+    "query": "pizza",
+    "venue_query": null,
+    "item_mode": "any",
+    "known_liked_constraint": false,
+    "quality_preference": "google",
+    "novelty_tolerance": 0.4,
+    "max_choices": 3,
+    "google_reviews_requested": false,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 6,
+    "resolved_live_products": 3,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "name": "New Pizza",
+      "slug": "new-pizza",
+      "open": true,
+      "glovo_rating": 4.8,
+      "glovo_rating_count": 800,
+      "glovo_count_aware_quality": 4.733,
+      "search_position": 2
+     },
+     "product": {
+      "id": "product-3",
+      "product_id": "product-3",
+      "external_id": "external-3",
+      "store_product_id": "store-product-3",
+      "name": "Pizza Truffle",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Truffle at EUR 12.00."
+     ],
+     "google_maps": {
+      "match_status": "matched",
+      "source": "Google Maps",
+      "place_id": "place-9",
+      "city": "BCN",
+      "lat": "41.38",
+      "reviews_status": "not_requested",
+      "ranking_effect": "display_only_not_backtested"
+     }
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-3",
+      "store_address_id": "address-3",
+      "name": "Third Pizza",
+      "slug": "third-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 3
+     },
+     "product": {
+      "id": "product-4",
+      "product_id": "product-4",
+      "external_id": "external-4",
+      "store_product_id": "store-product-4",
+      "name": "Pizza Four Cheese",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-3",
+      "store_address_id": "address-3",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Four Cheese at EUR 12.00."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-6",
+      "store_address_id": "address-6",
+      "name": "Search Pizza Bar",
+      "slug": "search-pizza-bar",
+      "open": true,
+      "glovo_rating": 0,
+      "glovo_rating_count": 0,
+      "glovo_count_aware_quality": 4.2,
+      "search_position": 6
+     },
+     "product": {
+      "id": "product-7",
+      "product_id": "product-7",
+      "external_id": "external-7",
+      "store_product_id": "store-product-7",
+      "name": "Pizza Funghi",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-6",
+      "store_address_id": "address-6",
+      "category_id": "cat-9",
+      "source": "store_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Funghi at EUR 12.00."
+     ],
+     "google_maps": {
+      "match_status": "matched",
+      "source": "Google Maps",
+      "place_id": "place-16",
+      "city": "BCN",
+      "lat": "41.38",
+      "reviews_status": "not_requested",
+      "ranking_effect": "display_only_not_backtested"
+     }
+    }
+   ],
+   "google_quality": {
+    "requested": true,
+    "available": true,
+    "enriched": 2,
+    "ambiguous_or_unmatched": 0,
+    "failures": 1,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "no_google": {
+   "intent": {
+    "mode": "balanced",
+    "query": "pizza",
+    "venue_query": null,
+    "item_mode": "any",
+    "known_liked_constraint": false,
+    "quality_preference": "google",
+    "novelty_tolerance": 0.4,
+    "max_choices": 3,
+    "google_reviews_requested": false,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 6,
+    "resolved_live_products": 3,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "reliable_repeat",
+     "store": {
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "name": "Favorite Pizza",
+      "slug": "favorite-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 1
+     },
+     "product": {
+      "id": "product-1",
+      "product_id": "product-1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "name": "Pizza Margherita",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "customizations",
+      "option_groups": [
+       {
+        "id": "group-legacy",
+        "groupLegacyId": "group-legacy",
+        "groupId": "group-stable",
+        "groupExternalId": "group-external",
+        "name": "Size",
+        "required": true,
+        "min": 1,
+        "max": null,
+        "options": [
+         {
+          "id": "option-legacy",
+          "legacyId": "option-legacy",
+          "optionId": "option-stable",
+          "externalId": "option-external",
+          "name": "Large"
+         }
+        ]
+       }
+      ],
+      "required_sections": [],
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 1
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 2,
+      "last_order_event_age": 0,
+      "recency_score": 1,
+      "components": {
+       "half_life_5": 1.445,
+       "half_life_20": 1.836,
+       "half_life_80": 1.957,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 2 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Margherita at EUR 12.00.",
+      "1 required option group(s) must be selected before a basket add."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "familiar_alternative",
+     "store": {
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "name": "Fourth Pizza",
+      "slug": "fourth-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 40,
+      "glovo_count_aware_quality": 4.314,
+      "search_position": 4
+     },
+     "product": {
+      "id": "product-5",
+      "product_id": "product-5",
+      "external_id": "external-5",
+      "store_product_id": "store-product-5",
+      "name": "Pizza Marinara",
+      "price": "EUR 9.50",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 1,
+      "last_order_event_age": 2,
+      "recency_score": 0.478,
+      "components": {
+       "half_life_5": 0.66,
+       "half_life_20": 0.901,
+       "half_life_80": 0.974,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 1 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Marinara at EUR 9.50."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "name": "New Pizza",
+      "slug": "new-pizza",
+      "open": true,
+      "glovo_rating": 4.8,
+      "glovo_rating_count": 800,
+      "glovo_count_aware_quality": 4.733,
+      "search_position": 2
+     },
+     "product": {
+      "id": "product-3",
+      "product_id": "product-3",
+      "external_id": "external-3",
+      "store_product_id": "store-product-3",
+      "name": "Pizza Truffle",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Truffle at EUR 12.00."
+     ],
+     "google_maps": null
+    }
+   ],
+   "google_quality": {
+    "requested": true,
+    "available": false,
+    "enriched": 0,
+    "ambiguous_or_unmatched": 0,
+    "failures": 0,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0,
+    "reason": "GOOGLE_MAPS_API_KEY is not configured; Glovo and personalized evidence remain available."
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "implicit_google": {
+   "intent": {
+    "mode": "balanced",
+    "query": "pizza",
+    "venue_query": null,
+    "item_mode": "any",
+    "known_liked_constraint": false,
+    "quality_preference": "balanced",
+    "novelty_tolerance": 0.4,
+    "max_choices": 3,
+    "google_reviews_requested": false,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 6,
+    "resolved_live_products": 3,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "reliable_repeat",
+     "store": {
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "name": "Favorite Pizza",
+      "slug": "favorite-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 1
+     },
+     "product": {
+      "id": "product-1",
+      "product_id": "product-1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "name": "Pizza Margherita",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "customizations",
+      "option_groups": [
+       {
+        "id": "group-legacy",
+        "groupLegacyId": "group-legacy",
+        "groupId": "group-stable",
+        "groupExternalId": "group-external",
+        "name": "Size",
+        "required": true,
+        "min": 1,
+        "max": null,
+        "options": [
+         {
+          "id": "option-legacy",
+          "legacyId": "option-legacy",
+          "optionId": "option-stable",
+          "externalId": "option-external",
+          "name": "Large"
+         }
+        ]
+       }
+      ],
+      "required_sections": [],
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 1
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 2,
+      "last_order_event_age": 0,
+      "recency_score": 1,
+      "components": {
+       "half_life_5": 1.445,
+       "half_life_20": 1.836,
+       "half_life_80": 1.957,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 2 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Margherita at EUR 12.00.",
+      "1 required option group(s) must be selected before a basket add."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "familiar_alternative",
+     "store": {
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "name": "Fourth Pizza",
+      "slug": "fourth-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 40,
+      "glovo_count_aware_quality": 4.314,
+      "search_position": 4
+     },
+     "product": {
+      "id": "product-5",
+      "product_id": "product-5",
+      "external_id": "external-5",
+      "store_product_id": "store-product-5",
+      "name": "Pizza Marinara",
+      "price": "EUR 9.50",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 1,
+      "last_order_event_age": 2,
+      "recency_score": 0.478,
+      "components": {
+       "half_life_5": 0.66,
+       "half_life_20": 0.901,
+       "half_life_80": 0.974,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 1 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Marinara at EUR 9.50."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "name": "New Pizza",
+      "slug": "new-pizza",
+      "open": true,
+      "glovo_rating": 4.8,
+      "glovo_rating_count": 800,
+      "glovo_count_aware_quality": 4.733,
+      "search_position": 2
+     },
+     "product": {
+      "id": "product-3",
+      "product_id": "product-3",
+      "external_id": "external-3",
+      "store_product_id": "store-product-3",
+      "name": "Pizza Truffle",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Truffle at EUR 12.00."
+     ],
+     "google_maps": null
+    }
+   ],
+   "google_quality": {
+    "requested": false,
+    "available": true,
+    "enriched": 0,
+    "ambiguous_or_unmatched": 0,
+    "failures": 0,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "review_cap": {
+   "intent": {
+    "mode": "explore",
+    "query": "pizza",
+    "venue_query": null,
+    "item_mode": "any",
+    "known_liked_constraint": false,
+    "quality_preference": "balanced",
+    "novelty_tolerance": 0.4,
+    "max_choices": 5,
+    "google_reviews_requested": true,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 6,
+    "resolved_live_products": 5,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "name": "New Pizza",
+      "slug": "new-pizza",
+      "open": true,
+      "glovo_rating": 4.8,
+      "glovo_rating_count": 800,
+      "glovo_count_aware_quality": 4.733,
+      "search_position": 2
+     },
+     "product": {
+      "id": "product-3",
+      "product_id": "product-3",
+      "external_id": "external-3",
+      "store_product_id": "store-product-3",
+      "name": "Pizza Truffle",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Truffle at EUR 12.00."
+     ],
+     "google_maps": {
+      "match_status": "matched",
+      "source": "Google Maps",
+      "place_id": "place-9",
+      "city": "BCN",
+      "lat": "41.38",
+      "reviews_status": "returned",
+      "ranking_effect": "display_only_not_backtested"
+     }
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-3",
+      "store_address_id": "address-3",
+      "name": "Third Pizza",
+      "slug": "third-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 3
+     },
+     "product": {
+      "id": "product-4",
+      "product_id": "product-4",
+      "external_id": "external-4",
+      "store_product_id": "store-product-4",
+      "name": "Pizza Four Cheese",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-3",
+      "store_address_id": "address-3",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Four Cheese at EUR 12.00."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-6",
+      "store_address_id": "address-6",
+      "name": "Search Pizza Bar",
+      "slug": "search-pizza-bar",
+      "open": true,
+      "glovo_rating": 0,
+      "glovo_rating_count": 0,
+      "glovo_count_aware_quality": 4.2,
+      "search_position": 6
+     },
+     "product": {
+      "id": "product-7",
+      "product_id": "product-7",
+      "external_id": "external-7",
+      "store_product_id": "store-product-7",
+      "name": "Pizza Funghi",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-6",
+      "store_address_id": "address-6",
+      "category_id": "cat-9",
+      "source": "store_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Funghi at EUR 12.00."
+     ],
+     "google_maps": {
+      "match_status": "matched",
+      "source": "Google Maps",
+      "place_id": "place-16",
+      "city": "BCN",
+      "lat": "41.38",
+      "reviews_status": "returned",
+      "ranking_effect": "display_only_not_backtested"
+     }
+    },
+    {
+     "label": "familiar_alternative",
+     "store": {
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "name": "Favorite Pizza",
+      "slug": "favorite-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 1
+     },
+     "product": {
+      "id": "product-1",
+      "product_id": "product-1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "name": "Pizza Margherita",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "customizations",
+      "option_groups": [
+       {
+        "id": "group-legacy",
+        "groupLegacyId": "group-legacy",
+        "groupId": "group-stable",
+        "groupExternalId": "group-external",
+        "name": "Size",
+        "required": true,
+        "min": 1,
+        "max": null,
+        "options": [
+         {
+          "id": "option-legacy",
+          "legacyId": "option-legacy",
+          "optionId": "option-stable",
+          "externalId": "option-external",
+          "name": "Large"
+         }
+        ]
+       }
+      ],
+      "required_sections": [],
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 1
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 2,
+      "last_order_event_age": 0,
+      "recency_score": 1,
+      "components": {
+       "half_life_5": 1.445,
+       "half_life_20": 1.836,
+       "half_life_80": 1.957,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 2 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Margherita at EUR 12.00.",
+      "1 required option group(s) must be selected before a basket add."
+     ],
+     "google_maps": {
+      "match_status": "matched",
+      "source": "Google Maps",
+      "place_id": "place-14",
+      "city": "BCN",
+      "lat": "41.38",
+      "reviews_status": "not_requested",
+      "ranking_effect": "display_only_not_backtested"
+     }
+    },
+    {
+     "label": "familiar_alternative",
+     "store": {
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "name": "Fourth Pizza",
+      "slug": "fourth-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 40,
+      "glovo_count_aware_quality": 4.314,
+      "search_position": 4
+     },
+     "product": {
+      "id": "product-5",
+      "product_id": "product-5",
+      "external_id": "external-5",
+      "store_product_id": "store-product-5",
+      "name": "Pizza Marinara",
+      "price": "EUR 9.50",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 1,
+      "last_order_event_age": 2,
+      "recency_score": 0.478,
+      "components": {
+       "half_life_5": 0.66,
+       "half_life_20": 0.901,
+       "half_life_80": 0.974,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 1 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Marinara at EUR 9.50."
+     ],
+     "google_maps": null
+    }
+   ],
+   "google_quality": {
+    "requested": true,
+    "available": true,
+    "enriched": 3,
+    "ambiguous_or_unmatched": 1,
+    "failures": 1,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": true,
+    "review_venues_enriched": 2
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "balanced_novelty": {
+   "intent": {
+    "mode": "balanced",
+    "query": "pizza",
+    "venue_query": null,
+    "item_mode": "any",
+    "known_liked_constraint": false,
+    "quality_preference": "balanced",
+    "novelty_tolerance": 0.6,
+    "max_choices": 4,
+    "google_reviews_requested": false,
+    "history_refresh": "full"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 6,
+    "resolved_live_products": 4,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "reliable_repeat",
+     "store": {
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "name": "Favorite Pizza",
+      "slug": "favorite-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 1
+     },
+     "product": {
+      "id": "product-1",
+      "product_id": "product-1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "name": "Pizza Margherita",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "customizations",
+      "option_groups": [
+       {
+        "id": "group-legacy",
+        "groupLegacyId": "group-legacy",
+        "groupId": "group-stable",
+        "groupExternalId": "group-external",
+        "name": "Size",
+        "required": true,
+        "min": 1,
+        "max": null,
+        "options": [
+         {
+          "id": "option-legacy",
+          "legacyId": "option-legacy",
+          "optionId": "option-stable",
+          "externalId": "option-external",
+          "name": "Large"
+         }
+        ]
+       }
+      ],
+      "required_sections": [],
+      "store_id": "store-1",
+      "store_address_id": "address-1",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 1
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 2,
+      "last_order_event_age": 0,
+      "recency_score": 1,
+      "components": {
+       "half_life_5": 1.445,
+       "half_life_20": 1.836,
+       "half_life_80": 1.957,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 2 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Margherita at EUR 12.00.",
+      "1 required option group(s) must be selected before a basket add."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "familiar_alternative",
+     "store": {
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "name": "Fourth Pizza",
+      "slug": "fourth-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 40,
+      "glovo_count_aware_quality": 4.314,
+      "search_position": 4
+     },
+     "product": {
+      "id": "product-5",
+      "product_id": "product-5",
+      "external_id": "external-5",
+      "store_product_id": "store-product-5",
+      "name": "Pizza Marinara",
+      "price": "EUR 9.50",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-4",
+      "store_address_id": "address-4",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": true,
+      "venue_orders": 1,
+      "last_order_event_age": 2,
+      "recency_score": 0.478,
+      "components": {
+       "half_life_5": 0.66,
+       "half_life_20": 0.901,
+       "half_life_80": 0.974,
+       "weights": [
+        0.5,
+        0.3,
+        0.2
+       ]
+      }
+     },
+     "reasons": [
+      "Previously ordered from this venue 1 time(s); ranked by the validated multi-scale recency model.",
+      "Glovo currently exposes Pizza Marinara at EUR 9.50."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "name": "New Pizza",
+      "slug": "new-pizza",
+      "open": true,
+      "glovo_rating": 4.8,
+      "glovo_rating_count": 800,
+      "glovo_count_aware_quality": 4.733,
+      "search_position": 2
+     },
+     "product": {
+      "id": "product-3",
+      "product_id": "product-3",
+      "external_id": "external-3",
+      "store_product_id": "store-product-3",
+      "name": "Pizza Truffle",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-2",
+      "store_address_id": "address-2",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Truffle at EUR 12.00."
+     ],
+     "google_maps": null
+    },
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-3",
+      "store_address_id": "address-3",
+      "name": "Third Pizza",
+      "slug": "third-pizza",
+      "open": true,
+      "glovo_rating": 4.6,
+      "glovo_rating_count": 300,
+      "glovo_count_aware_quality": 4.5,
+      "search_position": 3
+     },
+     "product": {
+      "id": "product-4",
+      "product_id": "product-4",
+      "external_id": "external-4",
+      "store_product_id": "store-product-4",
+      "name": "Pizza Four Cheese",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-3",
+      "store_address_id": "address-3",
+      "category_id": "cat-1",
+      "source": "global_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Four Cheese at EUR 12.00."
+     ],
+     "google_maps": null
+    }
+   ],
+   "google_quality": {
+    "requested": false,
+    "available": false,
+    "enriched": 0,
+    "ambiguous_or_unmatched": 0,
+    "failures": 0,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0,
+    "reason": "GOOGLE_MAPS_API_KEY is not configured; Glovo and personalized evidence remain available."
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "venue_filter_none": {
+   "intent": {
+    "mode": "balanced",
+    "query": "pizza",
+    "venue_query": "Nowhere",
+    "item_mode": "any",
+    "known_liked_constraint": false,
+    "quality_preference": "balanced",
+    "novelty_tolerance": 0.4,
+    "max_choices": 5,
+    "google_reviews_requested": false,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 0,
+    "resolved_live_products": 0,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [],
+   "google_quality": {
+    "requested": false,
+    "available": false,
+    "enriched": 0,
+    "ambiguous_or_unmatched": 0,
+    "failures": 0,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0,
+    "reason": "GOOGLE_MAPS_API_KEY is not configured; Glovo and personalized evidence remain available."
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  },
+  "search_fallback": {
+   "intent": {
+    "mode": "explore",
+    "query": "funghi",
+    "venue_query": null,
+    "item_mode": "any",
+    "known_liked_constraint": false,
+    "quality_preference": "balanced",
+    "novelty_tolerance": 0.4,
+    "max_choices": 3,
+    "google_reviews_requested": false,
+    "history_refresh": "incremental"
+   },
+   "model": {
+    "name": "venue-multi-scale-recency-5-20-80",
+    "level": "venue",
+    "evidence": "chronological rolling-origin backtest with untouched final holdout",
+    "evidence_scope": "aggregate benchmark from one private account; not a universal quality guarantee",
+    "holdout": {
+     "source_snapshot": "2026-06-28",
+     "usable_orders": 910,
+     "train_orders": 637,
+     "validation_orders": 136,
+     "final_test_orders": 137,
+     "precision_at_5": 0.0832,
+     "recall_at_5": 0.4161,
+     "ndcg_at_5": 0.2712,
+     "repeat_recall_at_5": 0.479,
+     "novel_target_share": 0.1314,
+     "popularity_recall_at_5": 0.2044,
+     "popularity_ndcg_at_5": 0.1599
+    },
+    "product_model": "not_promoted; the benchmark had only 15 detailed orders"
+   },
+   "coverage": {
+    "order_cards_discovered": 5,
+    "order_cursor_pages": 2,
+    "order_cursor_pages_fetched_this_call": 2,
+    "order_cursor_pages_at_last_full_refresh": 2,
+    "order_cursor_stop": "no_next_cursor",
+    "history_cache": {
+     "status": "disabled",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": null,
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    },
+    "venue_model_orders": 4,
+    "live_store_candidates": 6,
+    "resolved_live_products": 1,
+    "product_detail_history_orders_used_for_ranking": 0,
+    "benchmark_detailed_orders": 15,
+    "product_ranking_source": "live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model"
+   },
+   "choices": [
+    {
+     "label": "new_high_rated_option",
+     "store": {
+      "store_id": "store-6",
+      "store_address_id": "address-6",
+      "name": "Search Pizza Bar",
+      "slug": "search-pizza-bar",
+      "open": true,
+      "glovo_rating": 0,
+      "glovo_rating_count": 0,
+      "glovo_count_aware_quality": 4.2,
+      "search_position": 6
+     },
+     "product": {
+      "id": "product-7",
+      "product_id": "product-7",
+      "external_id": "external-7",
+      "store_product_id": "store-product-7",
+      "name": "Pizza Funghi",
+      "price": "EUR 12.00",
+      "available": true,
+      "add_enabled": true,
+      "is_variant": null,
+      "variant_selection": "not_exposed",
+      "option_groups": [],
+      "required_sections": [],
+      "store_id": "store-6",
+      "store_address_id": "address-6",
+      "category_id": "cat-9",
+      "source": "store_search",
+      "required_option_groups": 0
+     },
+     "personalized_evidence": {
+      "familiar": false,
+      "venue_orders": 0,
+      "recency_score": 0
+     },
+     "reasons": [
+      "Not found in the card-level venue history; included as a separate live-catalog exploration option.",
+      "Glovo currently exposes Pizza Funghi at EUR 12.00."
+     ],
+     "google_maps": null
+    }
+   ],
+   "google_quality": {
+    "requested": false,
+    "available": false,
+    "enriched": 0,
+    "ambiguous_or_unmatched": 0,
+    "failures": 0,
+    "ranking_effect": "none; Google evidence is not part of the backtested venue model",
+    "reviews_requested": false,
+    "review_venues_enriched": 0,
+    "reason": "GOOGLE_MAPS_API_KEY is not configured; Glovo and personalized evidence remain available."
+   },
+   "limitations": [
+    "Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.",
+    "A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.",
+    "Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.",
+    "Current product availability and required options are re-fetched; the suggestion tool never changes the basket."
+   ],
+   "mutates_basket": false
+  }
+ },
+ "query_error": "Suggestion query is required."
+}

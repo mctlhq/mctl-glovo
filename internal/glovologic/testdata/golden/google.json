@@ -1,0 +1,335 @@
+{
+ "match": [
+  {
+   "status": "ambiguous"
+  },
+  {
+   "status": "no_match"
+  },
+  {
+   "status": "matched",
+   "place": {
+    "id": "b",
+    "displayName": {
+     "text": "Favorite Pizza"
+    },
+    "location": {
+     "latitude": 41.39,
+     "longitude": 2.17
+    }
+   },
+   "name_score": 1,
+   "distance_meters": 1111.949266
+  },
+  {
+   "status": "no_match"
+  },
+  {
+   "status": "matched",
+   "place": {
+    "id": "a",
+    "displayName": {
+     "text": "Same Pizza"
+    },
+    "location": {
+     "latitude": 41.381,
+     "longitude": 2.17
+    }
+   },
+   "name_score": 1,
+   "distance_meters": 111.194927
+  }
+ ],
+ "providers": {
+  "matched_with_reviews": {
+   "output": {
+    "match_status": "matched",
+    "source": "Google Maps",
+    "place_id": "place 1/x",
+    "display_name": "Favorite Pizza",
+    "rating": 4.6,
+    "user_rating_count": 700,
+    "count_aware_quality": 4.55,
+    "quality_prior": {
+     "rating": 4.2,
+     "weight": 100
+    },
+    "business_status": "OPERATIONAL",
+    "google_maps_uri": "https://maps.example.test/place-1",
+    "attributions": [
+     {
+      "provider": "Example"
+     },
+     {
+      "provider": "Review Provider"
+     }
+    ],
+    "reviews": [
+     {
+      "text": "Carefully prepared.",
+      "language_code": "en",
+      "publish_time": "2026-01-01T00:00:00Z",
+      "relative_publish_time": "6 months ago",
+      "rating": 5,
+      "google_maps_uri": "https://maps.example.test/review-1",
+      "author_attribution": {
+       "display_name": "Reviewer One",
+       "uri": "https://maps.example.test/profile"
+      }
+     },
+     {
+      "text": "Fine.",
+      "rating": 4,
+      "author_attribution": null
+     },
+     {
+      "rating": 3,
+      "author_attribution": {}
+     }
+    ],
+    "reviews_status": "returned",
+    "review_notice": "Google selects and orders returned reviews; they may not be representative. Preserve author attribution and Google Maps links when displaying them.",
+    "review_policy": "https://developers.google.com/maps/documentation/places/web-service/policies",
+    "match_basis": "normalized venue name plus proximity to the selected Glovo location",
+    "ranking_effect": "display_only_not_backtested"
+   },
+   "requests": [
+    {
+     "path": "/v1/places:searchText",
+     "method": "POST",
+     "api_key": "synthetic-key",
+     "field_mask": "places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,places.attributions",
+     "content_type": "application/json",
+     "body": {
+      "textQuery": "Favorite Pizza BCN",
+      "pageSize": 3,
+      "locationBias": {
+       "circle": {
+        "center": {
+         "latitude": 41.38,
+         "longitude": 2.17
+        },
+        "radius": 3000
+       }
+      }
+     }
+    },
+    {
+     "path": "/v1/places/place%201%2Fx",
+     "method": "GET",
+     "api_key": "synthetic-key",
+     "field_mask": "id,reviews,attributions",
+     "content_type": null,
+     "body": null
+    }
+   ]
+  },
+  "matched_no_reviews": {
+   "output": {
+    "match_status": "matched",
+    "source": "Google Maps",
+    "place_id": "p2",
+    "display_name": "favorite pizza",
+    "rating": 96,
+    "user_rating_count": 12,
+    "count_aware_quality": 4.264,
+    "quality_prior": {
+     "rating": 4.2,
+     "weight": 100
+    },
+    "attributions": [],
+    "reviews": null,
+    "reviews_status": "not_requested",
+    "review_notice": null,
+    "review_policy": null,
+    "match_basis": "normalized venue name plus proximity to the selected Glovo location",
+    "ranking_effect": "display_only_not_backtested"
+   },
+   "requests": [
+    {
+     "path": "/v1/places:searchText",
+     "method": "POST",
+     "api_key": "synthetic-key",
+     "field_mask": "places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,places.attributions",
+     "content_type": "application/json",
+     "body": {
+      "textQuery": "Favorite Pizza",
+      "pageSize": 3,
+      "locationBias": {
+       "circle": {
+        "center": {
+         "latitude": 41.38,
+         "longitude": 2.17
+        },
+        "radius": 3000
+       }
+      }
+     }
+    }
+   ]
+  },
+  "review_failure": {
+   "output": {
+    "match_status": "matched",
+    "source": "Google Maps",
+    "place_id": "p3",
+    "display_name": "Favorite Pizza",
+    "rating": null,
+    "user_rating_count": null,
+    "count_aware_quality": null,
+    "quality_prior": {
+     "rating": 4.2,
+     "weight": 100
+    },
+    "attributions": [],
+    "reviews": null,
+    "reviews_status": "unavailable",
+    "review_notice": "Google selects and orders returned reviews; they may not be representative. Preserve author attribution and Google Maps links when displaying them.",
+    "review_policy": "https://developers.google.com/maps/documentation/places/web-service/policies",
+    "match_basis": "normalized venue name plus proximity to the selected Glovo location",
+    "ranking_effect": "display_only_not_backtested"
+   },
+   "requests": [
+    {
+     "path": "/v1/places:searchText",
+     "method": "POST",
+     "api_key": "synthetic-key",
+     "field_mask": "places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,places.attributions",
+     "content_type": "application/json",
+     "body": {
+      "textQuery": "Favorite Pizza BCN",
+      "pageSize": 3,
+      "locationBias": {
+       "circle": {
+        "center": {
+         "latitude": 41.38,
+         "longitude": 2.17
+        },
+        "radius": 3000
+       }
+      }
+     }
+    },
+    {
+     "path": "/v1/places/p3",
+     "method": "GET",
+     "api_key": "synthetic-key",
+     "field_mask": "id,reviews,attributions",
+     "content_type": null,
+     "body": null
+    }
+   ]
+  },
+  "no_match": {
+   "output": {
+    "match_status": "no_match"
+   },
+   "requests": [
+    {
+     "path": "/v1/places:searchText",
+     "method": "POST",
+     "api_key": "synthetic-key",
+     "field_mask": "places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,places.attributions",
+     "content_type": "application/json",
+     "body": {
+      "textQuery": "Favorite Pizza BCN",
+      "pageSize": 3,
+      "locationBias": {
+       "circle": {
+        "center": {
+         "latitude": 41.38,
+         "longitude": 2.17
+        },
+        "radius": 3000
+       }
+      }
+     }
+    }
+   ]
+  },
+  "search_error": {
+   "output": {
+    "error": "Google Places search failed (503)."
+   },
+   "requests": [
+    {
+     "path": "/v1/places:searchText",
+     "method": "POST",
+     "api_key": "synthetic-key",
+     "field_mask": "places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,places.attributions",
+     "content_type": "application/json",
+     "body": {
+      "textQuery": "Favorite Pizza BCN",
+      "pageSize": 3,
+      "locationBias": {
+       "circle": {
+        "center": {
+         "latitude": 41.38,
+         "longitude": 2.17
+        },
+        "radius": 3000
+       }
+      }
+     }
+    }
+   ]
+  },
+  "details_without_reviews_or_attributions": {
+   "output": {
+    "match_status": "matched",
+    "source": "Google Maps",
+    "place_id": "p4",
+    "display_name": "Favorite Pizza",
+    "rating": null,
+    "user_rating_count": null,
+    "count_aware_quality": null,
+    "quality_prior": {
+     "rating": 4.2,
+     "weight": 100
+    },
+    "attributions": [
+     {
+      "provider": "Example"
+     }
+    ],
+    "reviews": [],
+    "reviews_status": "returned",
+    "review_notice": "Google selects and orders returned reviews; they may not be representative. Preserve author attribution and Google Maps links when displaying them.",
+    "review_policy": "https://developers.google.com/maps/documentation/places/web-service/policies",
+    "match_basis": "normalized venue name plus proximity to the selected Glovo location",
+    "ranking_effect": "display_only_not_backtested"
+   },
+   "requests": [
+    {
+     "path": "/v1/places:searchText",
+     "method": "POST",
+     "api_key": "synthetic-key",
+     "field_mask": "places.id,places.displayName,places.location,places.rating,places.userRatingCount,places.googleMapsUri,places.businessStatus,places.attributions",
+     "content_type": "application/json",
+     "body": {
+      "textQuery": "Favorite Pizza BCN",
+      "pageSize": 3,
+      "locationBias": {
+       "circle": {
+        "center": {
+         "latitude": 41.38,
+         "longitude": 2.17
+        },
+        "radius": 3000
+       }
+      }
+     }
+    },
+    {
+     "path": "/v1/places/p4",
+     "method": "GET",
+     "api_key": "synthetic-key",
+     "field_mask": "id,reviews,attributions",
+     "content_type": null,
+     "body": null
+    }
+   ]
+  }
+ },
+ "no_key_is_null": true
+}

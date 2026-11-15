@@ -1,0 +1,366 @@
+{
+ "steps": [
+  {
+   "result": {
+    "orders": [
+     {
+      "order_id": "3",
+      "store": "A"
+     },
+     {
+      "order_id": "2",
+      "store": "B"
+     },
+     {
+      "order_id": "1",
+      "store": "A"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     },
+     {
+      "cursor": "next"
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 3,
+    "cache": {
+     "status": "missing_rebuilt",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": "2026-01-01T00:00:00.000Z",
+     "pages_fetched": 2,
+     "full_cursor_pages_at_last_full_refresh": 2
+    }
+   },
+   "stop_order_ids": [
+    null
+   ],
+   "file": {
+    "version": 1,
+    "account_hash": "7340c84e983274dc28b977a364908c611741cda9714f0f8d87e34f4edbe25318",
+    "updated_at": "2026-01-01T00:00:00.000Z",
+    "complete": true,
+    "full_cursor_pages": 2,
+    "orders": [
+     {
+      "order_id": "3",
+      "store": "A"
+     },
+     {
+      "order_id": "2",
+      "store": "B"
+     },
+     {
+      "order_id": "1",
+      "store": "A"
+     }
+    ]
+   },
+   "file_mode": "600",
+   "dir_mode": "700"
+  },
+  {
+   "result": {
+    "orders": [
+     {
+      "order_id": "4",
+      "store": "C"
+     },
+     {
+      "order_id": "3",
+      "store": "A"
+     },
+     {
+      "order_id": "2",
+      "store": "B"
+     },
+     {
+      "order_id": "1",
+      "store": "A"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "known_order",
+    "strategy": "order-id-cursor",
+    "count": 4,
+    "cache": {
+     "status": "hit_refreshed",
+     "mode": "incremental",
+     "stale": false,
+     "age_before_refresh_seconds": 86400,
+     "refreshed_at": "2026-01-02T00:00:00.400Z",
+     "pages_fetched": 1,
+     "full_cursor_pages_at_last_full_refresh": 2
+    }
+   },
+   "stop_order_ids": [
+    [
+     "1",
+     "2",
+     "3"
+    ]
+   ],
+   "file": {
+    "version": 1,
+    "account_hash": "7340c84e983274dc28b977a364908c611741cda9714f0f8d87e34f4edbe25318",
+    "updated_at": "2026-01-02T00:00:00.400Z",
+    "complete": true,
+    "full_cursor_pages": 2,
+    "orders": [
+     {
+      "order_id": "4",
+      "store": "C"
+     },
+     {
+      "order_id": "3",
+      "store": "A"
+     },
+     {
+      "order_id": "2",
+      "store": "B"
+     },
+     {
+      "order_id": "1",
+      "store": "A"
+     }
+    ]
+   },
+   "file_mode": "600",
+   "dir_mode": "700"
+  },
+  {
+   "result": {
+    "orders": [
+     {
+      "order_id": "6"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "empty_page",
+    "strategy": "order-id-cursor",
+    "count": 1,
+    "cache": {
+     "status": "cache_replaced_after_no_overlap",
+     "mode": "incremental",
+     "stale": false,
+     "age_before_refresh_seconds": 600,
+     "refreshed_at": "2026-01-02T00:10:00.600Z",
+     "pages_fetched": 1,
+     "full_cursor_pages_at_last_full_refresh": 2
+    }
+   },
+   "stop_order_ids": [
+    [
+     "1",
+     "2",
+     "3",
+     "4"
+    ]
+   ],
+   "file": {
+    "version": 1,
+    "account_hash": "7340c84e983274dc28b977a364908c611741cda9714f0f8d87e34f4edbe25318",
+    "updated_at": "2026-01-02T00:10:00.600Z",
+    "complete": true,
+    "full_cursor_pages": 2,
+    "orders": [
+     {
+      "order_id": "6"
+     }
+    ]
+   },
+   "file_mode": "600",
+   "dir_mode": "700"
+  },
+  null,
+  {
+   "result": {
+    "orders": [
+     {
+      "order_id": "5"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 1,
+    "cache": {
+     "status": "corrupt_rebuilt",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": null,
+     "refreshed_at": "2026-01-03T00:00:00.000Z",
+     "pages_fetched": 1,
+     "full_cursor_pages_at_last_full_refresh": 1
+    }
+   },
+   "stop_order_ids": [
+    null
+   ],
+   "file": {
+    "version": 1,
+    "account_hash": "7340c84e983274dc28b977a364908c611741cda9714f0f8d87e34f4edbe25318",
+    "updated_at": "2026-01-03T00:00:00.000Z",
+    "complete": true,
+    "full_cursor_pages": 1,
+    "orders": [
+     {
+      "order_id": "5"
+     }
+    ]
+   },
+   "file_mode": "600",
+   "dir_mode": "700"
+  },
+  null,
+  {
+   "result": {
+    "orders": [
+     {
+      "order_id": "5"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 1,
+    "cache": {
+     "status": "account_mismatch_rebuilt",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": 86400,
+     "refreshed_at": "2026-01-04T00:00:00.000Z",
+     "pages_fetched": 1,
+     "full_cursor_pages_at_last_full_refresh": 1
+    }
+   },
+   "stop_order_ids": [
+    null
+   ],
+   "file": {
+    "version": 1,
+    "account_hash": "7340c84e983274dc28b977a364908c611741cda9714f0f8d87e34f4edbe25318",
+    "updated_at": "2026-01-04T00:00:00.000Z",
+    "complete": true,
+    "full_cursor_pages": 1,
+    "orders": [
+     {
+      "order_id": "5"
+     }
+    ]
+   },
+   "file_mode": "600",
+   "dir_mode": "700"
+  },
+  {
+   "result": {
+    "orders": [
+     {
+      "order_id": "5"
+     },
+     {
+      "order_id": "4"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 2,
+    "cache": {
+     "status": "forced_full",
+     "mode": "full",
+     "stale": false,
+     "age_before_refresh_seconds": 86400,
+     "refreshed_at": "2026-01-05T00:00:00.000Z",
+     "pages_fetched": 1,
+     "full_cursor_pages_at_last_full_refresh": 1
+    }
+   },
+   "stop_order_ids": [
+    null
+   ],
+   "file": {
+    "version": 1,
+    "account_hash": "7340c84e983274dc28b977a364908c611741cda9714f0f8d87e34f4edbe25318",
+    "updated_at": "2026-01-05T00:00:00.000Z",
+    "complete": true,
+    "full_cursor_pages": 1,
+    "orders": [
+     {
+      "order_id": "5"
+     },
+     {
+      "order_id": "4"
+     }
+    ]
+   },
+   "file_mode": "600",
+   "dir_mode": "700"
+  },
+  {
+   "result": {
+    "error": "Incremental history refresh did not reach a known order or cursor exhaustion (repeated_next_cursor)."
+   },
+   "stop_order_ids": [
+    [
+     "4",
+     "5"
+    ]
+   ],
+   "file": {
+    "version": 1,
+    "account_hash": "7340c84e983274dc28b977a364908c611741cda9714f0f8d87e34f4edbe25318",
+    "updated_at": "2026-01-05T00:00:00.000Z",
+    "complete": true,
+    "full_cursor_pages": 1,
+    "orders": [
+     {
+      "order_id": "5"
+     },
+     {
+      "order_id": "4"
+     }
+    ]
+   },
+   "file_mode": "600",
+   "dir_mode": "700"
+  },
+  null,
+  {
+   "result": {
+    "error": "Full history refresh stopped before cursor exhaustion (max_pages)."
+   },
+   "stop_order_ids": [
+    null
+   ],
+   "file": "unparseable",
+   "file_mode": "600",
+   "dir_mode": "700"
+  }
+ ]
+}

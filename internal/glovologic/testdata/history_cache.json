@@ -1,0 +1,202 @@
+{
+ "customer_id": "synthetic-customer-1",
+ "steps": [
+  {
+   "op": "walk",
+   "now": "2026-01-01T00:00:00.000Z",
+   "response": {
+    "orders": [
+     {
+      "order_id": "3",
+      "store": "A"
+     },
+     {
+      "order_id": "2",
+      "store": "B"
+     },
+     {
+      "order_id": "1",
+      "store": "A"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     },
+     {
+      "cursor": "next"
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 3
+   }
+  },
+  {
+   "op": "walk",
+   "now": "2026-01-02T00:00:00.400Z",
+   "response": {
+    "orders": [
+     {
+      "order_id": "4",
+      "store": "C"
+     },
+     {
+      "order_id": "3",
+      "store": "A"
+     },
+     {
+      "order_id": "2",
+      "store": "B"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "known_order",
+    "strategy": "order-id-cursor",
+    "count": 3
+   }
+  },
+  {
+   "op": "walk",
+   "now": "2026-01-02T00:10:00.600Z",
+   "response": {
+    "orders": [
+     {
+      "order_id": "6"
+     },
+     {
+      "order_id": "6"
+     },
+     {
+      "order_id": null
+     },
+     {
+      "order_id": ""
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "empty_page",
+    "strategy": "order-id-cursor",
+    "count": 4
+   }
+  },
+  {
+   "op": "write_raw",
+   "content": "{broken"
+  },
+  {
+   "op": "walk",
+   "now": "2026-01-03T00:00:00.000Z",
+   "response": {
+    "orders": [
+     {
+      "order_id": "5"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 1
+   }
+  },
+  {
+   "op": "mutate_hash"
+  },
+  {
+   "op": "walk",
+   "now": "2026-01-04T00:00:00.000Z",
+   "response": {
+    "orders": [
+     {
+      "order_id": "5"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 1
+   }
+  },
+  {
+   "op": "walk",
+   "now": "2026-01-05T00:00:00.000Z",
+   "refresh": "full",
+   "response": {
+    "orders": [
+     {
+      "order_id": "5"
+     },
+     {
+      "order_id": "4"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "no_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 2
+   }
+  },
+  {
+   "op": "walk",
+   "now": "2026-01-06T00:00:00.000Z",
+   "response": {
+    "orders": [
+     {
+      "order_id": "new-only"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "repeated_next_cursor",
+    "strategy": "order-id-cursor",
+    "count": 1
+   }
+  },
+  {
+   "op": "write_raw",
+   "content": "{broken"
+  },
+  {
+   "op": "walk",
+   "now": "2026-01-08T00:00:00.000Z",
+   "response": {
+    "orders": [
+     {
+      "order_id": "1"
+     }
+    ],
+    "pages": [
+     {
+      "cursor": 0
+     }
+    ],
+    "stopped_reason": "max_pages",
+    "strategy": "order-id-cursor",
+    "count": 1
+   }
+  }
+ ]
+}
