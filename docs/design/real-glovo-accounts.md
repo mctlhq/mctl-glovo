@@ -152,12 +152,20 @@ the owner in.
   ZITADEL), consent, token issue, JWKS. `glovo.mctl.ai` is only the
   protected resource (RFC 9728); its metadata points at api.mctl.ai and
   that does not move.
-- **Clients are not users.** Claude, ChatGPT, Gemini and others reach the
-  authorization server through Dynamic Client Registration, and only
-  callbacks on `OAUTH_ALLOWED_REDIRECT_URIS` are accepted (wildcard
-  entries are path prefixes on a fixed https host, mctl-api#1059). The
-  user is the `pid` claim in the token. A client registration never
-  grants access to anyone's Glovo data.
+- **Clients are not users.** Client registration follows
+  mctlhq/.github#137: CIMD first, DCR as the fallback.
+  - CIMD is live on api.mctl.ai (`OAUTH_CIMD_ACCEPT` and `_ADVERTISE`).
+    Clients that publish a metadata document (claude.ai, chatgpt.com,
+    vscode.dev, listed in `OAUTH_CIMD_ALLOWED_HOSTS`) need no registry row
+    and no allowlist entry. Their own document decides the callback.
+  - DCR stays for clients without CIMD: Gemini custom connectors, Cursor,
+    Antigravity, the Cloudflare portal. Only callbacks on
+    `OAUTH_ALLOWED_REDIRECT_URIS` are accepted; wildcard entries are path
+    prefixes on a fixed https host (mctl-api#1059, #1060).
+  - When a DCR-only client starts publishing a metadata document, its host
+    moves to `OAUTH_CIMD_ALLOWED_HOSTS` and its allowlist entries go.
+  - The user is the `pid` claim in the token. Neither path grants access
+    to anyone's Glovo data.
 - **No hand-written registrations.** A client that cannot register through
   DCR gets an allowlist entry or a pre-registered client through a PR,
   never a row inserted into the database by hand.
@@ -177,8 +185,8 @@ in the shape that the v1 service already uses:
 ### 9.3 First use, step by step
 
 1. The user adds `https://glovo.mctl.ai/mcp` in their client. The client
-   gets the 401 challenge and the metadata, registers via DCR and opens
-   api.mctl.ai.
+   gets the 401 challenge and the metadata, then identifies itself by its
+   CIMD URL (or registers via DCR if it has none) and opens api.mctl.ai.
 2. The user signs in at api.mctl.ai and sees its consent page (client
    name, resource `glovo.mctl.ai`). The token carries `aud` =
    `https://glovo.mctl.ai/mcp` and the user's `pid`.
