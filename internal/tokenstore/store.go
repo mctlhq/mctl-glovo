@@ -256,7 +256,9 @@ func (s *store) decryptRow(ctx context.Context, pid PID, row LinkRow) (glovoapi.
 		return nil, ErrKilled
 	}
 	if breach == 1 {
-		_ = s.db.SetState(ctx, pid.id, row.LinkID, StateSuspended)
+		sctx, cancel := detached(ctx)
+		_ = s.db.SetState(sctx, pid.id, row.LinkID, StateSuspended)
+		cancel()
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "pid_decrypt_cap"})
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "suspend", Outcome: outcomeOK, Reason: "pid_decrypt_cap"})
 		return nil, ErrSuspended
@@ -470,13 +472,16 @@ func (s *store) update(ctx context.Context, pid PID, linkID string, actor string
 		case errors.Is(err, ErrBusy):
 			_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: linkID, Event: "refresh", Outcome: outcomeRefused, Reason: "busy", Actor: actor})
 		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
-			// ctx is done, so the audit write runs detached from it.
-			_ = s.audit(context.WithoutCancel(ctx), AuditEvent{PID: pid.id, LinkID: linkID, Event: "refresh", Outcome: outcomeRefused, Reason: "canceled", Actor: actor})
+			_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: linkID, Event: "refresh", Outcome: outcomeRefused, Reason: "canceled", Actor: actor})
 		}
 		return nil, 0, nil, err
 	}
 	release := func(addFailure bool, state string) {
-		_ = s.db.ReleaseLease(ctx, pid.id, row.LinkID, holder, addFailure, state)
+		// Runs on every exit, cancellation included: a lease left behind
+		// would make every refresh ErrBusy until it expires.
+		rctx, cancel := detached(ctx)
+		defer cancel()
+		_ = s.db.ReleaseLease(rctx, pid.id, row.LinkID, holder, addFailure, state)
 	}
 	cur, err := s.decryptRow(ctx, pid, row)
 	if err != nil {
@@ -517,6 +522,10 @@ func (s *store) update(ctx context.Context, pid PID, linkID string, actor string
 		// A relink, an unlink or another writer won. The rotated session
 		// belongs to a (link_id, version) that is no longer current, so it
 		// is discarded, never kept (2.5).
+		// Our lease may still sit on the row (a state change keeps it);
+		// ReleaseLease matches our token only, so this never touches a
+		// lease someone else now holds.
+		release(false, "")
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "persist_discarded", Outcome: outcomeRefused, Reason: "fence_lost", Actor: actor})
 		return nil, 0, nil, ErrSuperseded
 	default:
@@ -529,6 +538,10 @@ func (s *store) update(ctx context.Context, pid PID, linkID string, actor string
 // commit writes p with the fence, retrying a write whose outcome is
 // unknown. errFenceLost is final; any other error means "not confirmed".
 func (s *store) commit(ctx context.Context, pid PID, p *pendingWrite) (int64, error) {
+	// Glovo has already rotated the tokens: the write must not be lost to
+	// a caller that stopped waiting, or the only copy goes with it.
+	ctx, cancel := detached(ctx)
+	defer cancel()
 	ct, kv, err := s.encrypt(ctx, pid, p.linkID, p.session)
 	if err != nil {
 		return 0, err

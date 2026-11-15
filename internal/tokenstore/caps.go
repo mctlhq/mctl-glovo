@@ -58,8 +58,6 @@ func newWindow(limit int, period time.Duration) *window {
 	return &window{limit: limit, period: period, hits: map[string][]time.Time{}}
 }
 
-// allow records a hit for key at now and reports whether it is within the
-// cap. A refused hit is not recorded.
 // pruneLocked drops hits older than the window and reports whether one
 // more fits. w.mu must be held.
 func (w *window) pruneLocked(key string, now time.Time) bool {

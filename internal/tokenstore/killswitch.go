@@ -71,5 +71,8 @@ func (k *KillSwitch) Trip(ctx context.Context, by string) error {
 	k.latched = true
 	k.okUntil = time.Time{}
 	k.mu.Unlock()
-	return k.db.SetKilled(ctx, true, by)
+	// A safety write: it must land even if the caller has given up.
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
+	return k.db.SetKilled(dctx, true, by)
 }

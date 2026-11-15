@@ -230,7 +230,10 @@ func (m *memDB) ReadControl(context.Context) (bool, error) {
 	return m.killed, nil
 }
 
-func (m *memDB) SetKilled(_ context.Context, killed bool, _ string) error {
+func (m *memDB) SetKilled(ctx context.Context, killed bool, _ string) error {
+	if ctx.Err() != nil {
+		return errUnavailableCtx
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.noCtl {
@@ -262,7 +265,10 @@ func (m *memDB) AcquireLease(_ context.Context, pid, linkID, holder string, ttl 
 	return r.LinkRow, nil
 }
 
-func (m *memDB) CommitLease(_ context.Context, w LeaseCommit) (int64, error) {
+func (m *memDB) CommitLease(ctx context.Context, w LeaseCommit) (int64, error) {
+	if ctx.Err() != nil {
+		return 0, errUnavailableCtx
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.links[w.PID]
@@ -275,7 +281,10 @@ func (m *memDB) CommitLease(_ context.Context, w LeaseCommit) (int64, error) {
 	return r.Version, nil
 }
 
-func (m *memDB) ReleaseLease(_ context.Context, pid, linkID, holder string, addFailure bool, newState string) error {
+func (m *memDB) ReleaseLease(ctx context.Context, pid, linkID, holder string, addFailure bool, newState string) error {
+	if ctx.Err() != nil {
+		return errUnavailableCtx
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.links[pid]
@@ -293,7 +302,10 @@ func (m *memDB) ReleaseLease(_ context.Context, pid, linkID, holder string, addF
 	return nil
 }
 
-func (m *memDB) FindWrite(_ context.Context, pid, writeID string) (int64, error) {
+func (m *memDB) FindWrite(ctx context.Context, pid, writeID string) (int64, error) {
+	if ctx.Err() != nil {
+		return 0, errUnavailableCtx
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.links[pid]
@@ -335,7 +347,10 @@ func (m *memDB) CommitRewrap(_ context.Context, pid, linkID string, base int64, 
 	return r.Version, nil
 }
 
-func (m *memDB) SetState(_ context.Context, pid, linkID, state string) error {
+func (m *memDB) SetState(ctx context.Context, pid, linkID, state string) error {
+	if ctx.Err() != nil {
+		return errUnavailableCtx
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.links[pid]
@@ -430,7 +445,10 @@ func (m *memDB) codeRows(pid string) int {
 	return n
 }
 
-func (m *memDB) InsertAudit(_ context.Context, ev AuditEvent) error {
+func (m *memDB) InsertAudit(ctx context.Context, ev AuditEvent) error {
+	if ctx.Err() != nil {
+		return errUnavailableCtx
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	subject := ""
@@ -467,6 +485,11 @@ func (m *memDB) EraseLink(ctx context.Context, pid string, unlink, erasure Audit
 	}
 	return nil
 }
+
+// errUnavailableCtx is what a real driver gives a statement whose context
+// is already done; memDB models it so cleanup on a cancelled caller is
+// tested, not assumed.
+var errUnavailableCtx = errors.New("memdb: context done")
 
 func (m *memDB) events(event string) []memAudit {
 	m.mu.Lock()

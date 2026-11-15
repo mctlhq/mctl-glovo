@@ -1164,5 +1164,88 @@ func TestStateChangeTakesVersionAndFencesRefresh(t *testing.T) {
 		if got := h.stored(pidA)["accessToken"]; got != "access-A1" {
 			t.Fatalf("refresh landed on a suspended link: %v", got)
 		}
+		// The losing holder released its lease: once reactivated, the
+		// link can be refreshed at once instead of waiting out the TTL.
+		if err := h.raw.SetState(ctx, pidA, r.LinkID, StateActive); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.raw.AcquireLease(ctx, pidA, "", "glh_next", time.Minute); err != nil {
+			t.Fatalf("lease left behind by the fence loser: %v", err)
+		}
+	})
+}
+
+// A caller cancelled during the refresh still gets its lease released and
+// its audit row written: cleanup never runs on the caller's context.
+func TestCancelledRefreshReleasesLeaseAndAudits(t *testing.T) {
+	forEachDB(t, func(t *testing.T, h *harness) {
+		h.link(pidA, testSession("A1"))
+		ctx, cancel := context.WithCancel(context.Background())
+		err := h.st.Update(ctx, h.pid(pidA), func(ctx context.Context, s glovoapi.Session) (glovoapi.Session, error) {
+			cancel()
+			return nil, ctx.Err()
+		})
+		if err == nil {
+			t.Fatal("cancelled refresh succeeded")
+		}
+		if _, err := h.raw.AcquireLease(context.Background(), pidA, "", "glh_next", time.Minute); err != nil {
+			t.Fatalf("lease still held after a cancelled refresh: %v", err)
+		}
+		if h.mem != nil && len(h.mem.events("refresh")) != 1 {
+			t.Fatalf("refresh audit rows: %d", len(h.mem.events("refresh")))
+		}
+	})
+}
+
+// A refresh Glovo accepted is persisted even when the caller stopped
+// waiting right after: the rotated tokens are not lost to its context.
+func TestCancelledCallerStillPersistsRotatedSession(t *testing.T) {
+	forEachDB(t, func(t *testing.T, h *harness) {
+		h.link(pidA, testSession("A1"))
+		ctx, cancel := context.WithCancel(context.Background())
+		err := h.st.Update(ctx, h.pid(pidA), func(ctx context.Context, s glovoapi.Session) (glovoapi.Session, error) {
+			s["accessToken"] = "access-rotated"
+			cancel()
+			return s, nil
+		})
+		if err != nil {
+			t.Fatalf("rotated session not persisted: %v", err)
+		}
+		if got := h.stored(pidA)["accessToken"]; got != "access-rotated" {
+			t.Fatalf("stored %v", got)
+		}
+	})
+}
+
+// Safety writes (the global kill, a pid suspension) land even on a
+// cancelled caller.
+func TestSafetyWritesSurviveCancelledCaller(t *testing.T) {
+	t.Run("kill trip", func(t *testing.T) {
+		forEachDB(t, func(t *testing.T, h *harness) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_ = h.st.kill.Trip(ctx, "test")
+			if killed, err := h.raw.ReadControl(context.Background()); err != nil || !killed {
+				t.Fatalf("trip on a cancelled caller not persisted: %v %v", killed, err)
+			}
+		})
+	})
+	t.Run("pid suspension", func(t *testing.T) {
+		caps := DefaultCaps()
+		caps.PIDDecryptsPerHour = 1
+		m := newMemDB()
+		h := newHarness(t, m, m, nil, caps)
+		h.link(pidA, testSession("A1"))
+		if _, err := h.st.Get(context.Background(), h.pid(pidA)); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := h.st.Get(ctx, h.pid(pidA)); !errors.Is(err, ErrSuspended) {
+			t.Fatalf("cap breach: %v", err)
+		}
+		if st := h.row(pidA).State; st != StateSuspended {
+			t.Fatalf("suspension on a cancelled caller not persisted: %s", st)
+		}
 	})
 }

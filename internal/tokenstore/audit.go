@@ -3,6 +3,7 @@ package tokenstore
 import (
 	"context"
 	"log/slog"
+	"time"
 )
 
 // AuditEvent is one glovo_store_audit row (design section 5). It never
@@ -45,12 +46,27 @@ func requestID(ctx context.Context) string {
 // audit writes the row and the log line. The log line carries the link id
 // but not the pid: after an erasure (Q8) the pid must not survive in the
 // audit trail, and Loki lines cannot be rewritten.
+// cleanupTimeout bounds the work that must finish even when the caller's
+// context is already done: audit rows, lease releases, safety writes and
+// the persisting of a refresh Glovo has already accepted.
+const cleanupTimeout = 5 * time.Second
+
+// detached returns a context that keeps ctx's values but not its
+// cancellation, bounded by cleanupTimeout.
+func detached(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+}
+
 func (s *store) audit(ctx context.Context, ev AuditEvent) error {
 	ev.RequestID = requestID(ctx)
 	if ev.Actor == "" {
 		ev.Actor = actorService
 	}
-	err := s.db.InsertAudit(ctx, ev)
+	// The record of what happened must not depend on the caller still
+	// waiting: a cancelled request is often exactly what needs auditing.
+	dctx, cancel := detached(ctx)
+	defer cancel()
+	err := s.db.InsertAudit(dctx, ev)
 	s.logEvent(ctx, ev, err)
 	return err
 }
