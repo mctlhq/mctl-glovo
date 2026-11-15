@@ -125,6 +125,25 @@ How the two fit together:
   new owner decision recorded here. Until then the allowlist for C2 is the
   owner alone, enforced in mctl-api like today's pilot allowlist.
 
+### Decision update (owner, 2026-11-15, evening)
+
+- **Build to the C2-3 gate now.** Everything for external users is built,
+  but used by the owner alone: the cluster service, the token store,
+  linking and isolation. External users are switched on by a flag, and
+  only after the owner obtains the written legal read on R1 and R4 and the
+  C2-0 security review is done. The gate itself is unchanged.
+- **Egress: all users through the owner's Mac mini.** The cluster service
+  calls `api.glovoapp.com` only through a forward proxy on the mini. The
+  proxy allows CONNECT to that host and nothing else. The owner accepts
+  the R3 consequence: every linked account leaves from one home IP, so
+  Glovo may block that IP or ban accounts, the owner's included. Mitigations
+  that are not optional:
+  - a per-account and global request rate cap;
+  - no traffic when the proxy is down. A failed proxy means 503, never a
+    direct call from the cluster;
+  - a kill switch that stops all outbound Glovo calls;
+  - an alert when Glovo starts answering 403/429.
+
 ### Phases
 
 | Phase | What | Gate |
