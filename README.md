@@ -20,6 +20,15 @@ Migration phases:
 5. Basket data moves to its own database.
 6. The in-process copy is removed from mctl-api.
 
+## glovo-home (owner-only gateway)
+`cmd/glovo-home` is a separate, owner-only gateway for running
+`glovo.mctl.ai/mcp` from the owner's own machine. It sits in front of the
+open-source local Glovo MCP server
+[glovo-skill](https://github.com/denya/glovo-skill) and adds token
+verification against mctl-api, a principal allowlist, a checkout/payment
+tool refusal and an audit log. See
+[deploy/mac-mini/README.md](deploy/mac-mini/README.md).
+
 ## Development
 ```bash
 go test -race ./...
