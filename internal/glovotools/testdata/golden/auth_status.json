@@ -1,0 +1,32 @@
+{
+  "case": "auth_status",
+  "tool": "glovo_auth_status",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"signed_in\": true,\n  \"access_token_valid\": true,\n  \"seconds_left\": 3600,\n  \"has_customer\": true,\n  \"has_location\": true\n}"
+      }
+    ]
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

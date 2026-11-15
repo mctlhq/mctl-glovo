@@ -1,0 +1,39 @@
+{
+  "case": "get_basket_fail",
+  "tool": "glovo_get_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: GET /v1/authenticated/customers/[customer]/baskets/[basket]/1001 -> 500: TEST_FAILURE"
+      }
+    ],
+    "isError": true
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v1/authenticated/customers/4242/baskets/stores/1001",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

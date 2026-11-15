@@ -187,6 +187,42 @@ func WithDefaultLocation(l Location) Option { return func(c *Client) { c.default
 // WithSession installs an in-memory session instead of loading the file.
 func WithSession(s Session) Option { return func(c *Client) { c.session = s } }
 
+// WithClock replaces time.Now for token expiry and session timestamps.
+// Tests use it; nil is refused.
+func WithClock(now func() time.Time) Option {
+	return func(c *Client) {
+		if now == nil {
+			c.setOptErr(errors.New("glovoapi: WithClock: nil clock"))
+			return
+		}
+		c.now = now
+	}
+}
+
+// WithIDGenerator replaces the random UUID source used for search ids and
+// the per-process device identity. Tests use it; nil is refused.
+func WithIDGenerator(newID func() string) Option {
+	return func(c *Client) {
+		if newID == nil {
+			c.setOptErr(errors.New("glovoapi: WithIDGenerator: nil generator"))
+			return
+		}
+		c.newID = newID
+	}
+}
+
+// WithSleep replaces the pause between order-history pages and retries.
+// Tests use it; nil is refused.
+func WithSleep(sleep func(context.Context, time.Duration) error) Option {
+	return func(c *Client) {
+		if sleep == nil {
+			c.setOptErr(errors.New("glovoapi: WithSleep: nil sleep"))
+			return
+		}
+		c.sleep = sleep
+	}
+}
+
 // New returns a client for the session file at sessionPath. It does not read
 // the file; call Reload for that. It fails on an invalid option, on
 // WithProxy or WithRequireProxy combined with WithHTTPClient, and on
@@ -277,10 +313,15 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	p := u.EscapedPath()
 	prefix := strings.TrimRight(base.EscapedPath(), "/")
 	if prefix != "" {
-		if !strings.HasPrefix(p, prefix+"/") {
+		switch {
+		case p == prefix:
+			// Exactly the base path is the API root, not outside it.
+			p = "/"
+		case strings.HasPrefix(p, prefix+"/"):
+			p = strings.TrimPrefix(p, prefix)
+		default:
 			return fmt.Errorf("%w: outside the API base path", ErrRedirectRefused)
 		}
-		p = strings.TrimPrefix(p, prefix)
 	}
 	if u.RawQuery != "" {
 		p += "?" + u.RawQuery
@@ -315,10 +356,16 @@ func (c *Client) initBits() {
 // kept: AuthStatus reports it as session_error instead of failing. The
 // client stays usable either way, so SetLocation can write a fresh session
 // over a broken file.
+//
+// Reload waits for a token refresh in flight and holds the session lock
+// while it reads, so a file read cannot race a refresh or a location write
+// and put back a session that was already rotated away.
 func (c *Client) Reload() error {
-	s, err := LoadSession(c.sessionPath)
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	s, err := LoadSession(c.sessionPath)
 	c.session, c.loadErr = nil, nil
 	switch {
 	case err == nil:
@@ -492,17 +539,40 @@ var mutationAllowlist = []struct {
 }
 
 // ErrUnsafePath is returned for a request path with an empty, "." or ".."
-// segment. seg escapes "/" but not dots, so an id of ".." would otherwise
-// climb out of its path.
-var ErrUnsafePath = errors.New("glovoapi: refusing a request path with an empty, '.' or '..' segment")
+// segment, also percent-encoded. seg escapes "/" but not dots, so an id of
+// ".." would otherwise climb out of its path. Mutations are stricter still;
+// see checkMutation.
+var ErrUnsafePath = errors.New("glovoapi: refusing a request path with an empty, '.', '..' or slash-carrying segment")
 
 func checkPathSegments(p string) error {
 	raw := strings.SplitN(p, "?", 2)[0]
 	if !strings.HasPrefix(raw, "/") {
 		return ErrUnsafePath
 	}
+	if raw == "/" {
+		// The API root: reachable only as a redirect to the base path.
+		return nil
+	}
 	for _, s := range strings.Split(raw[1:], "/") {
-		if s == "" || s == "." || s == ".." {
+		dec, err := url.PathUnescape(s)
+		if err != nil || s == "" || dec == "" || dec == "." || dec == ".." {
+			return ErrUnsafePath
+		}
+	}
+	return nil
+}
+
+// checkMutationSegments refuses a mutation path with a segment that carries
+// an encoded "/" or "\". seg escapes "/" to %2F but does not refuse it, so a
+// basket or product id such as "x/../../orders" would reach the server as
+// one segment that a proxy or router decoding %2F before routing could
+// split and climb out of. Glovo ids never contain a slash. Reads keep
+// accepting such ids (a place id is opaque provider text).
+func checkMutationSegments(p string) error {
+	raw := strings.SplitN(p, "?", 2)[0]
+	for _, s := range strings.Split(raw, "/") {
+		dec, err := url.PathUnescape(s)
+		if err != nil || strings.ContainsAny(dec, "/\\") {
 			return ErrUnsafePath
 		}
 	}
@@ -512,6 +582,9 @@ func checkPathSegments(p string) error {
 func checkMutation(method, p string) error {
 	if method == http.MethodGet {
 		return nil
+	}
+	if err := checkMutationSegments(p); err != nil {
+		return err
 	}
 	// Match the cleaned path, so that a ".." segment cannot make a path look
 	// like an allowed one while resolving to another.
@@ -691,11 +764,22 @@ func (c *Client) refreshLocked(ctx context.Context) error {
 		return fmt.Errorf("glovo refresh failed: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return &AuthError{Msg: fmt.Sprintf("Glovo refresh failed (%d). Run glovo_login again.", status)}
+		if refreshRejected(status) {
+			return &AuthError{Msg: fmt.Sprintf("Glovo refresh failed (%d). Run glovo_login again.", status)}
+		}
+		// 429, 5xx and anything else that is not a rejection of the refresh
+		// token is transient: the session may still be good, so this is not
+		// a re-login signal, and withRetry may retry it.
+		text := data
+		if len(text) > 300 {
+			text = text[:300]
+		}
+		return &APIError{Method: http.MethodPost, Path: "/oauth/refresh", Status: status, Detail: safeErrorBody(string(text))}
 	}
 	v, err := decodeJSON(data)
 	if err != nil {
-		return &AuthError{Msg: "Glovo refresh failed (malformed response). Run glovo_login again."}
+		// A 2xx that is not JSON says nothing about the refresh token.
+		return fmt.Errorf("glovo refresh failed: malformed JSON body: %w", err)
 	}
 	creds := v
 	if truthy(get(v, "access", "accessToken")) {
@@ -725,6 +809,12 @@ func (c *Client) refreshLocked(ctx context.Context) error {
 	}
 	c.session = next
 	return nil
+}
+
+// refreshRejected reports a refresh response that rejects the refresh token
+// itself (invalid_grant and the like): only then is a new sign-in needed.
+func refreshRejected(status int) bool {
+	return status == http.StatusBadRequest || status == http.StatusUnauthorized || status == http.StatusForbidden
 }
 
 // setOrDelete assigns v, or removes the key when v is undefined (which is how

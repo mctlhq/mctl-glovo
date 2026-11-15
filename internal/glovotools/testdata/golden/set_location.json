@@ -1,0 +1,34 @@
+{
+  "case": "set_location",
+  "tool": "glovo_set_location",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"countryCode\": \"PT\",\n  \"cityCode\": \"LIS\",\n  \"latitude\": 38.7,\n  \"longitude\": \"-9.1\",\n  \"accuracy\": \"0\",\n  \"languageCode\": \"pt\"\n}"
+      }
+    ]
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "LIS",
+        "latitude": 38.7,
+        "longitude": "-9.1",
+        "countryCode": "PT",
+        "languageCode": "pt"
+      },
+      "updatedAt": "2026-03-01T12:00:00.000Z"
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-4",
+    "externalId": "external-4",
+    "storeProductId": "store-product-4",
+    "name": "Pizza Four Cheese",
+    "priceInfo": {
+     "displayText": "EUR 12.00"
+    },
+    "attributeGroups": []
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": true
+      }
+     }
+    ]
+   }
+  }
+ }
+}

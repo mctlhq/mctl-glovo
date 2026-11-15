@@ -1,0 +1,38 @@
+{
+  "case": "store_recommendations_all",
+  "tool": "glovo_get_store_recommendations",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"kind\": \"all\",\n  \"count\": 2,\n  \"sections\": [\n    {\n      \"type\": \"CAROUSEL\",\n      \"title\": \"Order again\",\n      \"slug\": \"easy-reorder\",\n      \"collection_type\": \"EasyReorder\",\n      \"products\": [\n        {\n          \"id\": \"1\",\n          \"product_id\": \"1\",\n          \"external_id\": \"external-1\",\n          \"store_product_id\": \"store-product-1\",\n          \"name\": \"Whole Milk\",\n          \"price\": \"1.50 EUR\",\n          \"available\": true,\n          \"description\": \"1L\",\n          \"collection_type\": \"EasyReorder\",\n          \"ordered_before\": true,\n          \"source\": \"easy_reorder\"\n        },\n        {\n          \"id\": \"4\",\n          \"product_id\": \"4\",\n          \"external_id\": \"external-4\",\n          \"store_product_id\": \"store-product-4\",\n          \"name\": \"Butter\",\n          \"price\": \"€3.00\",\n          \"amount\": 3,\n          \"available\": null,\n          \"collection_type\": \"EasyReorder\",\n          \"ordered_before\": false,\n          \"source\": \"easy_reorder\"\n        }\n      ]\n    }\n  ],\n  \"products\": [\n    {\n      \"id\": \"1\",\n      \"product_id\": \"1\",\n      \"external_id\": \"external-1\",\n      \"store_product_id\": \"store-product-1\",\n      \"name\": \"Whole Milk\",\n      \"price\": \"1.50 EUR\",\n      \"available\": true,\n      \"description\": \"1L\",\n      \"collection_type\": \"EasyReorder\",\n      \"ordered_before\": true,\n      \"source\": \"easy_reorder\"\n    },\n    {\n      \"id\": \"4\",\n      \"product_id\": \"4\",\n      \"external_id\": \"external-4\",\n      \"store_product_id\": \"store-product-4\",\n      \"name\": \"Butter\",\n      \"price\": \"€3.00\",\n      \"amount\": 3,\n      \"available\": null,\n      \"collection_type\": \"EasyReorder\",\n      \"ordered_before\": false,\n      \"source\": \"easy_reorder\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v4/stores/1001/addresses/2001/content/main",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

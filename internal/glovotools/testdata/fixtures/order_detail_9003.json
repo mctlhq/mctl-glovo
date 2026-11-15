@@ -1,0 +1,21 @@
+{
+ "id": 9003,
+ "storeId": 1001,
+ "storeAddressId": 2001,
+ "storeName": "Example Market",
+ "currentStatus": {
+  "type": "DELIVERED",
+  "creationTime": 1767312000000
+ },
+ "boughtProducts": [
+  {
+   "name": "Whole Milk",
+   "quantity": "3",
+   "price": "4,50 EUR",
+   "id": 1
+  }
+ ],
+ "total": {
+  "formatted": "4,50 EUR"
+ }
+}

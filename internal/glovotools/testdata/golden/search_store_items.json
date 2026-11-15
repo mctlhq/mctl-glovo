@@ -1,0 +1,38 @@
+{
+  "case": "search_store_items",
+  "tool": "glovo_search_store_items",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"total\": 3,\n  \"count\": 3,\n  \"results\": [\n    {\n      \"id\": \"5001\",\n      \"product_id\": \"5001\",\n      \"external_id\": \"ext-5001\",\n      \"store_product_id\": \"sp-5001\",\n      \"name\": \"Test Milk 1L\",\n      \"price\": \"1,20 EUR\",\n      \"amount\": 1.2,\n      \"image\": \"https://glovo.dhmedia.io/image/img-5001\",\n      \"available\": true,\n      \"category_id\": 77,\n      \"store_id\": \"1001\",\n      \"store_address_id\": 2001\n    },\n    {\n      \"id\": \"5002\",\n      \"product_id\": \"5002\",\n      \"name\": \"Test Bread\",\n      \"price\": \"€2.50\",\n      \"amount\": 2.5,\n      \"image\": \"https://img.example.test/b.png\",\n      \"sponsored\": false,\n      \"available\": false,\n      \"quantity_limit\": 3,\n      \"store_id\": \"1001\",\n      \"store_address_id\": 2001\n    },\n    {\n      \"id\": \"5003\",\n      \"product_id\": \"5003\",\n      \"name\": \"Test Water\",\n      \"restricted\": null,\n      \"available\": false,\n      \"store_id\": \"1001\",\n      \"store_address_id\": 2001\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/stores/1001/addresses/2001/search?query=milk&searchId=00000000-0000-4000-8000-000000000003",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

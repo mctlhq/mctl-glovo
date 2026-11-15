@@ -1,0 +1,38 @@
+{
+  "case": "store_recommendations_top",
+  "tool": "glovo_get_store_recommendations",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"kind\": \"top_sellers\",\n  \"count\": 1,\n  \"sections\": [\n    {\n      \"type\": \"CAROUSEL\",\n      \"title\": \"Popular\",\n      \"collection_type\": \"TopSellers\",\n      \"products\": [\n        {\n          \"id\": \"2\",\n          \"product_id\": \"2\",\n          \"external_id\": \"external-2\",\n          \"store_product_id\": \"store-product-2\",\n          \"name\": \"Bread\",\n          \"available\": false,\n          \"collection_type\": \"TopSellers\",\n          \"ordered_before\": false,\n          \"source\": \"top_sellers\"\n        }\n      ]\n    }\n  ],\n  \"products\": [\n    {\n      \"id\": \"2\",\n      \"product_id\": \"2\",\n      \"external_id\": \"external-2\",\n      \"store_product_id\": \"store-product-2\",\n      \"name\": \"Bread\",\n      \"available\": false,\n      \"collection_type\": \"TopSellers\",\n      \"ordered_before\": false,\n      \"source\": \"top_sellers\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v4/stores/1001/addresses/2001/content/main",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

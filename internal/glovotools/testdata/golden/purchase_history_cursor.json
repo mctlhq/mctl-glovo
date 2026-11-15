@@ -1,0 +1,38 @@
+{
+  "case": "purchase_history_cursor",
+  "tool": "glovo_get_purchase_history",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"raw_shape\": \"array\",\n  \"cursor\": \"9001\",\n  \"count\": 2,\n  \"next_offset\": null,\n  \"pagination\": {\n    \"next\": null\n  },\n  \"orders\": [\n    {\n      \"order_id\": \"9003\",\n      \"store\": \"Example Market\",\n      \"items\": [],\n      \"url\": \"https://glovoapp.com/en/profile/past-orders/9003\"\n    },\n    {\n      \"order_id\": \"9001\",\n      \"store\": \"Example Market\",\n      \"items\": [],\n      \"url\": \"https://glovoapp.com/en/profile/past-orders/9001\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/customer/orders-list?offset=9001&limit=5",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

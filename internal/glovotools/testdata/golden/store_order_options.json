@@ -1,0 +1,53 @@
+{
+  "case": "store_order_options",
+  "tool": "glovo_get_store_order_options",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"handling_strategy\": \"DELIVERY\",\n  \"fee_information\": \"Fees vary\",\n  \"minimum_basket_ranges\": [\n    {\n      \"lower_bound\": 0,\n      \"upper_bound\": 10,\n      \"upper_bound_text\": \"10 EUR\",\n      \"surcharge\": \"2 EUR\",\n      \"surcharge_strategy\": \"MBS\"\n    },\n    {\n      \"lower_bound\": 10,\n      \"success_text\": \"No surcharge\"\n    }\n  ],\n  \"restrictions_title\": \"Restrictions\",\n  \"restrictions\": [\n    {\n      \"id\": \"r1\",\n      \"text\": \"No alcohol\"\n    },\n    {\n      \"id\": \"r2\",\n      \"text\": \"Age check\",\n      \"link\": \"https://example.test/terms\"\n    }\n  ],\n  \"store_information\": [\n    {\n      \"type\": \"TEXT\",\n      \"text\": \"Open daily\"\n    },\n    {\n      \"type\": \"TITLE\",\n      \"text\": \"Example Market\"\n    }\n  ],\n  \"similar_stores\": [\n    {\n      \"id\": \"3\",\n      \"store_id\": \"3\",\n      \"name\": \"Alternative\",\n      \"open\": true\n    },\n    {\n      \"id\": \"4\",\n      \"store_id\": \"4\",\n      \"name\": \"Other Market\",\n      \"slug\": \"other-market\",\n      \"category_id\": 4,\n      \"store_class\": \"grocery\",\n      \"open\": false,\n      \"url\": \"https://glovoapp.com/en/es/barcelona/stores/other-market\"\n    }\n  ],\n  \"boundary\": \"Read-only pre-check. This does not create a basket, enter checkout, book a slot, pay, or place an order.\"\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v1/stores/1001/addresses/2001/node/store_fees",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/v4/stores/1001/addresses/2001/restrictions",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/v3/stores/1001/addresses/2001/store_info_screen?translation=en",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/v1/store-view/web/similar-stores?limit=5&storeId=1001&city_changed=false",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

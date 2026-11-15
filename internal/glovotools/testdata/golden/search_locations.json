@@ -1,0 +1,38 @@
+{
+  "case": "search_locations",
+  "tool": "glovo_search_locations",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"count\": 4,\n  \"results\": [\n    {\n      \"place_id\": \"p1\",\n      \"provider\": \"google\",\n      \"title\": \"One\",\n      \"subtitle\": \"Area\"\n    },\n    {\n      \"place_id\": \"p2\",\n      \"provider\": \"google\",\n      \"title\": \"Two\",\n      \"subtitle\": \"District\"\n    },\n    {\n      \"place_id\": \"p3\",\n      \"provider\": \"osm\",\n      \"title\": \"Three\"\n    },\n    {\n      \"place_id\": \"p4\",\n      \"title\": \"Four\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/addresslookup/pub/address?address=Example+street&allowFallback=true",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

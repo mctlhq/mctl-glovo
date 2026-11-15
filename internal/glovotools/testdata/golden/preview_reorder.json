@@ -1,0 +1,38 @@
+{
+  "case": "preview_reorder",
+  "tool": "glovo_preview_reorder",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"order_id\": 9001,\n  \"store\": \"Example Market\",\n  \"native_reorder_allowed\": true,\n  \"can_go_to_store\": true,\n  \"has_store_id\": true,\n  \"has_store_address_id\": true,\n  \"items_count\": 3,\n  \"can_prepare_basket\": false,\n  \"unsupported_reasons\": [\n    \"missing_product_identifier\",\n    \"option_payload_requires_live_revalidation\"\n  ],\n  \"limitation\": \"Read-only preview only. This order detail does not expose enough stable current product/option identifiers for a lossless basket rebuild.\",\n  \"items\": [\n    {\n      \"index\": 0,\n      \"name\": \"Test Milk\",\n      \"quantity\": 2,\n      \"has_product_identifier\": true,\n      \"has_selected_options\": false,\n      \"can_prepare_line\": true,\n      \"unsupported_reasons\": []\n    },\n    {\n      \"index\": 1,\n      \"name\": \"Test Bread\",\n      \"quantity\": 1,\n      \"has_product_identifier\": false,\n      \"has_selected_options\": true,\n      \"can_prepare_line\": false,\n      \"unsupported_reasons\": [\n        \"missing_product_identifier\",\n        \"option_payload_requires_live_revalidation\"\n      ]\n    },\n    {\n      \"index\": 2,\n      \"name\": \"Mystery item\",\n      \"quantity\": 1,\n      \"has_product_identifier\": false,\n      \"has_selected_options\": false,\n      \"can_prepare_line\": false,\n      \"unsupported_reasons\": [\n        \"missing_product_identifier\"\n      ]\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/customer/orders/9001",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

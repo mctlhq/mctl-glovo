@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-5",
+    "externalId": "external-5",
+    "storeProductId": "store-product-5",
+    "name": "Pizza Marinara",
+    "priceInfo": {
+     "displayText": "EUR 9.50"
+    },
+    "attributeGroups": []
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": true
+      }
+     }
+    ]
+   }
+  }
+ }
+}

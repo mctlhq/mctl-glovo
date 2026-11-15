@@ -1,0 +1,70 @@
+{
+ "data": {
+  "body": [
+   {
+    "data": {
+     "elements": [
+      {
+       "type": "PRODUCT_TILE",
+       "data": {
+        "id": "product-1",
+        "externalId": "external-1",
+        "storeProductId": "store-product-1",
+        "name": "Pizza Margherita",
+        "priceInfo": {
+         "displayText": "EUR 12.00"
+        }
+       },
+       "actions": [
+        {
+         "data": {
+          "events": [
+           {
+            "data": {
+             "collectionType": "Easy Reorder",
+             "isOrderedBefore": true
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   },
+   {
+    "data": {
+     "elements": [
+      {
+       "type": "PRODUCT_TILE",
+       "data": {
+        "id": "product-2",
+        "externalId": "external-2",
+        "storeProductId": "store-product-2",
+        "name": "Pizza Diavola",
+        "priceInfo": {
+         "displayText": "EUR 12.00"
+        }
+       },
+       "actions": [
+        {
+         "data": {
+          "events": [
+           {
+            "data": {
+             "collectionType": "Top Sellers",
+             "isOrderedBefore": false
+            }
+           }
+          ]
+         }
+        }
+       ]
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

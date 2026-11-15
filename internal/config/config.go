@@ -19,8 +19,18 @@ const (
 	JWKSURL  = "https://api.mctl.ai/.well-known/jwks.json"
 )
 
+// Backends for GLOVO_HOME_BACKEND. Exactly one runs.
+const (
+	// BackendSkill runs glovo-skill as a Node child and mirrors its tools.
+	BackendSkill = "skill"
+	// BackendNative serves the same tools from Go (internal/glovotools).
+	BackendNative = "native"
+)
+
 // Config is glovo-home's configuration.
 type Config struct {
+	// Backend is BackendSkill (the default) or BackendNative.
+	Backend           string
 	Listen            string
 	AllowedPrincipals []string
 	Node              string
@@ -36,14 +46,18 @@ type Config struct {
 	// AlertCmd is run with one fixed message argument when the keepalive
 	// fails. Empty only logs.
 	AlertCmd string
-	// SessionPath is the glovo-skill session file. glovo-home never opens
-	// or stats it.
+	// SessionPath is the glovo-skill session file. With the skill backend
+	// glovo-home never opens or stats it; the native backend reads it on
+	// every call and rewrites it (atomically, 0600) on a token refresh.
 	SessionPath string
 	// ReloadMarker is SessionPath + ".reload": scripts/glovo-relogin.sh
 	// touches it after installing a new session, and glovo-home stats it to
 	// restart the child. It is not the session file itself because
 	// glovo-skill rewrites that file on every token refresh.
 	ReloadMarker string
+	// GoogleMapsAPIKey is GOOGLE_MAPS_API_KEY, read only by the native
+	// backend (glovo-skill reads the same variable for Places evidence).
+	GoogleMapsAPIKey string
 }
 
 // childEnvKeys are inherited by the child verbatim when set. Everything
@@ -53,6 +67,7 @@ var childEnvKeys = []string{"HOME", "PATH", "USER", "LOGNAME", "LANG", "LC_ALL",
 // Load reads the configuration. getenv is os.Getenv; environ is os.Environ.
 func Load(getenv func(string) string, environ []string) (*Config, error) {
 	c := &Config{
+		Backend:     getenv("GLOVO_HOME_BACKEND"),
 		Listen:      getenv("GLOVO_HOME_LISTEN"),
 		Node:        getenv("GLOVO_HOME_NODE"),
 		Server:      getenv("GLOVO_HOME_SERVER"),
@@ -67,8 +82,17 @@ func Load(getenv func(string) string, environ []string) (*Config, error) {
 	if err := checkLoopback(c.Listen, getenv("GLOVO_HOME_ALLOW_NON_LOOPBACK") == "true"); err != nil {
 		return nil, err
 	}
-	if c.Node == "" || c.Server == "" {
-		return nil, errors.New("GLOVO_HOME_NODE and GLOVO_HOME_SERVER are required")
+	switch c.Backend {
+	case "", BackendSkill:
+		c.Backend = BackendSkill
+		if c.Node == "" || c.Server == "" {
+			return nil, errors.New("GLOVO_HOME_NODE and GLOVO_HOME_SERVER are required")
+		}
+	case BackendNative:
+		// No child: GLOVO_HOME_NODE and GLOVO_HOME_SERVER are not used.
+		c.Node, c.Server = "", ""
+	default:
+		return nil, fmt.Errorf("GLOVO_HOME_BACKEND: %q is not %q or %q", c.Backend, BackendSkill, BackendNative)
 	}
 	c.AllowedPrincipals = splitList(getenv("GLOVO_HOME_ALLOWED_PRINCIPALS"))
 	for _, p := range c.AllowedPrincipals {
@@ -109,6 +133,12 @@ func Load(getenv func(string) string, environ []string) (*Config, error) {
 	}
 	if c.SessionPath != "" {
 		c.ReloadMarker = c.SessionPath + ".reload"
+	}
+	if c.Backend == BackendNative {
+		if c.SessionPath == "" {
+			return nil, errors.New("GLOVO_HOME_BACKEND=native needs GLOVO_SESSION_PATH or HOME to find the session file")
+		}
+		c.GoogleMapsAPIKey = getenv("GOOGLE_MAPS_API_KEY")
 	}
 	c.ChildEnv = childEnv(environ)
 	return c, nil

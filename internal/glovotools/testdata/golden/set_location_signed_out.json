@@ -1,0 +1,27 @@
+{
+  "case": "set_location_signed_out",
+  "tool": "glovo_set_location",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"countryCode\": \"ES\",\n  \"cityCode\": \"BCN\",\n  \"latitude\": \"41.3874\",\n  \"longitude\": \"2.1686\",\n  \"accuracy\": \"0\",\n  \"languageCode\": \"en\"\n}"
+      }
+    ]
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "location": {
+        "countryCode": "ES",
+        "cityCode": "BCN"
+      },
+      "updatedAt": "2026-03-01T12:00:00.000Z"
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

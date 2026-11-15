@@ -1,0 +1,15 @@
+{
+ "results": [
+  {
+   "products": [
+    {
+     "id": "product-7",
+     "externalId": "external-7",
+     "storeProductId": "store-product-7",
+     "name": "Pizza Funghi",
+     "categoryId": "cat-9"
+    }
+   ]
+  }
+ ]
+}

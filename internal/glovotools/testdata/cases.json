@@ -1,0 +1,5053 @@
+{
+ "now_ms": 1772366400000,
+ "sessions": {
+  "default": {
+   "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+   "refreshToken": "refresh-test-old",
+   "customerId": 4242,
+   "keepMe": "unknown-field",
+   "location": {
+    "cityCode": "TST",
+    "latitude": "10.5",
+    "longitude": "-3.25",
+    "countryCode": "XX"
+   }
+  },
+  "expired": {
+   "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNjYzNDB9.sig",
+   "refreshToken": "refresh-test-old",
+   "customerId": 4242,
+   "tokenType": "Bearer",
+   "keepMe": "unknown-field",
+   "location": {
+    "cityCode": "TST",
+    "latitude": "10.5",
+    "longitude": "-3.25",
+    "countryCode": "XX"
+   }
+  },
+  "expired_no_refresh": {
+   "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNjYzNDB9.sig",
+   "customerId": 4242,
+   "location": {
+    "cityCode": "TST",
+    "latitude": "10.5",
+    "longitude": "-3.25",
+    "countryCode": "XX"
+   }
+  },
+  "location_only": {
+   "location": {
+    "cityCode": "TST",
+    "countryCode": "XX"
+   }
+  },
+  "no_location": {
+   "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+   "refreshToken": "refresh-test-old",
+   "customerId": 4242
+  },
+  "no_customer": {
+   "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+   "refreshToken": "refresh-test-old",
+   "location": {
+    "cityCode": "TST",
+    "latitude": "10.5",
+    "longitude": "-3.25",
+    "countryCode": "XX"
+   }
+  }
+ },
+ "cases": [
+  {
+   "name": "shopping_guide",
+   "tool": "glovo_get_shopping_guide",
+   "args": {},
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "auth_status",
+   "tool": "glovo_auth_status",
+   "args": {},
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "auth_status_expired",
+   "tool": "glovo_auth_status",
+   "args": {},
+   "session": "expired",
+   "routes": []
+  },
+  {
+   "name": "auth_status_signed_out",
+   "tool": "glovo_auth_status",
+   "args": {},
+   "session": null,
+   "routes": []
+  },
+  {
+   "name": "get_location",
+   "tool": "glovo_get_location",
+   "args": {},
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "get_location_signed_out",
+   "tool": "glovo_get_location",
+   "args": {},
+   "session": null,
+   "routes": []
+  },
+  {
+   "name": "set_location",
+   "tool": "glovo_set_location",
+   "args": {
+    "country_code": "PT",
+    "city_code": "LIS",
+    "latitude": 38.7,
+    "longitude": "-9.1",
+    "language_code": "pt"
+   },
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "set_location_partial",
+   "tool": "glovo_set_location",
+   "args": {
+    "city_code": "MAD"
+   },
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "set_location_signed_out",
+   "tool": "glovo_set_location",
+   "args": {
+    "country_code": "ES",
+    "city_code": "BCN"
+   },
+   "session": null,
+   "routes": []
+  },
+  {
+   "name": "set_location_invalid",
+   "tool": "glovo_set_location",
+   "args": {
+    "country_code": "ESP"
+   },
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "saved_locations",
+   "tool": "glovo_get_saved_locations",
+   "args": {},
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/customer_profile/api/v1/address_book/me/addresses",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/saved_addresses.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "saved_locations_match",
+   "tool": "glovo_get_saved_locations",
+   "args": {
+    "match_text": "Example"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/customer_profile/api/v1/address_book/me/addresses",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/saved_addresses.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "saved_locations_fail",
+   "tool": "glovo_get_saved_locations",
+   "args": {},
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/customer_profile/api/v1/address_book/me/addresses",
+     "replies": [
+      {
+       "status": 500,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "search_locations",
+   "tool": "glovo_search_locations",
+   "args": {
+    "query": "Example street"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/addresslookup/pub/address",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/address_search.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "search_locations_limit",
+   "tool": "glovo_search_locations",
+   "args": {
+    "query": "Example street",
+    "limit": 2
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/addresslookup/pub/address",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/address_search.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "search_locations_short",
+   "tool": "glovo_search_locations",
+   "args": {
+    "query": "ab"
+   },
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "select_location",
+   "tool": "glovo_select_location",
+   "args": {
+    "place_id": "p1",
+    "provider": "google"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/addresslookup/pub/p1",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/resolved_location.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/customer_profile/api/v1/guest/address_book/delivery_point_info",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/delivery_point.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "select_location_invalid",
+   "tool": "glovo_select_location",
+   "args": {
+    "place_id": "p2"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/addresslookup/pub/p2",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/resolved_invalid.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "select_location_undeliverable",
+   "tool": "glovo_select_location",
+   "args": {
+    "place_id": "p1"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/addresslookup/pub/p1",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/resolved_location.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/customer_profile/api/v1/guest/address_book/delivery_point_info",
+     "replies": [
+      {
+       "status": 200,
+       "json": {
+        "data": {
+         "isDeliverable": false
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "browse_stores",
+   "tool": "glovo_browse_stores",
+   "args": {},
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/category/4",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_wall.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "browse_stores_args",
+   "tool": "glovo_browse_stores",
+   "args": {
+    "category_id": 1,
+    "offset": 24,
+    "limit": 2,
+    "previous_store_ids": [
+     1001,
+     "x-2"
+    ]
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/category/1",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_wall.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "browse_stores_fail",
+   "tool": "glovo_browse_stores",
+   "args": {},
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/category/4",
+     "replies": [
+      {
+       "status": 503,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "get_store",
+   "tool": "glovo_get_store",
+   "args": {
+    "store": 1001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_store_slug",
+   "tool": "glovo_get_store",
+   "args": {
+    "store": "example-market"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/example-market",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_store_menu",
+   "tool": "glovo_get_store_menu",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": "2001"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/node/store_menu",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/menu.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_store_menu_limit",
+   "tool": "glovo_get_store_menu",
+   "args": {
+    "store_id": "1001",
+    "store_address_id": 2001,
+    "limit": 2
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/node/store_menu",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/menu.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "browse_store_catalog",
+   "tool": "glovo_browse_store_catalog",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "content_uri": "/v3/stores/1001/addresses/2001/content?nodeType=DEEP_LINK&link=dairy"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/content",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_content.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "browse_store_catalog_foreign",
+   "tool": "glovo_browse_store_catalog",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "content_uri": "/v3/stores/9999/addresses/2001/content"
+   },
+   "session": "default",
+   "routes": []
+  },
+  {
+   "name": "browse_store_catalog_empty",
+   "tool": "glovo_browse_store_catalog",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "content_uri": "/v3/stores/1001/addresses/2001/content?link=x",
+    "limit": 5
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/content",
+     "replies": [
+      {
+       "status": 200,
+       "json": {
+        "data": {
+         "body": []
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "store_recommendations",
+   "tool": "glovo_get_store_recommendations",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_content.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "store_recommendations_all",
+   "tool": "glovo_get_store_recommendations",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "kind": "all",
+    "limit": 2
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_content.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "store_recommendations_top",
+   "tool": "glovo_get_store_recommendations",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "kind": "top_sellers"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_content.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "store_order_options",
+   "tool": "glovo_get_store_order_options",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/stores/1001/addresses/2001/node/store_fees",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_fees.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/restrictions",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_restrictions.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/store_info_screen",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_info.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v1/store-view/web/similar-stores",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_similar.json"
+      }
+     ]
+    }
+   ],
+   "unordered_requests": true
+  },
+  {
+   "name": "store_order_options_args",
+   "tool": "glovo_get_store_order_options",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "translation": "es",
+    "similar_limit": 3
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/stores/1001/addresses/2001/node/store_fees",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_fees.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/restrictions",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_restrictions.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/store_info_screen",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_info.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v1/store-view/web/similar-stores",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_similar.json"
+      }
+     ]
+    }
+   ],
+   "unordered_requests": true
+  },
+  {
+   "name": "store_order_options_fail",
+   "tool": "glovo_get_store_order_options",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/stores/1001/addresses/2001/node/store_fees",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_fees.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/restrictions",
+     "replies": [
+      {
+       "status": 500,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/store_info_screen",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_info.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v1/store-view/web/similar-stores",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_similar.json"
+      }
+     ]
+    }
+   ],
+   "unordered_requests": true,
+   "requests_subset": true
+  },
+  {
+   "name": "search_store_items",
+   "tool": "glovo_search_store_items",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "query": "milk"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/search.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "search_store_items_limit",
+   "tool": "glovo_search_store_items",
+   "args": {
+    "store_id": "1001",
+    "store_address_id": "2001",
+    "query": "milk",
+    "limit": 1
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/search.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_product",
+   "tool": "glovo_get_product",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "product_id": 6001,
+    "external_id": "ext-6001",
+    "category_id": 9
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v4/stores/1001/addresses/2001/products/6001/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/product_view.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_product_minimal",
+   "tool": "glovo_get_product",
+   "args": {
+    "store_id": "1001",
+    "store_address_id": "2001",
+    "product_id": "6001",
+    "quantity": 2
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v4/stores/1001/addresses/2001/products/6001/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/product_view.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_basket_all",
+   "tool": "glovo_get_basket",
+   "args": {},
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets",
+     "replies": [
+      {
+       "status": 200,
+       "json": [
+        {
+         "basketId": "basket-test-1",
+         "storeId": 1001
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_basket_store",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_basket_store_none",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": "1001"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 404,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_basket_refresh",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": "expired",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/oauth/refresh",
+     "replies": [
+      {
+       "status": 200,
+       "json": {
+        "access": {
+         "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzM2MDB9.sig",
+         "refreshToken": "refresh-test-new",
+         "expiresIn": 7200,
+         "tokenType": "Bearer"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_basket_refresh_after_401",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 401,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      },
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/oauth/refresh",
+     "replies": [
+      {
+       "status": 200,
+       "json": {
+        "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzM2MDB9.sig",
+        "expiresIn": 7200
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "get_basket_refresh_rejected",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": "expired",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/oauth/refresh",
+     "replies": [
+      {
+       "status": 400,
+       "json": {
+        "error": "invalid_grant"
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "get_basket_expired_no_refresh",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": "expired_no_refresh",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 401,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "get_basket_signed_out",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": null,
+   "routes": [],
+   "error_exact": true
+  },
+  {
+   "name": "get_basket_no_customer",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": "no_customer",
+   "routes": []
+  },
+  {
+   "name": "get_basket_malformed_session",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": null,
+   "routes": [],
+   "session_text": "{not json",
+   "error_exact": true
+  },
+  {
+   "name": "get_basket_fail",
+   "tool": "glovo_get_basket",
+   "args": {
+    "store_id": 1001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 500,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "purchase_history",
+   "tool": "glovo_get_purchase_history",
+   "args": {},
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page1.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "purchase_history_cursor",
+   "tool": "glovo_get_purchase_history",
+   "args": {
+    "offset": "9001",
+    "limit": 5
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page2.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "purchase_history_fail",
+   "tool": "glovo_get_purchase_history",
+   "args": {},
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 500,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "order_items",
+   "tool": "glovo_get_order_items",
+   "args": {
+    "order_id": 9001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/order_detail.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "preview_reorder",
+   "tool": "glovo_preview_reorder",
+   "args": {
+    "order_id": "9001"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/order_detail.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "plan_reorder",
+   "tool": "glovo_plan_reorder",
+   "args": {
+    "order_id": 9001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/order_detail.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_content.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/search.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "plan_reorder_args",
+   "tool": "glovo_plan_reorder",
+   "args": {
+    "order_id": 9001,
+    "max_searches": 1,
+    "candidates_per_line": 1
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/order_detail.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/1001/addresses/2001/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/store_content.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001/addresses/2001/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/search.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "order_stats",
+   "tool": "glovo_get_order_stats",
+   "args": {
+    "page_delay_ms": 0
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page2.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "order_stats_one_page",
+   "tool": "glovo_get_order_stats",
+   "args": {
+    "max_pages": 1,
+    "page_delay_ms": 0
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page2.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "analyze_history",
+   "tool": "glovo_analyze_order_history",
+   "args": {
+    "page_delay_ms": 0,
+    "detail_delay_ms": 0
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page2.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/order_detail.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9002",
+     "replies": [
+      {
+       "status": 500,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9003",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/order_detail_9003.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "analyze_history_rate_limited",
+   "tool": "glovo_analyze_order_history",
+   "args": {
+    "page_delay_ms": 0,
+    "detail_delay_ms": 0,
+    "detail_limit": 3
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/orders_page2.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/order_detail.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders/9002",
+     "replies": [
+      {
+       "status": 429,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "suggestions_repeat",
+   "tool": "glovo_get_suggestions",
+   "args": {
+    "mode": "repeat",
+    "query": "pizza",
+    "item_mode": "repeat",
+    "quality_preference": "personal",
+    "max_choices": 3
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_global_search.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page2.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/store-1/addresses/address-1/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_content_store-1.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/store-6/addresses/address-6/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_search_store-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    }
+   ],
+   "strip_go_coverage": true,
+   "unordered_requests": true
+  },
+  {
+   "name": "suggestions_different",
+   "tool": "glovo_get_suggestions",
+   "args": {
+    "mode": "repeat",
+    "query": "pizza",
+    "venue_query": "Favorite Pizza",
+    "item_mode": "different",
+    "known_liked_only": true,
+    "max_choices": 3
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_global_search.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page2.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/store-1/addresses/address-1/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_content_store-1.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/store-6/addresses/address-6/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_search_store-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    }
+   ],
+   "strip_go_coverage": true,
+   "unordered_requests": true
+  },
+  {
+   "name": "suggestions_explore_google_unconfigured",
+   "tool": "glovo_get_suggestions",
+   "args": {
+    "mode": "explore",
+    "query": "pizza",
+    "include_google_quality": true,
+    "max_choices": 3
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_global_search.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page2.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/store-1/addresses/address-1/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_content_store-1.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/store-6/addresses/address-6/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_search_store-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    }
+   ],
+   "strip_go_coverage": true,
+   "unordered_requests": true
+  },
+  {
+   "name": "suggestions_fallback",
+   "tool": "glovo_get_suggestions",
+   "args": {
+    "mode": "explore",
+    "query": "funghi",
+    "max_choices": 3,
+    "history_refresh": "full"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_global_search.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page2.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/store-1/addresses/address-1/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_content_store-1.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/store-6/addresses/address-6/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_search_store-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    }
+   ],
+   "strip_go_coverage": true,
+   "unordered_requests": true
+  },
+  {
+   "name": "suggestions_no_location",
+   "tool": "glovo_get_suggestions",
+   "args": {
+    "query": "pizza"
+   },
+   "session": "no_location",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v1/web/store_wall/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_global_search.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/customer/orders-list",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page1.json"
+      },
+      {
+       "status": 200,
+       "file": "fixtures/suggest_orders_page2.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v4/stores/store-1/addresses/address-1/content/main",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_content_store-1.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/store-6/addresses/address-6/search",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_search_store-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-1/addresses/address-1/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-2/addresses/address-2/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-3/addresses/address-3/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-4/addresses/address-4/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-5/addresses/address-5/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-6/addresses/address-6/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-1/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-1.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-2/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-2.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-3/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-3.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-4/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-4.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-5/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-5.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-6/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-6.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-7/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-7.json"
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v4/stores/store-7/addresses/address-7/products/product-8/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "fixtures/suggest_view_product-8.json"
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "suggestions_signed_out",
+   "tool": "glovo_get_suggestions",
+   "args": {
+    "query": "pizza"
+   },
+   "session": "location_only",
+   "routes": [],
+   "error_exact": true
+  },
+  {
+   "name": "add_to_basket_create",
+   "tool": "glovo_add_to_basket",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "product_id": 6001,
+    "quantity": 2,
+    "selected_options": [
+     {
+      "group_id": 71,
+      "option_id": 702
+     },
+     {
+      "group_id": "73",
+      "option_id": "721"
+     }
+    ]
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v4/stores/1001/addresses/2001/products/6001/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/product_view.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "json": {
+        "id": 1001,
+        "categoryId": 4,
+        "storeAddressId": 2001
+       }
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 404,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "method": "POST",
+     "path": "/v1/authenticated/customers/4242/baskets",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "add_to_basket_no_category",
+   "tool": "glovo_add_to_basket",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "product_id": 6001,
+    "selected_options": [
+     {
+      "group_id": 71,
+      "option_id": 701
+     },
+     {
+      "group_id": 73,
+      "option_id": 721
+     }
+    ]
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v4/stores/1001/addresses/2001/products/6001/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/product_view.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v3/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "json": {
+        "id": 1001,
+        "storeCategoryId": 4
+       }
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 404,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "add_to_basket_bump",
+   "tool": "glovo_add_to_basket",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "store_category_id": 4,
+    "product_id": "5001",
+    "external_id": "ext-5001",
+    "store_product_id": "sp-5001",
+    "quantity": 3,
+    "validate_options": false
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    },
+    {
+     "method": "PATCH",
+     "path": "/v1/authenticated/customers/4242/baskets/basket-test-1/products/quantity",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "add_to_basket_append",
+   "tool": "glovo_add_to_basket",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "store_category_id": "4",
+    "product_id": 6001,
+    "selected_options": [
+     {
+      "group_id": "71",
+      "option_id": "701",
+      "quantity": 1
+     },
+     {
+      "group_id": 73,
+      "option_id": 721
+     }
+    ]
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v4/stores/1001/addresses/2001/products/6001/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/product_view.json"
+      }
+     ]
+    },
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/authenticated/customers/4242/baskets/basket-test-1/products",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "add_to_basket_missing_option",
+   "tool": "glovo_add_to_basket",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "store_category_id": 4,
+    "product_id": 6001
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v4/stores/1001/addresses/2001/products/6001/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/product_view.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "add_to_basket_unknown_option",
+   "tool": "glovo_add_to_basket",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "store_category_id": 4,
+    "product_id": 6001,
+    "selected_options": [
+     {
+      "group_id": "nope",
+      "option_id": "x"
+     }
+    ]
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "POST",
+     "path": "/v4/stores/1001/addresses/2001/products/6001/view",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/product_view.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "add_to_basket_read_fail",
+   "tool": "glovo_add_to_basket",
+   "args": {
+    "store_id": 1001,
+    "store_address_id": 2001,
+    "store_category_id": 4,
+    "product_id": "5001",
+    "external_id": "e",
+    "store_product_id": "s",
+    "validate_options": false
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 500,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  },
+  {
+   "name": "set_quantity",
+   "tool": "glovo_set_quantity",
+   "args": {
+    "store_id": 1001,
+    "product_id": "5001",
+    "quantity": 4
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    },
+    {
+     "method": "PATCH",
+     "path": "/v1/authenticated/customers/4242/baskets/basket-test-1/products/quantity",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "set_quantity_zero",
+   "tool": "glovo_set_quantity",
+   "args": {
+    "store_id": 1001,
+    "basket_product_id": "bp-test-2",
+    "quantity": 0
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    },
+    {
+     "method": "PATCH",
+     "path": "/v1/authenticated/customers/4242/baskets/basket-test-1/products/quantity",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "set_quantity_missing",
+   "tool": "glovo_set_quantity",
+   "args": {
+    "store_id": 1001,
+    "product_id": "9999",
+    "quantity": 1
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "set_quantity_no_basket",
+   "tool": "glovo_set_quantity",
+   "args": {
+    "store_id": 1001,
+    "product_id": "5001",
+    "quantity": 1
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 404,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "remove_from_basket",
+   "tool": "glovo_remove_from_basket",
+   "args": {
+    "store_id": 1001,
+    "store_product_id": "sp-5004"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    },
+    {
+     "method": "PATCH",
+     "path": "/v1/authenticated/customers/4242/baskets/basket-test-1/products/quantity",
+     "replies": [
+      {
+       "status": 200,
+       "json": {
+        "basketId": "basket-test-1",
+        "products": []
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "remove_from_basket_fail",
+   "tool": "glovo_remove_from_basket",
+   "args": {
+    "store_id": 1001,
+    "basket_product_id": "bp-test-1"
+   },
+   "session": "default",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/v1/authenticated/customers/4242/baskets/stores/1001",
+     "replies": [
+      {
+       "status": 200,
+       "file": "../../glovoapi/testdata/basket.json"
+      }
+     ]
+    },
+    {
+     "method": "PATCH",
+     "path": "/v1/authenticated/customers/4242/baskets/basket-test-1/products/quantity",
+     "replies": [
+      {
+       "status": 409,
+       "json": {
+        "error": {
+         "exceptionName": "TEST_FAILURE"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "error_exact": true
+  }
+ ]
+}

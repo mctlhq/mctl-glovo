@@ -1,0 +1,45 @@
+{
+  "case": "add_to_basket_missing_option",
+  "tool": "glovo_add_to_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: Missing required option group: Size."
+      }
+    ],
+    "isError": true
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/v4/stores/1001/addresses/2001/products/6001/view",
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "translation": null,
+        "trackingOrigin": null,
+        "quantity": 1
+      }
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

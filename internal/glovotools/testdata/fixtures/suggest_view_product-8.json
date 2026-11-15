@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-8",
+    "externalId": "external-8",
+    "storeProductId": "store-product-8",
+    "name": "Pizza Bianca",
+    "priceInfo": {
+     "displayText": "EUR 12.00"
+    },
+    "attributeGroups": []
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": false
+      }
+     }
+    ]
+   }
+  }
+ }
+}
