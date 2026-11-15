@@ -1,0 +1,11 @@
+# Cloudflare Worker serving the landing page at https://glovo.mctl.ai/.
+#
+# This file owns the script only. The route (glovo.mctl.ai/, the root path
+# alone) is declared in mctl-gitops infrastructure/cloudflare/zones/mctl-ai/
+# workers.tf: never add `routes` here, `wrangler deploy` would overwrite it.
+# The account comes from CLOUDFLARE_ACCOUNT_ID in CI.
+name = "glovo-landing"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = false
+preview_urls = false
