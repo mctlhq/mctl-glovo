@@ -23,6 +23,7 @@ func Blocked(name string) bool {
 	words := strings.FieldsFunc(lower, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	})
+	hasVerb, hasObject := false, false
 	for i, w := range words {
 		prev, next := "", ""
 		if i > 0 {
@@ -32,7 +33,8 @@ func Blocked(name string) bool {
 			next = words[i+1]
 		}
 		switch w {
-		case "pay", "paying", "charge", "buy", "ordernow":
+		case "pay", "paying", "charge", "buy", "ordernow",
+			"submit", "confirm", "finalize", "finalise", "place", "execute":
 			return true
 		case "purchase":
 			// purchase_history is a read; any other purchase is not.
@@ -45,19 +47,42 @@ func Blocked(name string) bool {
 			if prev != "preview" && prev != "plan" {
 				return true
 			}
+		case "order", "orders":
+			// order_items, order_stats, order_history and order_options are
+			// reads; a bare order (glovo_order, glovo_order_now) is not.
+			if !orderReads[next] {
+				return true
+			}
 		}
-		if orderVerbs[w] && orderObjects[next] {
-			return true
-		}
+		hasVerb = hasVerb || orderVerbs[w]
+		hasObject = hasObject || orderObjects[w]
 	}
-	return false
+	// A verb and an object in either order: create_order, basket_send.
+	return hasVerb && hasObject
 }
 
 var orderVerbs = map[string]bool{
-	"place": true, "submit": true, "confirm": true, "create": true, "complete": true,
-	"finalize": true, "finalise": true, "send": true, "execute": true, "make": true,
+	"create": true, "complete": true, "send": true, "make": true, "process": true,
 }
 
 var orderObjects = map[string]bool{
 	"order": true, "orders": true, "purchase": true, "basket": true, "cart": true,
+}
+
+var orderReads = map[string]bool{
+	"items": true, "stats": true, "history": true, "options": true,
+}
+
+// KnownTools are the glovo-skill 0.2.1 tools the gateway mirrors. The
+// mirror is an allowlist: a tool glovo-skill adds later is refused and
+// logged until an operator lists it in GLOVO_HOME_EXTRA_TOOLS, and Blocked
+// still applies to every name on either list.
+var KnownTools = []string{
+	"glovo_get_shopping_guide", "glovo_auth_status", "glovo_get_location", "glovo_set_location",
+	"glovo_get_saved_locations", "glovo_search_locations", "glovo_select_location", "glovo_login",
+	"glovo_browse_stores", "glovo_get_suggestions", "glovo_get_store", "glovo_get_store_menu",
+	"glovo_browse_store_catalog", "glovo_get_store_recommendations", "glovo_get_store_order_options",
+	"glovo_search_store_items", "glovo_get_product", "glovo_get_basket", "glovo_get_purchase_history",
+	"glovo_get_order_items", "glovo_preview_reorder", "glovo_plan_reorder", "glovo_get_order_stats",
+	"glovo_analyze_order_history", "glovo_add_to_basket", "glovo_set_quantity", "glovo_remove_from_basket",
 }

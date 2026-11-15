@@ -83,7 +83,9 @@ func (c *jwksCache) fetch(ctx context.Context) error {
 	c.lastOK = false
 	c.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
+	// Detached from the caller: a client that disconnects must not cancel
+	// the fetch and leave a failed attempt that throttles the next refetch.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jwksFetchTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {

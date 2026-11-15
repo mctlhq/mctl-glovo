@@ -71,6 +71,7 @@ func run(log *slog.Logger) error {
 	}
 	sup := childmcp.New(childmcp.Config{
 		Command: cfg.Node, Args: []string{cfg.Server}, Env: cfg.ChildEnv, Stderr: stderr,
+		Allowed:      append(append([]string{}, childmcp.KnownTools...), cfg.ExtraTools...),
 		ExtraBlocked: cfg.ExtraBlocked, Log: log.With("component", "child"),
 	}, mcpSrv)
 
@@ -87,14 +88,7 @@ func run(log *slog.Logger) error {
 	health.New(2*time.Second, sup.Ready, verifier.Ready).Register(mux)
 	gw.Register(mux)
 
-	srv := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		// No WriteTimeout: GET /mcp is a long-lived event stream. Tool
-		// calls are bounded by GLOVO_HOME_CALL_TIMEOUT instead.
-		IdleTimeout: 120 * time.Second,
-	}
+	srv := newHTTPServer(mux)
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return err
@@ -103,6 +97,29 @@ func run(log *slog.Logger) error {
 	childCtx, stopChild := context.WithCancel(context.Background())
 	defer stopChild()
 	go sup.Run(childCtx)
+
+	// Session hot-reload: a new session file (for example from
+	// scripts/glovo-relogin.sh) restarts the child. Stat only; the file is
+	// never read here.
+	if cfg.SessionPath != "" {
+		go childmcp.WatchSession(childCtx, cfg.SessionPath, 5*time.Second, log.With("component", "session"), sup.Restart)
+	}
+	if cfg.Keepalive > 0 {
+		klog := log.With("component", "keepalive")
+		ka := &childmcp.Keepalive{
+			Interval: cfg.Keepalive,
+			Call: func(ctx context.Context) (bool, error) {
+				res, err := sup.Call(ctx, childmcp.KeepaliveTool, nil)
+				if err != nil {
+					return false, err
+				}
+				return childmcp.ResultOK(res.IsError, len(res.Content)), nil
+			},
+			Alert: childmcp.ExecAlert(cfg.AlertCmd, klog),
+			Log:   klog,
+		}
+		go ka.Run(childCtx)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -150,4 +167,19 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("stopped")
 	return nil
+}
+
+// newHTTPServer returns the listener-facing server.
+func newHTTPServer(h http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		// No ReadTimeout or WriteTimeout: either one would cut a tool call
+		// longer than the timeout (net/http cancels the request context
+		// when the read deadline fires) and the long-lived GET /mcp event
+		// stream. Headers are bounded by ReadHeaderTimeout, POST bodies by
+		// the gateway's 1 MiB MaxBytesReader, tool calls by
+		// GLOVO_HOME_CALL_TIMEOUT.
+		IdleTimeout: 120 * time.Second,
+	}
 }

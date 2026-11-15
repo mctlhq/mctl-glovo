@@ -94,7 +94,7 @@ func newEnv(t *testing.T, childEnv []string) *env {
 	discard := slog.New(slog.NewTextHandler(io.Discard, nil))
 	srv := NewMCPServer("test", slog.New(slog.NewJSONHandler(audit, nil)), 10*time.Second)
 	sup := childmcp.New(childmcp.Config{
-		Command: fakeBin, Env: childEnv, MinBackoff: 50 * time.Millisecond, MaxBackoff: 100 * time.Millisecond, Log: discard,
+		Command: fakeBin, Env: childEnv, Allowed: []string{"echo", "crash", "glovo_get_basket", "glovo_checkout", "glovo_place_order"}, MinBackoff: 50 * time.Millisecond, MaxBackoff: 100 * time.Millisecond, Log: discard,
 	}, srv)
 	ctx, cancel := context.WithCancel(context.Background())
 	go sup.Run(ctx)
@@ -328,5 +328,11 @@ func TestSessionBoundToPrincipal(t *testing.T) {
 	hdr["Authorization"] = "Bearer good-b"
 	if resp, _ := do(t, "POST", e.ts.URL+"/mcp", hdr, list); resp.StatusCode != 404 {
 		t.Fatalf("other principal reused the session: %d", resp.StatusCode)
+	}
+	hdr["Authorization"] = "Bearer good"
+	hdr["Mcp-Session-Id"] = "never-issued"
+	// The gateway refuses it itself, before the MCP server sees the id.
+	if resp, body := do(t, "POST", e.ts.URL+"/mcp", hdr, list); resp.StatusCode != 404 || !strings.Contains(body, `"session_not_found"`) {
+		t.Fatalf("unrecorded session id not refused by the gateway: %d %s", resp.StatusCode, body)
 	}
 }

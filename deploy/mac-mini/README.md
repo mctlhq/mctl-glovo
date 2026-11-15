@@ -23,7 +23,11 @@ What it does:
   tools, and it refuses any tool whose name looks like checkout, payment or
   order placement;
 - writes one audit line per tool call (principal, tool, outcome,
-  duration). Arguments and results are never logged.
+  duration). Arguments and results are never logged;
+- keeps the Glovo session alive with one `glovo_get_basket` call a day and
+  runs an alert hook when that fails;
+- restarts glovo-skill when the session file changes, for example after
+  `scripts/glovo-relogin.sh`, without restarting itself.
 
 Basket writes go straight through, as they do with the local tool. There is
 no approval step, and glovo-skill has no checkout or payment tool.
@@ -54,7 +58,10 @@ are fixed in the binary and cannot be configured.
 | `GLOVO_HOME_LISTEN` | no | Listen address, default `127.0.0.1:8787`. A non-loopback address is refused unless `GLOVO_HOME_ALLOW_NON_LOOPBACK=true`. |
 | `GLOVO_HOME_CALL_TIMEOUT` | no | Per-tool-call limit, default `3m`. |
 | `GLOVO_HOME_BLOCKED_TOOLS` | no | Extra exact tool names to refuse, e.g. `glovo_login`. |
-| `GLOVO_HOME_CHILD_STDERR` | no | `discard` drops glovo-skill's stderr; by default it goes to the log. |
+| `GLOVO_HOME_EXTRA_TOOLS` | no | Exact tool names to mirror on top of the 27 known glovo-skill 0.2.1 tools. Any other tool glovo-skill offers is refused and logged ("not on the allowlist"); the checkout/payment/order name rules still apply to listed names. |
+| `GLOVO_HOME_CHILD_STDERR` | no | `inherit` sends glovo-skill's stderr to glovo-home's stderr (the log file). Default: discarded, because glovo-skill's output is not under this repository's control and may carry request data; the "no arguments or results in the log" guarantee covers glovo-home's own lines only. |
+| `GLOVO_HOME_KEEPALIVE` | no | Session keepalive interval, default `24h`; `0` turns it off (minimum `1m`). |
+| `GLOVO_HOME_ALERT_CMD` | no | Absolute path of an executable run when the keepalive fails. Unset: the failure is only logged. |
 
 The child gets an explicit environment: `HOME`, `PATH`, `USER`, `LOGNAME`,
 `LANG`, `LC_ALL`, `TMPDIR`, `TZ`, every `GLOVO_*` variable except
@@ -63,6 +70,60 @@ passed.
 
 `glovo_login` opens a browser on the mini itself. If remote callers should
 not be able to trigger that, add it to `GLOVO_HOME_BLOCKED_TOOLS`.
+
+## Session keepalive
+
+Once per `GLOVO_HOME_KEEPALIVE` (the first time one interval after start),
+glovo-home calls `glovo_get_basket` through the same path as a remote
+call. That tool needs a valid Glovo session, so glovo-skill refreshes an
+expiring access token and rotates the refresh token. (`glovo_auth_status`
+does not work for this: it only reads the local file.)
+
+Only a result that is not `isError` and has content counts as `ok`. An
+auth error, any other error, an empty result, or glovo-skill being down is
+a failure. On failure, glovo-home runs `GLOVO_HOME_ALERT_CMD` without a
+shell, with exactly one argument, which is one of these fixed messages:
+
+- `glovo-home: Glovo session keepalive failed; re-login may be needed`
+- `glovo-home: Glovo session keepalive could not run; glovo-skill is unavailable`
+
+The hook runs with glovo-home's environment and a 30s limit, and its output
+is discarded. It never receives token, session or result content. Every
+check writes one `session_keepalive` log line with its outcome and
+duration.
+
+## Session hot-reload and re-login
+
+glovo-home checks the session file (`GLOVO_SESSION_PATH`, or
+`~/.glovo/session.json`) every 5s, using stat only (size and mtime). It
+never opens, reads, logs or hashes the file. When the size or mtime has
+changed and then held steady for one more check, glovo-home refuses new
+calls, waits for in-flight calls to finish, and restarts glovo-skill. A
+stat that fails is logged and is not treated as a change. glovo-skill
+already re-reads the file on every tool call, so the restart is a safety
+net. glovo-skill's own token refreshes rewrite the file too, so they also
+cause a short, drained restart.
+
+When the keepalive alert says a re-login is needed, run this on a machine
+with a browser and glovo-skill installed:
+
+```bash
+GLOVO_HOME_HOST=<ssh destination of the mini> scripts/glovo-relogin.sh
+```
+
+The script:
+
+1. runs glovo-skill's `scripts/login.mjs` into a session file inside a
+   fresh 0700 temporary directory;
+2. streams the file over ssh into a 0600 temporary file in a 0700
+   directory on the host, then renames it over the old session (atomic);
+3. deletes the local temporary directory, also on error or Ctrl-C.
+
+The file is never printed. Optional variables: `GLOVO_SKILL_DIR` (default
+`~/.local/share/glovo-skill`), `GLOVO_NODE` (default `node`) and
+`GLOVO_HOME_REMOTE_SESSION` (default `.glovo/session.json`, relative to
+the remote home directory). glovo-home picks up the new file within about
+15s.
 
 ## launchd
 

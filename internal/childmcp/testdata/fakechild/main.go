@@ -8,6 +8,9 @@
 //   - crash: exits with status 3 without answering.
 //   - slow: answers after FAKE_SLOW (default 500ms).
 //   - add_tool: registers "late_tool" and emits tools/list_changed.
+//   - glovo_get_basket: ok, or isError when FAKE_BASKET=fail, or no
+//     content when FAKE_BASKET=empty.
+//   - pid: returns the process id.
 //   - glovo_checkout, glovo_place_order: must never be mirrored.
 //
 // FAKE_EXIT_AT_START=1 makes it exit before serving.
@@ -17,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -62,6 +66,20 @@ func main() {
 			return text("late"), nil
 		})
 		return text("added"), nil
+	})
+	s.AddTool(mcp.NewTool("glovo_get_basket"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		switch os.Getenv("FAKE_BASKET") {
+		case "fail":
+			res := text("Glovo auth failed (401). Run glovo_login first.")
+			res.IsError = true
+			return res, nil
+		case "empty":
+			return &mcp.CallToolResult{Content: []mcp.Content{}}, nil
+		}
+		return text(`{"baskets":[]}`), nil
+	})
+	s.AddTool(mcp.NewTool("pid"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return text(strconv.Itoa(os.Getpid())), nil
 	})
 	for _, n := range []string{"glovo_checkout", "glovo_place_order"} {
 		s.AddTool(mcp.NewTool(n), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {

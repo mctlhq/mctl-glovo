@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -39,6 +40,10 @@ type Config struct {
 	Env []string
 	// Stderr receives the child's stderr. nil discards it.
 	Stderr io.Writer
+	// Allowed are the exact tool names that may be mirrored; any other name
+	// is refused and logged. nil means KnownTools. Blocked and ExtraBlocked
+	// apply on top.
+	Allowed []string
 	// ExtraBlocked are exact tool names refused on top of Blocked.
 	ExtraBlocked []string
 	// InitTimeout bounds initialize + tools/list. Default 30s.
@@ -56,14 +61,21 @@ type child struct {
 	// eof is closed when the transport's reader has hit EOF/error on stdout.
 	eof    chan struct{}
 	exited chan struct{}
+	// draining is set (under Supervisor.mu) before a planned restart: new
+	// calls are refused while in-flight ones finish. inflight counts calls
+	// on this child; it is only incremented under Supervisor.mu's read lock
+	// while draining is false.
+	draining bool
+	inflight atomic.Int64
 }
 
 // Supervisor owns the child process and the mirrored tool set.
 type Supervisor struct {
-	cfg   Config
-	log   *slog.Logger
-	srv   *server.MCPServer
-	extra map[string]bool
+	cfg     Config
+	log     *slog.Logger
+	srv     *server.MCPServer
+	extra   map[string]bool
+	allowed map[string]bool
 
 	mu       sync.RWMutex
 	cur      *child
@@ -71,8 +83,9 @@ type Supervisor struct {
 	loaded   bool
 	stopping bool
 
-	calls sync.WaitGroup
-	done  chan struct{}
+	calls   sync.WaitGroup
+	done    chan struct{}
+	restart chan struct{}
 }
 
 // New returns a Supervisor that mirrors tools onto srv. Call Run to start.
@@ -99,7 +112,17 @@ func New(cfg Config, srv *server.MCPServer) *Supervisor {
 			extra[n] = true
 		}
 	}
-	return &Supervisor{cfg: cfg, log: log, srv: srv, extra: extra, done: make(chan struct{})}
+	names := cfg.Allowed
+	if names == nil {
+		names = KnownTools
+	}
+	allowed := map[string]bool{}
+	for _, n := range names {
+		if n != "" {
+			allowed[n] = true
+		}
+	}
+	return &Supervisor{cfg: cfg, log: log, srv: srv, extra: extra, allowed: allowed, done: make(chan struct{}), restart: make(chan struct{}, 1)}
 }
 
 // Ready reports nil only when a child is running and its tools are mirrored.
@@ -134,6 +157,15 @@ func (s *Supervisor) Run(ctx context.Context) {
 			case <-c.exited:
 				s.markDown(c)
 				s.log.Error("child exited", "exit", exitString(c.cmd), "uptime", time.Since(started).Round(time.Millisecond).String())
+			case <-s.restart:
+				s.log.Info("child restart requested")
+				s.drainChild(ctx, c)
+				s.terminate(c)
+				if ctx.Err() != nil {
+					return
+				}
+				backoff = s.cfg.MinBackoff
+				continue
 			case <-ctx.Done():
 				s.stopChild(c)
 				return
@@ -153,6 +185,25 @@ func (s *Supervisor) Run(ctx context.Context) {
 		}
 		backoff = min(backoff*2, s.cfg.MaxBackoff)
 	}
+}
+
+// Restart asks Run to replace the child (for example after the session
+// file changed). In-flight calls finish first; calls arriving meanwhile get
+// ErrUnavailable. Requests coalesce: several before the restart run once.
+func (s *Supervisor) Restart() {
+	select {
+	case s.restart <- struct{}{}:
+	default:
+	}
+}
+
+// Call runs one tool on the child for the gateway itself (the keepalive),
+// through the same path and blocklist as a remote call.
+func (s *Supervisor) Call(ctx context.Context, name string, args map[string]any) (*mcp.CallToolResult, error) {
+	req := mcp.CallToolRequest{}
+	req.Params.Name = name
+	req.Params.Arguments = args
+	return s.handler(name)(ctx, req)
 }
 
 // Wait waits for Run to return.
@@ -298,6 +349,10 @@ func (s *Supervisor) reload(ctx context.Context, c *child) error {
 			s.log.Warn("tool refused: not mirrored", "tool", t.Name)
 			continue
 		}
+		if !s.allowed[t.Name] {
+			s.log.Warn("tool refused: not on the allowlist (GLOVO_HOME_EXTRA_TOOLS)", "tool", t.Name)
+			continue
+		}
 		mirrored = append(mirrored, server.ServerTool{Tool: t, Handler: s.handler(t.Name)})
 		names = append(names, t.Name)
 	}
@@ -317,19 +372,22 @@ func (s *Supervisor) reload(ctx context.Context, c *child) error {
 // handler forwards a call verbatim to the current child.
 func (s *Supervisor) handler(name string) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		if Blocked(name) || s.extra[name] {
+		if Blocked(name) || s.extra[name] || !s.allowed[name] {
 			return nil, fmt.Errorf("tool %q is not available through this gateway", name)
 		}
 		s.mu.RLock()
 		c, stopping := s.cur, s.stopping
-		if c != nil && !stopping {
+		ok := c != nil && !stopping && !c.draining
+		if ok {
 			s.calls.Add(1)
+			c.inflight.Add(1)
 		}
 		s.mu.RUnlock()
-		if c == nil || stopping {
+		if !ok {
 			return nil, ErrUnavailable
 		}
 		defer s.calls.Done()
+		defer c.inflight.Add(-1)
 
 		fwd := mcp.CallToolRequest{}
 		fwd.Params.Name = name
@@ -377,12 +435,34 @@ func (s *Supervisor) kill(c *child) {
 	_ = c.stdout.Close()
 }
 
-// stopChild ends the current child: refuse new calls, close stdin (the MCP
-// stdio shutdown signal), then SIGTERM, then SIGKILL.
+// drainChild refuses new calls on c and waits for its in-flight calls (each
+// bounded by the gateway's call timeout), or for ctx.
+func (s *Supervisor) drainChild(ctx context.Context, c *child) {
+	s.mu.Lock()
+	c.draining = true
+	s.mu.Unlock()
+	for c.inflight.Load() > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.exited:
+			return
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+// stopChild ends the current child for shutdown.
 func (s *Supervisor) stopChild(c *child) {
 	s.mu.Lock()
 	s.stopping = true
 	s.mu.Unlock()
+	s.terminate(c)
+}
+
+// terminate closes stdin (the MCP stdio shutdown signal), then sends
+// SIGTERM, then SIGKILL.
+func (s *Supervisor) terminate(c *child) {
 	_ = c.stdin.Close()
 	select {
 	case <-c.exited:

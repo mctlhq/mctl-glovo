@@ -27,8 +27,17 @@ type Config struct {
 	Server            string
 	ChildEnv          []string
 	ExtraBlocked      []string
-	CallTimeout       time.Duration
-	ChildStderr       bool
+	// ExtraTools are mirrored on top of childmcp.KnownTools.
+	ExtraTools  []string
+	CallTimeout time.Duration
+	ChildStderr bool
+	// Keepalive is the session keepalive interval; 0 disables it.
+	Keepalive time.Duration
+	// AlertCmd is run with one fixed message argument when the keepalive
+	// fails. Empty only logs.
+	AlertCmd string
+	// SessionPath is the glovo-skill session file, watched by stat only.
+	SessionPath string
 }
 
 // childEnvKeys are inherited by the child verbatim when set. Everything
@@ -42,7 +51,9 @@ func Load(getenv func(string) string, environ []string) (*Config, error) {
 		Node:        getenv("GLOVO_HOME_NODE"),
 		Server:      getenv("GLOVO_HOME_SERVER"),
 		CallTimeout: 3 * time.Minute,
-		ChildStderr: getenv("GLOVO_HOME_CHILD_STDERR") != "discard",
+		// Opt-in: glovo-skill's stderr is not under this repository's
+		// control and may carry request data.
+		ChildStderr: getenv("GLOVO_HOME_CHILD_STDERR") == "inherit",
 	}
 	if c.Listen == "" {
 		c.Listen = "127.0.0.1:8787"
@@ -60,12 +71,35 @@ func Load(getenv func(string) string, environ []string) (*Config, error) {
 		}
 	}
 	c.ExtraBlocked = splitList(getenv("GLOVO_HOME_BLOCKED_TOOLS"))
+	c.ExtraTools = splitList(getenv("GLOVO_HOME_EXTRA_TOOLS"))
 	if v := getenv("GLOVO_HOME_CALL_TIMEOUT"); v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil || d <= 0 {
 			return nil, fmt.Errorf("GLOVO_HOME_CALL_TIMEOUT: %q is not a positive duration", v)
 		}
 		c.CallTimeout = d
+	}
+	c.Keepalive = 24 * time.Hour
+	if v := getenv("GLOVO_HOME_KEEPALIVE"); v != "" {
+		d, err := time.ParseDuration(v)
+		if v == "0" {
+			d, err = 0, nil
+		}
+		if err != nil || d < 0 || (d > 0 && d < time.Minute) {
+			return nil, fmt.Errorf("GLOVO_HOME_KEEPALIVE: %q is not 0 or a duration of at least 1m", v)
+		}
+		c.Keepalive = d
+	}
+	c.AlertCmd = getenv("GLOVO_HOME_ALERT_CMD")
+	if c.AlertCmd != "" && !strings.HasPrefix(c.AlertCmd, "/") {
+		return nil, errors.New("GLOVO_HOME_ALERT_CMD must be an absolute path to an executable (it is run without a shell)")
+	}
+	// glovo-skill's own default when GLOVO_SESSION_PATH is unset.
+	c.SessionPath = getenv("GLOVO_SESSION_PATH")
+	if c.SessionPath == "" {
+		if home := getenv("HOME"); home != "" {
+			c.SessionPath = home + "/.glovo/session.json"
+		}
 	}
 	c.ChildEnv = childEnv(environ)
 	return c, nil

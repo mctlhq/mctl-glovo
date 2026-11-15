@@ -222,14 +222,16 @@ func newSessionOwners() *sessionOwners {
 	return &sessionOwners{owners: map[string]sessionOwner{}}
 }
 
-// check reports whether principal may use id; an id this gateway never saw
-// is left to the MCP server, which answers 404 for unknown sessions.
+// check reports whether principal may use id. An id with no owner record
+// (never issued by this process, or pruned) is refused: sessions live in
+// this process's memory only, so such an id is not a usable session anyway,
+// and allowing it would fail open.
 func (s *sessionOwners) check(id, principal string, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o, ok := s.owners[id]
 	if !ok {
-		return true
+		return false
 	}
 	if o.principal != principal {
 		return false
@@ -249,6 +251,17 @@ func (s *sessionOwners) record(id, principal string, now time.Time) {
 	}
 	if _, ok := s.owners[id]; !ok {
 		s.owners[id] = sessionOwner{principal: principal, lastSeen: now}
+	}
+}
+
+// touch moves lastSeen for an owned id, so a long-lived GET stream keeps
+// its record when it ends, not only when it starts.
+func (s *sessionOwners) touch(id string, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if o, ok := s.owners[id]; ok {
+		o.lastSeen = now
+		s.owners[id] = o
 	}
 }
 
@@ -289,12 +302,14 @@ func (g *Gateway) bindSession(next http.Handler) http.Handler {
 		now := time.Now()
 		if id := r.Header.Get(server.HeaderKeySessionID); id != "" {
 			if !g.sessions.check(id, p.ID, now) {
-				g.log.Warn("request refused", "reason", "session_principal_mismatch", "method", r.Method)
+				g.log.Warn("request refused", "reason", "session_not_owned", "method", r.Method)
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "session_not_found"})
 				return
 			}
 			if r.Method == http.MethodDelete {
 				defer g.sessions.forget(id)
+			} else {
+				defer func() { g.sessions.touch(id, time.Now()) }()
 			}
 		}
 		cw := &captureWriter{ResponseWriter: w, onHeader: func(h http.Header) {

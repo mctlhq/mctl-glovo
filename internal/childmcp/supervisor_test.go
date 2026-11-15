@@ -69,7 +69,7 @@ func startHarness(t *testing.T, env []string, tweak func(*Config)) *harness {
 	logs := &syncBuffer{}
 	srv := server.NewMCPServer("glovo-home-test", "0", server.WithToolCapabilities(true))
 	cfg := Config{
-		Command: fakeBin, Env: env, MinBackoff: 50 * time.Millisecond, MaxBackoff: 200 * time.Millisecond,
+		Command: fakeBin, Env: env, Allowed: fakeTools, MinBackoff: 50 * time.Millisecond, MaxBackoff: 200 * time.Millisecond,
 		InitTimeout: 10 * time.Second, Log: slog.New(slog.NewTextHandler(logs, nil)),
 	}
 	if tweak != nil {
@@ -97,6 +97,13 @@ func startHarness(t *testing.T, env []string, tweak func(*Config)) *harness {
 	}
 	h.cl = cl
 	return h
+}
+
+// fakeTools is the fake child's tool set, blocked names included so the
+// tests prove Blocked applies even to an allowlisted name.
+var fakeTools = []string{
+	"add_tool", "crash", "echo", "glovo_get_basket", "pid", "rpc_error", "slow", "tool_error",
+	"late_tool", "glovo_checkout", "glovo_place_order",
 }
 
 func waitFor(t *testing.T, what string, cond func() bool) {
@@ -140,7 +147,7 @@ func TestMirrorsToolsAndPassesCallsThrough(t *testing.T) {
 	h := startHarness(t, []string{"FAKE_MARK=passed"}, nil)
 	waitFor(t, "ready", h.ready)
 
-	want := []string{"add_tool", "crash", "echo", "rpc_error", "slow", "tool_error"}
+	want := []string{"add_tool", "crash", "echo", "glovo_get_basket", "pid", "rpc_error", "slow", "tool_error"}
 	if got := h.listed(t); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
@@ -196,15 +203,47 @@ func TestBlockedToolsNeverMirrored(t *testing.T) {
 	}
 }
 
+func TestToolsOffTheAllowlistNeverMirrored(t *testing.T) {
+	h := startHarness(t, nil, func(c *Config) { c.Allowed = []string{"echo", "pid"} })
+	waitFor(t, "ready", h.ready)
+	if got := h.listed(t); !slices.Equal(got, []string{"echo", "pid"}) {
+		t.Fatalf("tools = %v, want [echo pid]", got)
+	}
+	if out, err := h.call("slow", nil); err == nil && (out == nil || !out.IsError) {
+		t.Fatalf("call to unlisted tool succeeded: %+v", out)
+	}
+	if !strings.Contains(h.logs.String(), "not on the allowlist") {
+		t.Fatalf("refusal not logged:\n%s", h.logs.String())
+	}
+}
+
+func TestDefaultAllowlistIsKnownTools(t *testing.T) {
+	h := startHarness(t, nil, func(c *Config) { c.Allowed = nil })
+	waitFor(t, "ready", h.ready)
+	// Of the fake child's tools only glovo_get_basket is a real glovo-skill
+	// tool.
+	if got := h.listed(t); !slices.Equal(got, []string{"glovo_get_basket"}) {
+		t.Fatalf("tools = %v", got)
+	}
+}
+
 func TestChildCrashIsAnErrorThenRestarts(t *testing.T) {
 	h := startHarness(t, nil, nil)
 	waitFor(t, "ready", h.ready)
+	before := pidOf(t, h)
 
 	out, err := h.call("crash", nil)
 	if err == nil && (out == nil || !out.IsError) {
 		t.Fatalf("call that crashed the child returned success: %+v", out)
 	}
-	waitFor(t, "restart", h.ready)
+	// Ready alone can still see the dying child: wait for a new one.
+	waitFor(t, "restart", func() bool {
+		if !h.ready() {
+			return false
+		}
+		out, err := h.call("pid", nil)
+		return err == nil && !out.IsError && out.Content[0].(mcp.TextContent).Text != before
+	})
 	out, err = h.call("echo", map[string]any{"text": "again"})
 	if err != nil || out.IsError {
 		t.Fatalf("after restart: %+v, %v", out, err)
@@ -319,15 +358,10 @@ func TestChildEnvIsExplicit(t *testing.T) {
 
 func TestBlocked(t *testing.T) {
 	// Every tool glovo-skill 0.2.1 ships must pass.
-	for _, n := range []string{
-		"glovo_get_shopping_guide", "glovo_auth_status", "glovo_get_location", "glovo_set_location",
-		"glovo_get_saved_locations", "glovo_search_locations", "glovo_select_location", "glovo_login",
-		"glovo_browse_stores", "glovo_get_suggestions", "glovo_get_store", "glovo_get_store_menu",
-		"glovo_browse_store_catalog", "glovo_get_store_recommendations", "glovo_get_store_order_options",
-		"glovo_search_store_items", "glovo_get_product", "glovo_get_basket", "glovo_get_purchase_history",
-		"glovo_get_order_items", "glovo_preview_reorder", "glovo_plan_reorder", "glovo_get_order_stats",
-		"glovo_analyze_order_history", "glovo_add_to_basket", "glovo_set_quantity", "glovo_remove_from_basket",
-	} {
+	if len(KnownTools) != 27 {
+		t.Fatalf("KnownTools has %d names, want 27", len(KnownTools))
+	}
+	for _, n := range KnownTools {
 		if Blocked(n) {
 			t.Errorf("%s blocked", n)
 		}
@@ -336,6 +370,9 @@ func TestBlocked(t *testing.T) {
 		"glovo_checkout", "checkout", "glovo_pay", "glovo_payment_methods", "glovo_place_order",
 		"glovo_submit_order", "glovo_confirm_basket", "glovo_create_order", "glovo_reorder",
 		"glovo_purchase", "glovo_buy_now", "GlovoCheckout", "glovo-place-order", "glovo_charge_card",
+		"glovo_order_now", "glovo_basket_submit", "glovo_order_submit", "glovo_basket_confirm",
+		"glovo_submit", "glovo_confirm", "glovo_order", "glovo_basket_send", "glovo_order_create",
+		"glovo_orders", "glovo_finalize",
 	} {
 		if !Blocked(n) {
 			t.Errorf("%s not blocked", n)
