@@ -33,7 +33,11 @@ const maxBodyBytes = 16 << 20
 
 // AuthError means the Glovo session is missing, expired or rejected. The
 // caller should ask the user to sign in again.
-type AuthError struct{ Msg string }
+type AuthError struct {
+	Msg string
+	// Status is the HTTP status of a rejected token refresh, 0 otherwise.
+	Status int
+}
 
 func (e *AuthError) Error() string { return e.Msg }
 
@@ -101,6 +105,10 @@ type Client struct {
 	customHTTP   bool
 	proxyTLS     *tls.Config // tests only: trust roots for the upstream
 	optErr       error
+
+	// Hosted mode (hosted.go): the session lives in the token store.
+	coordinator RefreshCoordinator
+	gate        func(context.Context) error
 
 	refreshMu sync.Mutex // serialises refreshes
 	mu        sync.Mutex // guards session
@@ -246,6 +254,9 @@ func New(sessionPath string, opts ...Option) (*Client, error) {
 	if c.optErr != nil {
 		return nil, c.optErr
 	}
+	if c.hosted() && c.sessionPath != "" {
+		return nil, ErrHostedSessionPath
+	}
 	if err := c.configureEgress(); err != nil {
 		return nil, err
 	}
@@ -370,6 +381,9 @@ func (c *Client) initBits() {
 // while it reads, so a file read cannot race a refresh or a location write
 // and put back a session that was already rotated away.
 func (c *Client) Reload() error {
+	if c.hosted() {
+		return ErrHostedNoFile
+	}
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
 	c.mu.Lock()
@@ -689,6 +703,11 @@ func (c *Client) send(ctx context.Context, method, path string, body any, auth b
 	if err := checkMutation(method, path); err != nil {
 		return 0, nil, "", err
 	}
+	if c.gate != nil {
+		if err := c.gate(ctx); err != nil {
+			return 0, nil, "", err
+		}
+	}
 	var reader io.Reader
 	if body != nil {
 		b, err := marshalJSON(body)
@@ -832,18 +851,45 @@ func (c *Client) Refresh(ctx context.Context) error {
 
 func (c *Client) refreshLocked(ctx context.Context) error {
 	c.mu.Lock()
-	refreshToken := get(map[string]any(c.session), "refreshToken")
+	held := c.session
 	c.mu.Unlock()
+	if c.hosted() {
+		next, err := c.coordinator(ctx, held, c.exchangeRefresh)
+		if err != nil {
+			return err
+		}
+		c.mu.Lock()
+		c.session = next
+		c.mu.Unlock()
+		return nil
+	}
+	next, err := c.refreshSession(ctx, held)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := SaveSession(c.sessionPath, next, c.now()); err != nil {
+		return fmt.Errorf("persist refreshed Glovo session: %w", err)
+	}
+	c.session = next
+	return nil
+}
+
+// refreshSession exchanges cur's refresh token and returns the rotated
+// session. It persists nothing and does not modify cur.
+func (c *Client) refreshSession(ctx context.Context, cur Session) (Session, error) {
+	refreshToken := get(map[string]any(cur), "refreshToken")
 	if !truthy(refreshToken) {
-		return &AuthError{Msg: "Glovo session expired. Run glovo_login again."}
+		return nil, &AuthError{Msg: "Glovo session expired. Run glovo_login again."}
 	}
 	status, data, _, err := c.send(ctx, http.MethodPost, "/oauth/refresh", map[string]any{"refreshToken": refreshToken}, false)
 	if err != nil {
-		return fmt.Errorf("glovo refresh failed: %w", err)
+		return nil, fmt.Errorf("glovo refresh failed: %w", err)
 	}
 	if status < 200 || status > 299 {
 		if refreshRejected(status) {
-			return &AuthError{Msg: fmt.Sprintf("Glovo refresh failed (%d). Run glovo_login again.", status)}
+			return nil, &AuthError{Msg: fmt.Sprintf("Glovo refresh failed (%d). Run glovo_login again.", status), Status: status}
 		}
 		// 429, 5xx and anything else that is not a rejection of the refresh
 		// token is transient: the session may still be good, so this is not
@@ -852,12 +898,12 @@ func (c *Client) refreshLocked(ctx context.Context) error {
 		if len(text) > 300 {
 			text = text[:300]
 		}
-		return &APIError{Method: http.MethodPost, Path: "/oauth/refresh", Status: status, Detail: safeErrorBody(string(text))}
+		return nil, &APIError{Method: http.MethodPost, Path: "/oauth/refresh", Status: status, Detail: safeErrorBody(string(text))}
 	}
 	v, err := decodeJSON(data)
 	if err != nil {
 		// A 2xx that is not JSON says nothing about the refresh token.
-		return fmt.Errorf("glovo refresh failed: malformed JSON body: %w", err)
+		return nil, fmt.Errorf("glovo refresh failed: malformed JSON body: %w", err)
 	}
 	creds := v
 	if truthy(get(v, "access", "accessToken")) {
@@ -866,27 +912,21 @@ func (c *Client) refreshLocked(ctx context.Context) error {
 	access, ok := get(creds, "accessToken").(string)
 	if !ok || access == "" {
 		// Upstream would store an undefined token here; fail closed instead.
-		return &AuthError{Msg: "Glovo refresh failed (no access token in response). Run glovo_login again."}
+		return nil, &AuthError{Msg: "Glovo refresh failed (no access token in response). Run glovo_login again."}
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	next := make(Session, len(c.session)+6)
-	for k, val := range c.session {
+	next := make(Session, len(cur)+6)
+	for k, val := range cur {
 		next[k] = val
 	}
-	old := map[string]any(c.session)
+	old := map[string]any(cur)
 	next["accessToken"] = access
 	next["refreshToken"] = or(get(creds, "refreshToken"), get(old, "refreshToken"))
 	setOrDelete(next, "expiresIn", get(creds, "expiresIn"))
 	setOrDelete(next, "tokenType", or(get(creds, "tokenType"), get(old, "tokenType")))
 	next["scope"] = orNull(coalesce(get(creds, "scope"), get(old, "scope")))
 	next["createdAt"] = msNumber(c.now())
-	if err := SaveSession(c.sessionPath, next, c.now()); err != nil {
-		return fmt.Errorf("persist refreshed Glovo session: %w", err)
-	}
-	c.session = next
-	return nil
+	return next, nil
 }
 
 // refreshRejected reports a refresh response that rejects the refresh token

@@ -63,6 +63,11 @@ func (c *Client) setLocation(update map[string]any) (Location, error) {
 		s[k] = v
 	}
 	s["location"] = next
+	if c.hosted() {
+		// Location changes for hosted sessions go through the token store
+		// (C2-1b); until then refuse rather than keep an unsaved copy.
+		return nil, ErrHostedNoFile
+	}
 	if err := SaveSession(c.sessionPath, s, c.now()); err != nil {
 		return nil, err
 	}

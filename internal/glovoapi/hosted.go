@@ -1,0 +1,63 @@
+package glovoapi
+
+import (
+	"context"
+	"errors"
+)
+
+// RefreshCoordinator persists a token refresh for a hosted client, one whose
+// session lives in the token store rather than in a file.
+//
+// The client calls it instead of refreshing and writing a session file.
+// held is the session the client holds now. exchange performs the Glovo
+// refresh for the session it is given and returns the rotated session
+// without persisting anything. The coordinator decides whether a refresh
+// is still needed (another replica may already have rotated the token),
+// runs exchange under its own cross-replica fence, stores the result and
+// returns the session the client must use from now on. On an error the
+// client keeps its current session.
+type RefreshCoordinator func(ctx context.Context, held Session, exchange func(context.Context, Session) (Session, error)) (Session, error)
+
+// ErrHostedSessionPath is returned by New for a hosted client (one built
+// with WithRefreshCoordinator) that was also given a session path. A hosted
+// client never reads or writes a session file.
+var ErrHostedSessionPath = errors.New("glovoapi: a hosted client must not have a session path")
+
+// ErrHostedNoFile is returned by Reload and by location writes on a hosted
+// client: those operations would read or write a session file.
+var ErrHostedNoFile = errors.New("glovoapi: a hosted client has no session file")
+
+// WithRefreshCoordinator makes the client hosted: refreshes go through rc
+// and no code path reads or writes a session file. nil is refused.
+func WithRefreshCoordinator(rc RefreshCoordinator) Option {
+	return func(c *Client) {
+		if rc == nil {
+			c.setOptErr(errors.New("glovoapi: WithRefreshCoordinator: nil coordinator"))
+			return
+		}
+		c.coordinator = rc
+	}
+}
+
+// WithRequestGate installs a check that runs before every request to Glovo,
+// refreshes included. A non-nil error refuses the request and is returned
+// unchanged. The token store uses it for the kill switch and the request
+// caps. nil is refused.
+func WithRequestGate(gate func(context.Context) error) Option {
+	return func(c *Client) {
+		if gate == nil {
+			c.setOptErr(errors.New("glovoapi: WithRequestGate: nil gate"))
+			return
+		}
+		c.gate = gate
+	}
+}
+
+// hosted reports whether the client's session lives outside a file.
+func (c *Client) hosted() bool { return c.coordinator != nil }
+
+// exchangeRefresh performs the Glovo refresh for cur and returns the rotated
+// session. It persists nothing and does not touch c.session.
+func (c *Client) exchangeRefresh(ctx context.Context, cur Session) (Session, error) {
+	return c.refreshSession(ctx, cur)
+}
