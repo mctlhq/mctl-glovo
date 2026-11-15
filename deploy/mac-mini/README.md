@@ -271,17 +271,16 @@ install -m 644 deploy/mac-mini/tinyproxy.conf ~/.config/tinyproxy/tinyproxy.conf
 install -m 644 deploy/mac-mini/tinyproxy-filter ~/.config/tinyproxy/tinyproxy-filter
 ```
 
-In `~/.config/tinyproxy/tinyproxy.conf` replace `<mini-tailscale-ip>` with
-the output of `tailscale ip -4`, and every `REPLACE_ME` with the account
-name. Do not use `brew services start tinyproxy`: that runs Homebrew's
+In `~/.config/tinyproxy/tinyproxy.conf` replace every `REPLACE_ME` with the
+account name. Do not use `brew services start tinyproxy`: that runs Homebrew's
 default configuration, which listens on every interface. The LaunchAgent
 below runs this configuration only.
 
 What the configuration does (each directive is annotated in the file with
 its tinyproxy.conf(5) meaning, checked against tinyproxy 1.11.3):
 
-- `Listen` on the Tailscale address only, `Port 3128`;
-- `Allow 100.64.0.0/10` (the Tailscale CGNAT range) and nothing else;
+- `Listen 127.0.0.1`, `Port 3128`, `Allow 127.0.0.1` only; the tailnet
+  reaches it through `tailscale serve` (below);
 - `ConnectPort 443` only;
 - `Filter` with the single rule `^api\.glovoapp\.com$`, `FilterType ere`,
   `FilterURLs No` (match the host; for HTTPS that is the CONNECT target) and
@@ -328,15 +327,33 @@ on the x86_64 mini (`/opt/homebrew/bin` on Apple silicon).
   <key>StandardOutPath</key>
   <string>/Users/REPLACE_ME/Library/Logs/mctl-tinyproxy.stdout.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/REPLACE_ME/Library/Logs/mctl-tinyproxy.stdout.log</string>
+  <string>/Users/REPLACE_ME/Library/Logs/mctl-tinyproxy.stderr.log</string>
 </dict>
 </plist>
 ```
 
-At login the Tailscale address may not exist yet, so the first start can
-fail to bind; `KeepAlive` restarts it every 10s until Tailscale is up. A
-failed bind is never a fallback to another address, because `Listen` names
-exactly one.
+### Tailnet exposure (`tailscale serve`)
+
+tinyproxy listens on loopback only. Tailscale carries tailnet connections to
+it:
+
+```bash
+tailscale serve --bg --tcp 3128 tcp://127.0.0.1:3128
+tailscale serve status        # shows tcp://<mini>:3128 -> 127.0.0.1:3128
+tailscale serve --tcp=3128 off  # to stop exposing it
+```
+
+Why not `Listen` on the Tailscale address: with the macOS application
+firewall on in stealth mode (the mini's setting), a listener on the
+Tailscale interface accepts connections but no data reaches tinyproxy
+(`read_request_line: Client ... closed socket before read`, curl `Proxy
+CONNECT aborted`). Allowing tinyproxy through the firewall would be a
+system security setting change; `tailscale serve` needs none, because
+tailscaled is already allowed, and it leaves nothing listening on a
+network interface.
+
+A connection from the mini to its own Tailscale address through
+`serve` does not pass data either, so test from another tailnet node.
 
 After editing the configuration or the plist, `launchctl bootout
 gui/$(id -u)/com.mctl.tinyproxy` and wait until `launchctl print
@@ -346,8 +363,10 @@ unloading fails with `5: Input/output error`.
 
 ### Tailnet ACL
 
-tinyproxy's `Allow` admits any tailnet address; the tailnet policy is what
-limits the proxy to the cluster's sidecar. In the Tailscale admin console
+tinyproxy sees every tailnet client as 127.0.0.1, so the tailnet policy
+alone limits the proxy to the cluster's sidecar. Until that grant exists,
+every node the tailnet ACL lets reach the mini (including shared devices)
+can use the proxy, for `api.glovoapp.com:443` only. In the Tailscale admin console
 (Access controls), tag the mini (here `tag:glovo-proxy-host`, an example
 name) and add a grant that lets only `tag:glovo-egress` reach it, on
 `tcp:3128` only:
@@ -389,8 +408,11 @@ curl -sS -o /dev/null -x http://<mini-tailscale-ip>:3128 https://example.com/
 curl -sS -o /dev/null -x http://<mini-tailscale-ip>:3128 https://api.glovoapp.com:8443/
 ```
 
-On the mini, `curl -x http://127.0.0.1:3128 ...` must fail to connect (the
-proxy is not on loopback), and `grep -i filtered
+`http://api.glovoapp.com/` passes (Glovo answers 301): that is the known
+plain-HTTP gap above, closed on the client by `glovoapi.WithRequireProxy`.
+
+On the mini, testing through its own Tailscale address does not work (see
+above); `curl -x http://127.0.0.1:3128 ...` tests tinyproxy alone, and `grep -i filtered
 ~/Library/Logs/mctl-tinyproxy.log` shows the refused requests. After the
 ACL is in place, the same curl from a node without `tag:glovo-egress` must
 time out.
