@@ -136,3 +136,103 @@ How the two fit together:
 | C2-1 | Account linking for the owner only via a local helper (the token never passes through the chat or the model). | owner GO |
 | C2-2 | Owner-only tools: order history, suggestions, real basket edit, every write behind approval. Still no checkout or payment. | owner GO |
 | C2-3 | External users. | legal read + new owner decision |
+
+## 9. OAuth and the user flow with several users (draft, 2026-11-15)
+
+Today `glovo.mctl.ai` serves the owner alone: `glovo-home` on the owner's
+machine checks the mctl-api token and a local principal allowlist
+(`GLOVO_HOME_ALLOWED_PRINCIPALS`), and holds one Glovo session. This
+section is how the same surface works once more than one person uses it.
+It applies to C1 for everyone, and to C2 once section 8 lets anyone but
+the owner in.
+
+### 9.1 Roles stay as they are
+
+- **Authorization server: `https://api.mctl.ai`.** Login (Google,
+  ZITADEL), consent, token issue, JWKS. `glovo.mctl.ai` is only the
+  protected resource (RFC 9728); its metadata points at api.mctl.ai and
+  that does not move.
+- **Clients are not users.** Claude, ChatGPT, Gemini and others reach the
+  authorization server through Dynamic Client Registration, and only
+  callbacks on `OAUTH_ALLOWED_REDIRECT_URIS` are accepted (wildcard
+  entries are path prefixes on a fixed https host, mctl-api#1059). The
+  user is the `pid` claim in the token. A client registration never
+  grants access to anyone's Glovo data.
+- **No hand-written registrations.** A client that cannot register through
+  DCR gets an allowlist entry or a pre-registered client through a PR,
+  never a row inserted into the database by hand.
+
+### 9.2 Access decision
+
+`GLOVO_HOME_ALLOWED_PRINCIPALS` is replaced by a decision from mctl-api,
+in the shape that the v1 service already uses:
+
+- grants per principal: `glovo:c1` (catalog, MCTL basket, handoff) and
+  `glovo:c2` (linked real account; owner only until C2-3);
+- checked on every tool call, with a short positive cache and **no**
+  negative or error cache; mctl-api unreachable means 503, never a pass;
+- revoking a grant stops the next call; it does not wait for the token to
+  expire.
+
+### 9.3 First use, step by step
+
+1. The user adds `https://glovo.mctl.ai/mcp` in their client. The client
+   gets the 401 challenge and the metadata, registers via DCR and opens
+   api.mctl.ai.
+2. The user signs in at api.mctl.ai and sees its consent page (client
+   name, resource `glovo.mctl.ai`). The token carries `aud` =
+   `https://glovo.mctl.ai/mcp` and the user's `pid`.
+3. The first tool call checks the grant (9.2). No grant: a refusal that
+   says how to ask for access. Never an empty catalog.
+4. C1 tools work from here: an address the user types, catalog reads with
+   no Glovo account, a basket kept in MCTL, then the handoff.
+5. C2 tools for a user with `glovo:c2` and no linked account return
+   `account not linked` with a link to `https://glovo.mctl.ai/link`.
+
+### 9.4 Linking a Glovo account (C2)
+
+The Glovo token can only be obtained in a browser on glovoapp.com
+(R5), so linking needs the user's machine:
+
+1. `/link` (after api.mctl.ai login) shows what linking allows: read order
+   history and suggestions, edit the real basket; never checkout, payment
+   or order placement. Explicit consent is recorded in mctl-api with a
+   timestamp and the text version.
+2. The page shows a one-time link code: random, single use, valid for
+   10 minutes, bound to the `pid`, stored as a hash.
+3. The user runs the local helper (the `glovo-relogin.sh` pattern,
+   mctl-glovo#4). It opens the Glovo login and captures the session
+   locally. Then it uploads the session over TLS with the code, and with
+   nothing in argv or the shell history. The token never passes through
+   the chat or the model.
+4. The server checks the code, stores the session for that `pid` (C2-0:
+   Vault transit envelope per user, never in clear in Postgres, logs or
+   traces) and burns the code.
+5. `/link` shows the linked state, the last successful use and **Unlink**.
+   Unlinking deletes the stored session at once. The user is also told to
+   sign out of other sessions in Glovo, because we cannot revoke Glovo's
+   refresh token ourselves.
+
+Re-login after an expired session follows the same path with a new code.
+The keepalive alert goes to the account's owner, not to the operator.
+
+### 9.5 Isolation between users
+
+- One Glovo client per `pid`. With the Go port (#7), this is one
+  `glovoapi.Client` per linked session inside one process, not one Node
+  child per user.
+- The session is looked up by `pid` from the verified token only, never
+  from a tool argument.
+- Basket locks, rate limits and the global request cap are per `pid`.
+  The kill switch is global.
+- The audit line carries `pid`, tool, outcome and duration. Arguments,
+  results and tokens are never logged.
+- A required test: user A's token can never reach user B's session,
+  basket or history, including after B unlinks and relinks.
+
+### 9.6 Where the owner-only gateway fits
+
+`glovo-home` on the owner's machine is the owner's C2-1/C2-2 path today,
+with custody on the owner's own hardware. Moving to the shared service
+replaces only the allowlist (by 9.2) and the session store (by 9.4). The
+tool surface, the no-checkout rule and the token checks stay the same.
