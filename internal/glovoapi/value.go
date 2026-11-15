@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -175,7 +177,9 @@ func truthy(v Value) bool {
 	}
 }
 
-// list returns v as an array, or nil when it is not one.
+// list returns v as an array, or nil when it is not one. It is only for
+// probing shapes (the upstream Array.isArray checks); a field that must be a
+// list is read with strictList.
 func list(v Value) []any {
 	if s, ok := v.([]any); ok {
 		return s
@@ -183,21 +187,78 @@ func list(v Value) []any {
 	return nil
 }
 
-// orList is `v || []` followed by an array operation; a truthy non-array is
-// treated as empty.
-func orList(v Value) []any { return list(v) }
+// ErrUnexpectedShape is wrapped by every ShapeError.
+var ErrUnexpectedShape = errors.New("unexpected Glovo response shape")
 
-// flatItems is one step of Array.prototype.flatMap over `x || []`: arrays are
-// spliced, other truthy values are kept as a single element.
-func flatItems(v Value) []any {
+// ShapeError reports a response field that must be a list but is present
+// with another type. Upstream throws a TypeError in that case; this package
+// returns the error instead of treating the field as empty.
+type ShapeError struct {
+	Field string
+	Got   string
+}
+
+func (e *ShapeError) Error() string {
+	return fmt.Sprintf("%v: %s is %s, not an array", ErrUnexpectedShape, e.Field, e.Got)
+}
+
+// Unwrap makes errors.Is(err, ErrUnexpectedShape) work.
+func (e *ShapeError) Unwrap() error { return ErrUnexpectedShape }
+
+func jsTypeName(v Value) string {
+	switch v.(type) {
+	case map[string]any:
+		return "an object"
+	case string:
+		return "a string"
+	case json.Number, float64, int, Number:
+		return "a number"
+	case bool:
+		return "a boolean"
+	}
+	return fmt.Sprintf("%T", v)
+}
+
+// shapePanic carries a ShapeError from deep inside a compactor to the
+// exported function that recovers it with catchShape. It never escapes the
+// package: every exported entry point that can reach strictList defers
+// catchShape.
+type shapePanic struct{ err *ShapeError }
+
+// strictList reads a field that must be a list: absent or null is empty, an
+// array is returned as is, and anything else is a ShapeError.
+func strictList(v Value, field string) []any {
+	if nullish(v) {
+		return nil
+	}
 	if s, ok := v.([]any); ok {
 		return s
 	}
-	if truthy(v) {
-		return []any{v}
+	panic(shapePanic{&ShapeError{Field: field, Got: jsTypeName(v)}})
+}
+
+// catchShape turns a strictList failure into *err. Other panics propagate.
+func catchShape(err *error) {
+	if r := recover(); r != nil {
+		sp, ok := r.(shapePanic)
+		if !ok {
+			panic(r)
+		}
+		*err = sp.err
 	}
+}
+
+// guardShape runs fn and returns a strictList failure as an error.
+func guardShape(fn func()) (err error) {
+	defer catchShape(&err)
+	fn()
 	return nil
 }
+
+// flatItems is one step of Array.prototype.flatMap over `x || []` where x
+// must be a list. Upstream would keep a non-array value as a single element;
+// this package rejects it like any other wrongly typed list field.
+func flatItems(v Value, field string) []any { return strictList(v, field) }
 
 // jsString is JavaScript String(v).
 func jsString(v Value) string {
@@ -372,6 +433,36 @@ func (n Number) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 	return []byte(jsNumberString(f)), nil
+}
+
+// jsToFixed2 is Number.prototype.toFixed(2). It rounds the exact binary
+// value of f half up, as the specification requires, so 1.125 gives "1.13"
+// while 1.005 (stored as 1.00499...) gives "1.00". strconv rounds ties to
+// even and would give "1.12".
+func jsToFixed2(f float64) string {
+	switch {
+	case math.IsNaN(f):
+		return "NaN"
+	case math.IsInf(f, 1):
+		return "Infinity"
+	case math.IsInf(f, -1):
+		return "-Infinity"
+	case math.Abs(f) >= 1e21:
+		return jsNumberString(f)
+	}
+	sign := ""
+	if f < 0 {
+		sign = "-"
+		f = -f
+	}
+	r := new(big.Rat).SetFloat64(f)
+	r.Mul(r, big.NewRat(100, 1))
+	r.Add(r, big.NewRat(1, 2))
+	n := new(big.Int).Quo(r.Num(), r.Denom()).String()
+	for len(n) < 3 {
+		n = "0" + n
+	}
+	return sign + n[:len(n)-2] + "." + n[len(n)-2:]
 }
 
 // numberValue wraps a computed float as a pass-through Value.

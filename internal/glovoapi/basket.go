@@ -65,7 +65,9 @@ func (c *Client) createBasket(ctx context.Context, storeID, storeAddressID, stor
 	if err != nil {
 		return nil, err
 	}
-	if storeCategoryID == "" || jsNumber(storeCategoryID) == 0 {
+	// Upstream refuses a falsy or zero category (api.mjs:432). "null" and
+	// "undefined" are what String() makes of a missing one; refuse them too.
+	if storeCategoryID == "" || storeCategoryID == "null" || storeCategoryID == "undefined" || jsNumber(storeCategoryID) == 0 {
 		return nil, errors.New("storeCategoryId is required for new basket creation")
 	}
 	body := createBasketBody{
@@ -218,7 +220,10 @@ func customizationPayload(productView Value, selected []SelectedOption) ([]Custo
 	if nullish(productView) {
 		return nil, errors.New("productView is required for customization payloads")
 	}
-	groups := OptionGroupsFromProduct(productView)
+	groups, err := OptionGroupsFromProduct(productView)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Customization, 0, len(selected))
 	for _, s := range selected {
 		g := findGroup(groups, s.GroupID)
@@ -230,7 +235,6 @@ func customizationPayload(productView Value, selected []SelectedOption) ([]Custo
 			return nil, fmt.Errorf("unknown option %s for group %s", s.OptionID, s.GroupID)
 		}
 		var ids CustomizationIDs
-		var err error
 		fields := []struct {
 			dst   *Value
 			src   Value
@@ -264,7 +268,10 @@ func customizationPayload(productView Value, selected []SelectedOption) ([]Custo
 
 // ValidateSelectedOptions is validateSelectedOptions (api.mjs:1412).
 func ValidateSelectedOptions(productView Value, selected []SelectedOption) error {
-	groups := OptionGroupsFromProduct(productView)
+	groups, err := OptionGroupsFromProduct(productView)
+	if err != nil {
+		return err
+	}
 	counts := map[string]int{}
 	for _, s := range selected {
 		g := findGroup(groups, s.GroupID)
@@ -306,21 +313,23 @@ type BasketLineRef struct {
 }
 
 // findBasketProduct is findBasketProduct (api.mjs:1369): ids must be equal
-// strings, as upstream compares with ===.
-func findBasketProduct(basket Value, ref BasketLineRef) Value {
+// strings, as upstream compares with ===. A products field that is not a
+// list is an error.
+func findBasketProduct(basket Value, ref BasketLineRef) (found Value, err error) {
+	defer catchShape(&err)
 	match := func(v Value, want string) bool {
 		s, ok := v.(string)
 		return want != "" && ok && s == want
 	}
-	for _, p := range orList(get(basket, "products")) {
+	for _, p := range strictList(or(get(basket, "products"), Null), "products") {
 		ids := get(p, "ids")
 		if match(get(ids, "basketProductId"), ref.BasketProductID) ||
 			match(get(ids, "id"), ref.ProductID) ||
 			match(get(ids, "storeProductId"), ref.StoreProductID) {
-			return p
+			return p, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // AddToBasketParams are the addToBasket arguments. A zero Quantity means 1.
@@ -367,7 +376,10 @@ func (c *Client) AddToBasket(ctx context.Context, p AddToBasketParams) (Value, e
 	if !truthy(basket) {
 		return c.createBasket(ctx, p.StoreID, p.StoreAddressID, p.StoreCategoryID, product)
 	}
-	existing := findBasketProduct(basket, BasketLineRef{ProductID: p.ProductID, StoreProductID: p.StoreProductID})
+	existing, err := findBasketProduct(basket, BasketLineRef{ProductID: p.ProductID, StoreProductID: p.StoreProductID})
+	if err != nil {
+		return nil, err
+	}
 	if bpID := get(existing, "ids", "basketProductId"); truthy(bpID) {
 		current := 0.0
 		if inc := get(existing, "quantity", "increments"); truthy(inc) {
@@ -384,7 +396,10 @@ func (c *Client) AddToBasket(ctx context.Context, p AddToBasketParams) (Value, e
 	for k, v := range m {
 		payload[k] = v
 	}
-	products := append([]any{}, orList(get(basket, "products"))...)
+	var products []any
+	if err := guardShape(func() { products = append([]any{}, strictList(or(get(basket, "products"), Null), "products")...) }); err != nil {
+		return nil, err
+	}
 	payload["products"] = append(products, product)
 	return c.updateBasketProducts(ctx, jsString(get(basket, "basketId")), payload)
 }
@@ -401,7 +416,11 @@ func (c *Client) patchLineQuantity(ctx context.Context, ref BasketLineRef, quant
 	if ref.BasketProductID != "" {
 		id = ref.BasketProductID
 	} else {
-		id = get(findBasketProduct(basket, ref), "ids", "basketProductId")
+		line, err := findBasketProduct(basket, ref)
+		if err != nil {
+			return nil, err
+		}
+		id = get(line, "ids", "basketProductId")
 	}
 	if !truthy(id) {
 		return nil, errors.New("product is not in the basket")

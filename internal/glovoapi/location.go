@@ -5,11 +5,43 @@ import (
 	"regexp"
 )
 
-// SetLocation is setLocation (api.mjs:145). Every key in update overrides the
-// session location; a key mapped to nil removes that field, exactly like the
-// upstream spread of undefined values followed by cleanObject. The updated
-// session is persisted.
-func (c *Client) SetLocation(update map[string]any) (Location, error) {
+// LocationUpdate is the glovo_set_location input (server.mjs:102). The tool
+// always passes all five keys to setLocation, so a field left empty (nil or
+// "") removes that stored field instead of keeping it: omitting the country
+// clears the stored country. Other stored keys (accuracy, perseus ids, ...)
+// are kept. Latitude and Longitude take a string or a number.
+type LocationUpdate struct {
+	CountryCode  string
+	CityCode     string
+	Latitude     Value
+	Longitude    Value
+	LanguageCode string
+}
+
+// SetLocation is the glovo_set_location tool: setLocation (api.mjs:145) with
+// every LocationUpdate field, so omitted fields clear. The updated session
+// is persisted, which also replaces a session file that failed to load.
+func (c *Client) SetLocation(u LocationUpdate) (Location, error) {
+	str := func(v string) Value {
+		if v == "" {
+			return nil
+		}
+		return v
+	}
+	return c.setLocation(map[string]any{
+		"countryCode":  str(u.CountryCode),
+		"cityCode":     str(u.CityCode),
+		"latitude":     u.Latitude,
+		"longitude":    u.Longitude,
+		"languageCode": str(u.LanguageCode),
+	})
+}
+
+// setLocation is setLocation (api.mjs:145). Every key in update overrides
+// the session location; a key mapped to nil removes that field, exactly like
+// the upstream spread of undefined values followed by cleanObject. Keys not
+// in update are kept.
+func (c *Client) setLocation(update map[string]any) (Location, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	next := map[string]any{}
@@ -34,7 +66,7 @@ func (c *Client) SetLocation(update map[string]any) (Location, error) {
 	if err := SaveSession(c.sessionPath, s, c.now()); err != nil {
 		return nil, err
 	}
-	c.session = s
+	c.session, c.loadErr = s, nil
 	return c.locationLocked(), nil
 }
 
@@ -109,7 +141,7 @@ func (c *Client) SelectLocation(ctx context.Context, placeID, provider string) (
 	if !validLocationCodes(strOrNil(countryCode), strOrNil(cityCode)) {
 		return &SelectLocationResult{Deliverable: true, Title: resolved.Title, CityCode: cityCode, CountryCode: countryCode, Reason: "invalid_codes"}, nil
 	}
-	if _, err := c.SetLocation(map[string]any{
+	if _, err := c.setLocation(map[string]any{
 		"countryCode": *countryCode,
 		"cityCode":    *cityCode,
 		"latitude":    jsNumberString(float64(resolved.Latitude)),

@@ -51,7 +51,12 @@ type CompactBasketResult struct {
 
 // CompactBasket is compactBasket (api.mjs:1052). A nil basket (no basket for
 // the store) yields zero products and no lines.
-func CompactBasket(basket Value) *CompactBasketResult {
+func CompactBasket(basket Value) (out *CompactBasketResult, err error) {
+	defer catchShape(&err)
+	return compactBasket(basket), nil
+}
+
+func compactBasket(basket Value) *CompactBasketResult {
 	if !truthy(basket) {
 		return &CompactBasketResult{Lines: []BasketLine{}}
 	}
@@ -64,7 +69,7 @@ func CompactBasket(basket Value) *CompactBasketResult {
 		Lines:          []BasketLine{},
 	}
 	var count float64
-	for _, p := range orList(get(basket, "products")) {
+	for _, p := range strictList(or(get(basket, "products"), Null), "products") {
 		if inc := get(p, "quantity", "increments"); truthy(inc) {
 			count += jsNumber(inc)
 		}
@@ -98,12 +103,17 @@ type CompactOrder struct {
 }
 
 // CompactOrderCard is compactOrder (api.mjs:1076): nil for a falsy order.
-func CompactOrderCard(o Value) *CompactOrder {
+func CompactOrderCard(o Value) (out *CompactOrder, err error) {
+	defer catchShape(&err)
+	return compactOrderCard(o), nil
+}
+
+func compactOrderCard(o Value) *CompactOrder {
 	if !truthy(o) {
 		return nil
 	}
 	var cardItems []any
-	for _, entry := range orList(get(o, "content", "body")) {
+	for _, entry := range strictList(or(get(o, "content", "body"), Null), "content.body") {
 		text := coalesce(get(entry, "data"), get(entry, "text"), "")
 		if !truthy(text) {
 			continue
@@ -114,7 +124,7 @@ func CompactOrderCard(o Value) *CompactOrder {
 			}
 		}
 	}
-	products := orList(or(get(o, "products"), get(o, "orderProducts"), get(o, "items")))
+	products := strictList(or(get(o, "products"), get(o, "orderProducts"), get(o, "items"), Null), "products")
 	if len(products) > 5 {
 		products = products[:5]
 	}
@@ -147,7 +157,7 @@ type pastOrderLine struct {
 }
 
 func orderLines(o Value) []any {
-	return orList(or(get(o, "boughtProducts"), get(o, "products"), get(o, "orderProducts"), get(o, "items"), get(o, "order", "products")))
+	return strictList(or(get(o, "boughtProducts"), get(o, "products"), get(o, "orderProducts"), get(o, "items"), get(o, "order", "products"), Null), "boughtProducts")
 }
 
 // pastOrderLines mirrors pastOrderLines (api.mjs:1125).
@@ -171,17 +181,55 @@ func pastOrderLines(o Value) []pastOrderLine {
 	return out
 }
 
-var dateLayouts = []string{
-	time.RFC3339Nano,
-	"2006-01-02T15:04:05.999999999",
-	"2006-01-02T15:04",
-	"2006-01-02",
-	time.RFC1123,
-	time.RFC1123Z,
+// Layouts Date.parse accepts in practice, grouped by how a missing zone is
+// read. ECMAScript reads a date-only ISO string as UTC and an ISO date-time
+// without an offset as local time; V8 reads "2006-01-02 15:04:05" (space
+// separator) the same way as the T form.
+var (
+	zonedDateLayouts = []string{
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05.999999999Z0700",
+		"2006-01-02T15:04Z07:00",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05.999999999Z0700",
+		time.RFC1123,
+		time.RFC1123Z,
+	}
+	localDateLayouts = []string{
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02T15:04",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04",
+	}
+	utcDateLayouts = []string{"2006-01-02", "2006-01", "2006"}
+)
+
+// localZone is the zone for date-times without an offset, like the zone of
+// the Node process upstream. Tests replace it.
+var localZone = func() *time.Location { return time.Local }
+
+// parseJSDate approximates Date.parse for the formats above.
+func parseJSDate(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	for _, layout := range zonedDateLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	for _, layout := range localDateLayouts {
+		if t, err := time.ParseInLocation(layout, s, localZone()); err == nil {
+			return t, true
+		}
+	}
+	for _, layout := range utcDateLayouts {
+		if t, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
-// orderDateMs mirrors orderDate (api.mjs:1137). Date.parse is approximated
-// with ISO 8601 and RFC 1123 layouts.
+// orderDateMs mirrors orderDate (api.mjs:1137); see parseJSDate.
 func orderDateMs(o Value) (float64, bool) {
 	v := firstValue(get(o, "creationTime"), get(o, "createdAt"), get(o, "orderTime"), get(o, "deliveredAt"), get(o, "currentStatus", "creationTime"))
 	if nullish(v) {
@@ -195,12 +243,8 @@ func orderDateMs(o Value) (float64, bool) {
 		}
 		return n, true
 	}
-	s := jsString(v)
-	for _, layout := range dateLayouts {
-		loc := time.UTC
-		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
-			return float64(t.UnixMilli()), true
-		}
+	if t, ok := parseJSDate(jsString(v)); ok {
+		return float64(t.UnixMilli()), true
 	}
 	return 0, false
 }
@@ -248,7 +292,12 @@ func nativeReorderAllowed(o Value) bool {
 
 // CompactOrderDetail is compactOrderDetail (api.mjs:1095): nil for a falsy
 // order.
-func CompactOrderDetail(o Value) *CompactOrderDetailResult {
+func CompactOrderDetail(o Value) (out *CompactOrderDetailResult, err error) {
+	defer catchShape(&err)
+	return compactOrderDetail(o), nil
+}
+
+func compactOrderDetail(o Value) *CompactOrderDetailResult {
 	if !truthy(o) {
 		return nil
 	}
@@ -277,7 +326,7 @@ func CompactOrderDetail(o Value) *CompactOrderDetailResult {
 			Customizations: l.customizations, FreeProduct: l.freeProduct, Promotion: l.promotion,
 		})
 	}
-	for _, line := range orList(get(o, "pricingBreakdown", "lines")) {
+	for _, line := range strictList(or(get(o, "pricingBreakdown", "lines"), Null), "pricingBreakdown.lines") {
 		out.PricingBreakdown = append(out.PricingBreakdown, PricingLine{
 			Type:        clean(get(line, "type")),
 			Description: clean(get(line, "description")),
@@ -331,7 +380,12 @@ func (r ReorderPreview) MarshalJSON() ([]byte, error) {
 }
 
 // CompactReorderPreview is compactReorderPreview (api.mjs:1268).
-func CompactReorderPreview(o Value) *ReorderPreview {
+func CompactReorderPreview(o Value) (out *ReorderPreview, err error) {
+	defer catchShape(&err)
+	return compactReorderPreview(o), nil
+}
+
+func compactReorderPreview(o Value) *ReorderPreview {
 	if !truthy(o) {
 		return &ReorderPreview{empty: true, Items: []ReorderPreviewItem{}, UnsupportedReasons: []string{"Order detail was empty."}}
 	}

@@ -124,7 +124,10 @@ func (c *Client) GetAllOrderCards(ctx context.Context, o OrderCardsOptions) (*Or
 		}
 		knownSeen := false
 		for _, order := range pageOrders {
-			compact := CompactOrderCard(order)
+			compact, err := CompactOrderCard(order)
+			if err != nil {
+				return nil, fmt.Errorf("order history page %d: %w", len(out.Pages)+1, err)
+			}
 			if compact == nil || !truthy(compact.OrderID) {
 				continue
 			}

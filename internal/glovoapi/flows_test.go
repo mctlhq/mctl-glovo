@@ -310,10 +310,10 @@ func TestSelectLocationDoesNotPersistOnFailure(t *testing.T) {
 	}
 }
 
-func TestSetLocationMergesAndRemoves(t *testing.T) {
+func TestSetLocationInternalMergeKeepsOtherKeys(t *testing.T) {
 	f := newFake(t)
 	c, path := newTestClient(t, f, testSession())
-	loc, err := c.SetLocation(map[string]any{"cityCode": "NEW", "longitude": nil, "label": ""})
+	loc, err := c.setLocation(map[string]any{"cityCode": "NEW", "longitude": nil, "label": ""})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,6 +336,49 @@ func TestSetLocationMergesAndRemoves(t *testing.T) {
 	}
 	if len(f.requests()) != 0 {
 		t.Error("SetLocation made a request")
+	}
+}
+
+// glovo_set_location passes all five keys (server.mjs:102), so the ones the
+// caller leaves out clear the stored value instead of keeping it.
+func TestSetLocationOmittedFieldsClear(t *testing.T) {
+	f := newFake(t)
+	s := testSession()
+	loc0 := s["location"].(map[string]any)
+	loc0["languageCode"] = "es"
+	loc0["accuracy"] = "5"
+	c, path := newTestClient(t, f, s)
+	loc, err := c.SetLocation(LocationUpdate{Latitude: json.Number("41.5"), Longitude: "2.2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := LoadSession(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pl, _ := persisted["location"].(map[string]any)
+	for _, k := range []string{"countryCode", "cityCode", "languageCode"} {
+		if _, ok := pl[k]; ok {
+			t.Errorf("omitted %s kept: %v", k, pl)
+		}
+	}
+	if pl["latitude"] != json.Number("41.5") || pl["longitude"] != "2.2" || pl["accuracy"] != "5" {
+		t.Errorf("persisted %v", pl)
+	}
+	// Location() falls back to the defaults for the cleared keys.
+	if loc["countryCode"] != "ES" || loc["cityCode"] != "BCN" || loc["languageCode"] != "en" {
+		t.Errorf("effective location %v", loc)
+	}
+	if _, err := c.SetLocation(LocationUpdate{CountryCode: "PT", CityCode: "LIS", LanguageCode: "pt"}); err != nil {
+		t.Fatal(err)
+	}
+	persisted, _ = LoadSession(path)
+	pl, _ = persisted["location"].(map[string]any)
+	if pl["countryCode"] != "PT" || pl["cityCode"] != "LIS" || pl["languageCode"] != "pt" {
+		t.Errorf("persisted %v", pl)
+	}
+	if _, ok := pl["latitude"]; ok {
+		t.Errorf("omitted latitude kept: %v", pl)
 	}
 }
 

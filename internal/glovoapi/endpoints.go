@@ -71,7 +71,7 @@ func (c *Client) SavedLocations(ctx context.Context, matchText string) (*SavedLo
 	if err != nil {
 		return nil, err
 	}
-	return CompactSavedLocations(raw, c.Location(), matchText), nil
+	return CompactSavedLocations(raw, c.Location(), matchText)
 }
 
 // BrowseStoresParams are the browseStores options. Zero values take the
@@ -258,7 +258,7 @@ func (c *Client) StoreOrderOptions(ctx context.Context, storeID, storeAddressID,
 	if err != nil {
 		return nil, err
 	}
-	return CompactStoreOrderOptions(fees, restrictions, info, similar), nil
+	return CompactStoreOrderOptions(fees, restrictions, info, similar)
 }
 
 // SearchStoreItems is searchStoreItems (api.mjs:393): product search inside

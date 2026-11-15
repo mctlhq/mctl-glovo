@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"math"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -69,8 +68,14 @@ func StoreClassFromCategoryID(categoryID Value) string {
 }
 
 // StoreCategoryIDFromStore mirrors storeCategoryIdFromStore (api.mjs:1330).
-func StoreCategoryIDFromStore(store Value) Value {
-	return orNull(coalesce(get(store, "categoryId"), get(store, "data", "categoryId"), get(store, "store", "categoryId")))
+// It returns a string; a missing or null category is "", never "null", so
+// that createBasket refuses it as upstream does (api.mjs:432).
+func StoreCategoryIDFromStore(store Value) string {
+	v := coalesce(get(store, "categoryId"), get(store, "data", "categoryId"), get(store, "store", "categoryId"))
+	if nullish(v) {
+		return ""
+	}
+	return jsString(v)
 }
 
 // CompactStore is compactStore (api.mjs:648).
@@ -144,18 +149,23 @@ type CompactStoreWallResult struct {
 }
 
 // CompactStoreWall is compactStoreWall (api.mjs:880).
-func CompactStoreWall(data Value) *CompactStoreWallResult {
+func CompactStoreWall(data Value) (out *CompactStoreWallResult, err error) {
+	defer catchShape(&err)
+	return compactStoreWall(data), nil
+}
+
+func compactStoreWall(data Value) *CompactStoreWallResult {
 	stores := coalesce(get(data, "data", "stores"), get(data, "stores"))
 	category := coalesce(get(data, "data", "category"), get(data, "category"))
 	categoryID := coalesce(get(category, "id"), get(category, "categoryId"))
-	entries := get(stores, "entries")
+	entries := strictList(get(stores, "entries"), "stores.entries")
 	out := &CompactStoreWallResult{
 		Pagination: get(stores, "pagination"),
-		Count:      len(list(entries)),
+		Count:      len(entries),
 		Stores:     []*CompactStore{},
 		Category:   category,
 	}
-	for _, e := range orList(entries) {
+	for _, e := range entries {
 		if !nullish(categoryID) {
 			m := map[string]any{}
 			if em, ok := e.(map[string]any); ok {
@@ -168,7 +178,8 @@ func CompactStoreWall(data Value) *CompactStoreWallResult {
 		}
 		out.Stores = append(out.Stores, CompactStoreEntry(e))
 	}
-	if ws, ok := get(data, "data", "widgets").([]any); ok {
+	if raw := get(data, "data", "widgets"); !nullish(raw) {
+		ws := strictList(raw, "data.widgets")
 		widgets := make([]StoreWallWidget, 0, len(ws))
 		for _, w := range ws {
 			widgets = append(widgets, StoreWallWidget{ID: get(w, "id"), Title: get(w, "title"), TemplateID: get(w, "templateId")})
@@ -196,7 +207,12 @@ type CompactMenuResult struct {
 }
 
 // CompactMenu is compactMenu (api.mjs:893). A zero limit means 80.
-func CompactMenu(menu Value, limit int) *CompactMenuResult {
+func CompactMenu(menu Value, limit int) (out *CompactMenuResult, err error) {
+	defer catchShape(&err)
+	return compactMenu(menu, limit), nil
+}
+
+func compactMenu(menu Value, limit int) *CompactMenuResult {
 	if limit == 0 {
 		limit = 80
 	}
@@ -223,10 +239,10 @@ func CompactMenu(menu Value, limit int) *CompactMenuResult {
 				ContentURI: get(item, "action", "data", "path"),
 				Tracking:   get(item, "tracking"),
 			})
-			walk(orList(get(item, "elements")), depth+1, chain)
+			walk(strictList(or(get(item, "elements"), Null), "elements"), depth+1, chain)
 		}
 	}
-	walk(orList(or(get(menu, "data", "elements"), get(menu, "elements"))), 0, nil)
+	walk(strictList(or(get(menu, "data", "elements"), get(menu, "elements"), Null), "data.elements"), 0, nil)
 	return &CompactMenuResult{Type: get(menu, "type"), Count: len(result), Sections: result}
 }
 
@@ -279,10 +295,7 @@ func CompactItemOf(p Value) *CompactItem {
 	id := jsString(coalesce(get(p, "id"), get(p, "productId")))
 	var fallbackPrice Value
 	if price := get(p, "price"); !nullish(price) {
-		fallbackPrice = "€" + strconv.FormatFloat(jsNumber(price), 'f', 2, 64)
-		if math.IsNaN(jsNumber(price)) {
-			fallbackPrice = "€NaN"
-		}
+		fallbackPrice = "€" + jsToFixed2(jsNumber(price))
 	}
 	image := get(p, "imageUrl")
 	if !truthy(image) {
@@ -329,14 +342,19 @@ type CompactSearchResult struct {
 }
 
 // CompactSearch is compactSearch (api.mjs:933).
-func CompactSearch(data Value, o SearchOptions) *CompactSearchResult {
+func CompactSearch(data Value, o SearchOptions) (out *CompactSearchResult, err error) {
+	defer catchShape(&err)
+	return compactSearch(data, o), nil
+}
+
+func compactSearch(data Value, o SearchOptions) *CompactSearchResult {
 	limit := o.Limit
 	if limit == 0 {
 		limit = 24
 	}
 	products := []any{}
-	for _, r := range orList(get(data, "results")) {
-		products = append(products, flatItems(get(r, "products"))...)
+	for _, r := range strictList(or(get(data, "results"), Null), "results") {
+		products = append(products, flatItems(or(get(r, "products"), Null), "results[].products")...)
 	}
 	n := len(products)
 	if n > limit {
@@ -355,8 +373,8 @@ func CompactSearch(data Value, o SearchOptions) *CompactSearchResult {
 }
 
 func productEventData(element Value) Value {
-	for _, action := range orList(get(element, "actions")) {
-		for _, event := range flatItems(get(action, "data", "events")) {
+	for _, action := range strictList(or(get(element, "actions"), Null), "actions") {
+		for _, event := range flatItems(or(get(action, "data", "events"), Null), "actions[].data.events") {
 			d := get(event, "data")
 			if truthy(get(d, "collectionType")) || truthy(get(d, "isOrderedBefore")) {
 				return d
@@ -404,7 +422,12 @@ type CompactStoreContentResult struct {
 }
 
 // CompactStoreContent is compactStoreContent (api.mjs:953).
-func CompactStoreContent(data Value, o StoreContentCompactOptions) *CompactStoreContentResult {
+func CompactStoreContent(data Value, o StoreContentCompactOptions) (out *CompactStoreContentResult, err error) {
+	defer catchShape(&err)
+	return compactStoreContent(data, o), nil
+}
+
+func compactStoreContent(data Value, o StoreContentCompactOptions) *CompactStoreContentResult {
 	kind := o.Kind
 	if kind == "" {
 		kind = "all"
@@ -416,9 +439,9 @@ func CompactStoreContent(data Value, o StoreContentCompactOptions) *CompactStore
 	}
 	remaining := int(math.Max(1, math.Min(limit, 100)))
 	out := &CompactStoreContentResult{Kind: kind, Sections: []ContentSection{}, Products: []*CompactItem{}}
-	for _, section := range orList(or(get(data, "data", "body"), get(data, "body"))) {
+	for _, section := range strictList(or(get(data, "data", "body"), get(data, "body"), Null), "data.body") {
 		var tiles []any
-		for _, el := range orList(get(section, "data", "elements")) {
+		for _, el := range strictList(or(get(section, "data", "elements"), Null), "data.body[].data.elements") {
 			if get(el, "type") == "PRODUCT_TILE" && truthy(get(el, "data")) {
 				tiles = append(tiles, el)
 			}
@@ -518,7 +541,12 @@ type CompactStoreOrderOptionsResult struct {
 }
 
 // CompactStoreOrderOptions is compactStoreOrderOptions (api.mjs:996).
-func CompactStoreOrderOptions(fees, restrictions, info, similar Value) *CompactStoreOrderOptionsResult {
+func CompactStoreOrderOptions(fees, restrictions, info, similar Value) (out *CompactStoreOrderOptionsResult, err error) {
+	defer catchShape(&err)
+	return compactStoreOrderOptions(fees, restrictions, info, similar), nil
+}
+
+func compactStoreOrderOptions(fees, restrictions, info, similar Value) *CompactStoreOrderOptionsResult {
 	feeData := coalesce(get(fees, "data"), fees)
 	if nullish(feeData) {
 		feeData = map[string]any{}
@@ -533,7 +561,7 @@ func CompactStoreOrderOptions(fees, restrictions, info, similar Value) *CompactS
 		SimilarStores:       []*CompactStore{},
 		Boundary:            "Read-only pre-check. This does not create a basket, enter checkout, book a slot, pay, or place an order.",
 	}
-	for _, r := range orList(get(feeData, "ranges")) {
+	for _, r := range strictList(or(get(feeData, "ranges"), Null), "ranges") {
 		out.MinimumBasketRanges = append(out.MinimumBasketRanges, BasketRange{
 			LowerBound:        clean(get(r, "lowerBound")),
 			UpperBound:        clean(get(r, "upperBound")),
@@ -544,14 +572,14 @@ func CompactStoreOrderOptions(fees, restrictions, info, similar Value) *CompactS
 			SuccessText:       clean(get(r, "successText")),
 		})
 	}
-	for _, r := range orList(get(restrictions, "restrictions")) {
+	for _, r := range strictList(or(get(restrictions, "restrictions"), Null), "restrictions") {
 		out.Restrictions = append(out.Restrictions, Restriction{
 			ID:   clean(get(r, "id")),
 			Text: clean(coalesce(get(r, "text"), get(r, "description"))),
 			Link: clean(get(r, "hyperlink", "url")),
 		})
 	}
-	for _, s := range orList(get(info, "sections")) {
+	for _, s := range strictList(or(get(info, "sections"), Null), "sections") {
 		text := clean(coalesce(get(s, "data", "text"), get(s, "data", "label"), get(s, "data", "title")))
 		if !truthy(text) {
 			continue
@@ -559,7 +587,7 @@ func CompactStoreOrderOptions(fees, restrictions, info, similar Value) *CompactS
 		out.StoreInformation = append(out.StoreInformation, StoreInfoSection{Type: clean(get(s, "type")), Text: text})
 	}
 	similarStores := coalesce(get(similar, "stores"), get(similar, "data", "stores"))
-	for _, s := range orList(similarStores) {
+	for _, s := range strictList(similarStores, "stores") {
 		out.SimilarStores = append(out.SimilarStores, CompactStoreEntry(s))
 	}
 	return out
@@ -595,14 +623,19 @@ func productMeta(data Value) Value {
 
 func requiredSections(data Value) []any {
 	var out []any
-	for _, e := range orList(get(data, "data", "actions", "primary", "events")) {
-		out = append(out, flatItems(get(e, "data", "requiredSections"))...)
+	for _, e := range strictList(or(get(data, "data", "actions", "primary", "events"), Null), "data.actions.primary.events") {
+		out = append(out, flatItems(or(get(e, "data", "requiredSections"), Null), "requiredSections")...)
 	}
 	return out
 }
 
 // OptionGroupsFromProduct is optionGroupsFromProduct (api.mjs:1380).
-func OptionGroupsFromProduct(data Value) []OptionGroup {
+func OptionGroupsFromProduct(data Value) (groups []OptionGroup, err error) {
+	defer catchShape(&err)
+	return optionGroupsFromProduct(data), nil
+}
+
+func optionGroupsFromProduct(data Value) []OptionGroup {
 	product := productMeta(data)
 	required := map[string]bool{}
 	for _, section := range requiredSections(data) {
@@ -615,7 +648,7 @@ func OptionGroupsFromProduct(data Value) []OptionGroup {
 		}
 	}
 	groups := []OptionGroup{}
-	for _, g := range orList(or(get(product, "attributeGroups"), get(product, "optionGroups"))) {
+	for _, g := range strictList(or(get(product, "attributeGroups"), get(product, "optionGroups"), Null), "attributeGroups") {
 		id := jsString(coalesce(get(g, "id"), get(g, "attributeGroupId"), get(g, "externalId")))
 		group := OptionGroup{
 			ID:              id,
@@ -633,7 +666,7 @@ func OptionGroupsFromProduct(data Value) []OptionGroup {
 			Max:     orNull(coalesce(get(g, "maxSelection"), get(g, "maxSelections"), get(g, "max"))),
 			Options: []OptionChoice{},
 		}
-		for _, o := range orList(or(get(g, "attributes"), get(g, "options"), get(g, "values"))) {
+		for _, o := range strictList(or(get(g, "attributes"), get(g, "options"), get(g, "values"), Null), "attributeGroups[].attributes") {
 			group.Options = append(group.Options, OptionChoice{
 				ID:         jsString(coalesce(get(o, "id"), get(o, "attributeId"), get(o, "externalId"))),
 				LegacyID:   get(o, "id"),
@@ -650,7 +683,7 @@ func OptionGroupsFromProduct(data Value) []OptionGroup {
 
 func productAddEnabled(data Value) *bool {
 	elements := coalesce(get(data, "data", "footer", "data", "elements"), get(data, "footer", "data", "elements"))
-	for _, el := range orList(elements) {
+	for _, el := range strictList(elements, "footer.data.elements") {
 		if b, ok := get(el, "data", "isEnabled").(bool); ok {
 			return boolPtr(b)
 		}
@@ -669,7 +702,12 @@ type CompactProductViewResult struct {
 }
 
 // CompactProductView is compactProductView (api.mjs:1026).
-func CompactProductView(data Value) *CompactProductViewResult {
+func CompactProductView(data Value) (out *CompactProductViewResult, err error) {
+	defer catchShape(&err)
+	return compactProductView(data), nil
+}
+
+func compactProductView(data Value) *CompactProductViewResult {
 	meta := productMeta(data)
 	fields := map[string]any{}
 	for _, k := range []string{"id", "externalId", "storeProductId", "categoryId", "name", "priceInfo", "imageUrl", "imageId", "sponsored", "restricted"} {
@@ -683,7 +721,7 @@ func CompactProductView(data Value) *CompactProductViewResult {
 	item := CompactItemOf(fields)
 	addEnabled := productAddEnabled(data)
 	item.Available = addEnabled
-	groups := OptionGroupsFromProduct(data)
+	groups := optionGroupsFromProduct(data)
 	isVariant := get(meta, "isVariant")
 	selection := "not_exposed"
 	if len(groups) > 0 {

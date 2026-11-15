@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -90,6 +91,7 @@ type Client struct {
 	refreshMu sync.Mutex // serialises refreshes
 	mu        sync.Mutex // guards session
 	session   Session
+	loadErr   error
 	bits      map[string]string
 }
 
@@ -144,24 +146,30 @@ func (c *Client) initBits() {
 	}
 }
 
-// Reload reads the session file. A missing file leaves the client signed out
-// (the documented "not signed in" state). Any other failure, including a
-// malformed file, is returned: unlike upstream, it is not treated as signed
-// out.
+// Reload reads the session file, like reload in api.mjs:121.
+//
+// A missing file, or one with no token and no location (for example "{}"),
+// leaves the client signed out with no error, as upstream does. A file that
+// cannot be read or is malformed (not JSON, not an object, a non-string
+// token) also leaves the client signed out, but the error is returned and
+// kept: AuthStatus reports it as session_error instead of failing. The
+// client stays usable either way, so SetLocation can write a fresh session
+// over a broken file.
 func (c *Client) Reload() error {
 	s, err := LoadSession(c.sessionPath)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if errors.Is(err, os.ErrNotExist) {
-		c.session = nil
+	c.session, c.loadErr = nil, nil
+	switch {
+	case err == nil:
+		c.session = s
 		return nil
-	}
-	if err != nil {
-		c.session = nil
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, ErrNoSessionData):
+		return nil
+	default:
+		c.loadErr = err
 		return err
 	}
-	c.session = s
-	return nil
 }
 
 // Session returns a shallow copy of the current session, or nil.
@@ -209,6 +217,9 @@ type AuthStatus struct {
 	SecondsLeft      int  `json:"seconds_left"`
 	HasCustomer      bool `json:"has_customer"`
 	HasLocation      bool `json:"has_location"`
+	// SessionError is set when the session file exists but could not be
+	// loaded. Upstream reports such a file as plain signed out.
+	SessionError string `json:"session_error,omitempty"`
 }
 
 // AuthStatus reports the session state without any network call.
@@ -225,6 +236,18 @@ func (c *Client) AuthStatus() AuthStatus {
 		SecondsLeft:      int(math.Max(0, math.Floor(st.SecondsLeft+0.5))),
 		HasCustomer:      truthy(coalesce(get(m, "customerId"), get(m, "customer", "id"))),
 		HasLocation:      truthy(get(loc, "cityCode")) || truthy(get(loc, "latitude")),
+		SessionError:     sessionErrorText(c.loadErr),
+	}
+}
+
+func sessionErrorText(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrSessionMalformed):
+		return ErrSessionMalformed.Error()
+	default:
+		return "Glovo session file could not be read."
 	}
 }
 
@@ -283,6 +306,9 @@ func (c *Client) baseHeaders(auth bool) headerList {
 		{"Glovo-Perseus-Consent", jsString(or(get(loc, "perseusConsent"), "essential_functional_marketing"))},
 		{"Glovo-Request-Id", c.newID()},
 		{"Glovo-Request-TTL", "7500"},
+		// Node's fetch (undici) adds these two to every request.
+		{"accept-language", "*"},
+		{"sec-fetch-mode", "cors"},
 	}
 	if tok := get(sess, "accessToken"); auth && truthy(tok) {
 		h = append(h, [2]string{"Authorization", jsString(tok)})
@@ -305,16 +331,41 @@ var mutationAllowlist = []struct {
 	{http.MethodPatch, regexp.MustCompile(`^/v1/authenticated/customers/[^/?]+/baskets/[^/?]+/products/quantity$`)},
 }
 
-func checkMutation(method, path string) error {
+// ErrUnsafePath is returned for a request path with an empty, "." or ".."
+// segment. seg escapes "/" but not dots, so an id of ".." would otherwise
+// climb out of its path.
+var ErrUnsafePath = errors.New("glovoapi: refusing a request path with an empty, '.' or '..' segment")
+
+func checkPathSegments(p string) error {
+	raw := strings.SplitN(p, "?", 2)[0]
+	if !strings.HasPrefix(raw, "/") {
+		return ErrUnsafePath
+	}
+	for _, s := range strings.Split(raw[1:], "/") {
+		if s == "" || s == "." || s == ".." {
+			return ErrUnsafePath
+		}
+	}
+	return nil
+}
+
+func checkMutation(method, p string) error {
 	if method == http.MethodGet {
 		return nil
 	}
+	// Match the cleaned path, so that a ".." segment cannot make a path look
+	// like an allowed one while resolving to another.
+	parts := strings.SplitN(p, "?", 2)
+	cleaned := path.Clean(parts[0])
+	if len(parts) == 2 {
+		cleaned += "?" + parts[1]
+	}
 	for _, a := range mutationAllowlist {
-		if a.method == method && a.path.MatchString(path) {
+		if a.method == method && a.path.MatchString(cleaned) && cleaned == p {
 			return nil
 		}
 	}
-	return fmt.Errorf("glovoapi: refusing %s %s: not an allowed basket or read endpoint", method, safePath(strings.SplitN(path, "?", 2)[0]))
+	return fmt.Errorf("glovoapi: refusing %s %s: not an allowed basket or read endpoint", method, safePath(parts[0]))
 }
 
 type callOpts struct {
@@ -325,6 +376,9 @@ type callOpts struct {
 }
 
 func (c *Client) send(ctx context.Context, method, path string, body any, auth bool) (int, []byte, string, error) {
+	if err := checkPathSegments(path); err != nil {
+		return 0, nil, "", err
+	}
 	if err := checkMutation(method, path); err != nil {
 		return 0, nil, "", err
 	}

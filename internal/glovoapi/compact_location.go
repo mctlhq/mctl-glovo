@@ -268,8 +268,8 @@ func compactSavedLocation(entry, address Value, current Location, matchText stri
 		get(entry, "title"), get(entry, "subtitle"), get(address, "addressLine"), get(address, "details"),
 		get(address, "tag"), get(address, "kind"), get(address, "cityName"), get(address, "cityCode"), get(address, "countryCode"),
 	}
-	if fields, ok := get(address, "fields").([]any); ok {
-		for _, f := range fields {
+	if fields := get(address, "fields"); !nullish(fields) {
+		for _, f := range strictList(fields, "addresses[].fields") {
 			searchable = append(searchable, get(f, "value"))
 		}
 	}
@@ -331,13 +331,18 @@ type SavedLocations struct {
 }
 
 // CompactSavedLocations is compactSavedLocations (api.mjs:859).
-func CompactSavedLocations(data Value, current Location, matchText string) *SavedLocations {
+func CompactSavedLocations(data Value, current Location, matchText string) (out *SavedLocations, err error) {
+	defer catchShape(&err)
+	return compactSavedLocations(data, current, matchText), nil
+}
+
+func compactSavedLocations(data Value, current Location, matchText string) *SavedLocations {
 	entries := coalesce(get(data, "data", "addresses"), get(data, "addresses"))
 	var list0 []any
 	if nullish(entries) {
 		list0 = asArray(data)
 	} else {
-		list0 = orList(entries)
+		list0 = strictList(entries, "addresses")
 	}
 	out := &SavedLocations{SavedLocations: []SavedLocation{}}
 	for _, e := range list0 {

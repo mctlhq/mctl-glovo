@@ -52,57 +52,77 @@ func assertGolden(t *testing.T, name string, got any) {
 	}
 }
 
+func must[T any](t *testing.T) func(v T, err error) T {
+	return func(v T, err error) T {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+}
+
 var testCurrentLocation = Location{"countryCode": "ES", "cityCode": "BCN", "latitude": "41.4", "longitude": "2.17", "accuracy": "0", "languageCode": "en"}
 
 func TestCompactMatchesUpstreamGolden(t *testing.T) {
 	cases := map[string]func(t *testing.T) any{
-		"store_wall":  func(t *testing.T) any { return CompactStoreWall(fixture(t, "store_wall")) },
+		"store_wall": func(t *testing.T) any {
+			return must[*CompactStoreWallResult](t)(CompactStoreWall(fixture(t, "store_wall")))
+		},
 		"store":       func(t *testing.T) any { return CompactStoreEntry(fixture(t, "store")) },
-		"menu":        func(t *testing.T) any { return CompactMenu(fixture(t, "menu"), 80) },
-		"menu_limit2": func(t *testing.T) any { return CompactMenu(fixture(t, "menu"), 2) },
+		"menu":        func(t *testing.T) any { return must[*CompactMenuResult](t)(CompactMenu(fixture(t, "menu"), 80)) },
+		"menu_limit2": func(t *testing.T) any { return must[*CompactMenuResult](t)(CompactMenu(fixture(t, "menu"), 2)) },
 		"store_content_all": func(t *testing.T) any {
-			return CompactStoreContent(fixture(t, "store_content"), StoreContentCompactOptions{Kind: "all", Limit: 40, StoreID: 1001, StoreAddressID: 2001})
+			return must[*CompactStoreContentResult](t)(CompactStoreContent(fixture(t, "store_content"), StoreContentCompactOptions{Kind: "all", Limit: 40, StoreID: 1001, StoreAddressID: 2001}))
 		},
 		"store_content_easy": func(t *testing.T) any {
-			return CompactStoreContent(fixture(t, "store_content"), StoreContentCompactOptions{Kind: "easy_reorder", Limit: 40})
+			return must[*CompactStoreContentResult](t)(CompactStoreContent(fixture(t, "store_content"), StoreContentCompactOptions{Kind: "easy_reorder", Limit: 40}))
 		},
 		"store_content_limit1": func(t *testing.T) any {
-			return CompactStoreContent(fixture(t, "store_content"), StoreContentCompactOptions{Kind: "all", Limit: 1})
+			return must[*CompactStoreContentResult](t)(CompactStoreContent(fixture(t, "store_content"), StoreContentCompactOptions{Kind: "all", Limit: 1}))
 		},
 		"store_content_empty": func(t *testing.T) any {
-			return CompactStoreContent(map[string]any{"data": map[string]any{"body": []any{}}}, StoreContentCompactOptions{Kind: "top_sellers", Limit: 40})
+			return must[*CompactStoreContentResult](t)(CompactStoreContent(map[string]any{"data": map[string]any{"body": []any{}}}, StoreContentCompactOptions{Kind: "top_sellers", Limit: 40}))
 		},
 		"search": func(t *testing.T) any {
-			return CompactSearch(fixture(t, "search"), SearchOptions{StoreID: "1001", StoreAddressID: 2001, Limit: 24})
+			return must[*CompactSearchResult](t)(CompactSearch(fixture(t, "search"), SearchOptions{StoreID: "1001", StoreAddressID: 2001, Limit: 24}))
 		},
 		"search_limit1": func(t *testing.T) any {
-			return CompactSearch(fixture(t, "search"), SearchOptions{StoreID: "1001", StoreAddressID: "2001", Limit: 1})
+			return must[*CompactSearchResult](t)(CompactSearch(fixture(t, "search"), SearchOptions{StoreID: "1001", StoreAddressID: "2001", Limit: 1}))
 		},
-		"product_view":  func(t *testing.T) any { return CompactProductView(fixture(t, "product_view")) },
-		"option_groups": func(t *testing.T) any { return OptionGroupsFromProduct(fixture(t, "product_view")) },
+		"product_view": func(t *testing.T) any {
+			return must[*CompactProductViewResult](t)(CompactProductView(fixture(t, "product_view")))
+		},
+		"option_groups": func(t *testing.T) any {
+			return must[[]OptionGroup](t)(OptionGroupsFromProduct(fixture(t, "product_view")))
+		},
 		"order_options": func(t *testing.T) any {
-			return CompactStoreOrderOptions(fixture(t, "store_fees"), fixture(t, "store_restrictions"), fixture(t, "store_info"), fixture(t, "store_similar"))
+			return must[*CompactStoreOrderOptionsResult](t)(CompactStoreOrderOptions(fixture(t, "store_fees"), fixture(t, "store_restrictions"), fixture(t, "store_info"), fixture(t, "store_similar")))
 		},
-		"basket":      func(t *testing.T) any { return CompactBasket(fixture(t, "basket")) },
-		"basket_null": func(t *testing.T) any { return CompactBasket(nil) },
+		"basket":      func(t *testing.T) any { return must[*CompactBasketResult](t)(CompactBasket(fixture(t, "basket"))) },
+		"basket_null": func(t *testing.T) any { return must[*CompactBasketResult](t)(CompactBasket(nil)) },
 		"order_cards": func(t *testing.T) any {
 			var out []*CompactOrder
 			for _, o := range list(get(fixture(t, "orders_page1"), "orders")) {
-				out = append(out, CompactOrderCard(o))
+				out = append(out, must[*CompactOrder](t)(CompactOrderCard(o)))
 			}
 			return out
 		},
-		"order_detail":         func(t *testing.T) any { return CompactOrderDetail(fixture(t, "order_detail")) },
-		"reorder_preview":      func(t *testing.T) any { return CompactReorderPreview(fixture(t, "order_detail")) },
-		"reorder_preview_null": func(t *testing.T) any { return CompactReorderPreview(nil) },
+		"order_detail": func(t *testing.T) any {
+			return must[*CompactOrderDetailResult](t)(CompactOrderDetail(fixture(t, "order_detail")))
+		},
+		"reorder_preview": func(t *testing.T) any {
+			return must[*ReorderPreview](t)(CompactReorderPreview(fixture(t, "order_detail")))
+		},
+		"reorder_preview_null": func(t *testing.T) any { return must[*ReorderPreview](t)(CompactReorderPreview(nil)) },
 		"reorder_preview_noids": func(t *testing.T) any {
-			return CompactReorderPreview(map[string]any{"orderCode": "x", "boughtProducts": []any{}})
+			return must[*ReorderPreview](t)(CompactReorderPreview(map[string]any{"orderCode": "x", "boughtProducts": []any{}}))
 		},
 		"saved_locations_match": func(t *testing.T) any {
-			return CompactSavedLocations(fixture(t, "saved_addresses"), testCurrentLocation, "example street 00000")
+			return must[*SavedLocations](t)(CompactSavedLocations(fixture(t, "saved_addresses"), testCurrentLocation, "example street 00000"))
 		},
 		"saved_locations_plain": func(t *testing.T) any {
-			return CompactSavedLocations(fixture(t, "saved_addresses"), Location{"countryCode": "PT"}, "")
+			return must[*SavedLocations](t)(CompactSavedLocations(fixture(t, "saved_addresses"), Location{"countryCode": "PT"}, ""))
 		},
 		"location_search":        func(t *testing.T) any { return CompactLocationSearch(fixture(t, "address_search"), 5) },
 		"location_search_limit2": func(t *testing.T) any { return CompactLocationSearch(fixture(t, "address_search"), 2) },
@@ -123,7 +143,7 @@ func TestCompactMatchesUpstreamGolden(t *testing.T) {
 }
 
 func TestCompactItemKeepsRawPriceInfo(t *testing.T) {
-	res := CompactSearch(fixture(t, "search"), SearchOptions{})
+	res := must[*CompactSearchResult](t)(CompactSearch(fixture(t, "search"), SearchOptions{}))
 	raw := res.Results[0].PriceInfo
 	if !strings.Contains(string(raw), `"discountedPrice"`) {
 		t.Fatalf("raw priceInfo lost: %s", raw)
@@ -138,14 +158,14 @@ func TestCompactItemKeepsRawPriceInfo(t *testing.T) {
 	if strings.Contains(string(out), "discountedPrice") {
 		t.Fatalf("raw priceInfo leaked into tool output: %s", out)
 	}
-	pv := CompactProductView(fixture(t, "product_view"))
+	pv := must[*CompactProductViewResult](t)(CompactProductView(fixture(t, "product_view")))
 	if !strings.Contains(string(pv.PriceInfo), `"displayText"`) {
 		t.Fatalf("product view raw priceInfo lost: %s", pv.PriceInfo)
 	}
 }
 
 func TestCompactSavedLocationsDoesNotLeakTokens(t *testing.T) {
-	out, err := marshalJSON(CompactSavedLocations(fixture(t, "saved_addresses"), testCurrentLocation, "home"))
+	out, err := marshalJSON(must[*SavedLocations](t)(CompactSavedLocations(fixture(t, "saved_addresses"), testCurrentLocation, "home")))
 	if err != nil {
 		t.Fatal(err)
 	}

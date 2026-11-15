@@ -205,6 +205,8 @@ func TestRequestHeaders(t *testing.T) {
 		"Glovo-Perseus-Consent":             "essential_functional_marketing",
 		"Glovo-Request-Id":                  "00000000-0000-4000-8000-000000000003",
 		"Glovo-Request-Ttl":                 "7500",
+		"Accept-Language":                   "*",
+		"Sec-Fetch-Mode":                    "cors",
 	}
 	for k, v := range want {
 		if got := h.Get(k); got != v {
