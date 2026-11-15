@@ -187,6 +187,42 @@ func WithDefaultLocation(l Location) Option { return func(c *Client) { c.default
 // WithSession installs an in-memory session instead of loading the file.
 func WithSession(s Session) Option { return func(c *Client) { c.session = s } }
 
+// WithClock replaces time.Now for token expiry and session timestamps.
+// Tests use it; nil is refused.
+func WithClock(now func() time.Time) Option {
+	return func(c *Client) {
+		if now == nil {
+			c.setOptErr(errors.New("glovoapi: WithClock: nil clock"))
+			return
+		}
+		c.now = now
+	}
+}
+
+// WithIDGenerator replaces the random UUID source used for search ids and
+// the per-process device identity. Tests use it; nil is refused.
+func WithIDGenerator(newID func() string) Option {
+	return func(c *Client) {
+		if newID == nil {
+			c.setOptErr(errors.New("glovoapi: WithIDGenerator: nil generator"))
+			return
+		}
+		c.newID = newID
+	}
+}
+
+// WithSleep replaces the pause between order-history pages and retries.
+// Tests use it; nil is refused.
+func WithSleep(sleep func(context.Context, time.Duration) error) Option {
+	return func(c *Client) {
+		if sleep == nil {
+			c.setOptErr(errors.New("glovoapi: WithSleep: nil sleep"))
+			return
+		}
+		c.sleep = sleep
+	}
+}
+
 // New returns a client for the session file at sessionPath. It does not read
 // the file; call Reload for that. It fails on an invalid option, on
 // WithProxy or WithRequireProxy combined with WithHTTPClient, and on
@@ -320,10 +356,16 @@ func (c *Client) initBits() {
 // kept: AuthStatus reports it as session_error instead of failing. The
 // client stays usable either way, so SetLocation can write a fresh session
 // over a broken file.
+//
+// Reload waits for a token refresh in flight and holds the session lock
+// while it reads, so a file read cannot race a refresh or a location write
+// and put back a session that was already rotated away.
 func (c *Client) Reload() error {
-	s, err := LoadSession(c.sessionPath)
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	s, err := LoadSession(c.sessionPath)
 	c.session, c.loadErr = nil, nil
 	switch {
 	case err == nil:

@@ -536,3 +536,10 @@ func withQuery(path string, q query) string {
 	}
 	return path + "?" + q.String()
 }
+
+// JSString is JavaScript String(v) for a decoded JSON value or a tool
+// argument: numbers use Number.prototype.toString, nil is "undefined".
+func JSString(v Value) string { return jsString(v) }
+
+// Truthy is JavaScript truthiness for a decoded JSON value.
+func Truthy(v Value) bool { return truthy(v) }
