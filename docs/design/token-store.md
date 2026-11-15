@@ -1,9 +1,9 @@
 # Design: token store for linked Glovo accounts (C2-0)
 
-Status: IN SECURITY REVIEW. Nothing here is built. The owner decided Q1,
-Q2 and Q4/Q5 on 2026-11-15 (9.3), and those decisions add the C2-3 go
-criteria in 9.4. C2-1 (linking) does not start until the open questions
-in 9.1 are answered and the go criteria in 9.2 hold.
+Status: REVIEWED. Nothing here is built. The owner decided all ten review
+questions on 2026-11-15 (9.3), so go criterion 1 in 9.2 holds. C2-1
+(linking) starts only when the rest of 9.2 holds. External users (C2-3)
+additionally need the criteria in 9.4.
 
 Scope: epic mctlhq/mctl-glovo#11, slice C2-0. The parent design is
 `docs/design/real-glovo-accounts.md` (PR #2): risks R1-R6 (section 3), the
@@ -122,19 +122,21 @@ rejected: an RCE would turn into offline, unaudited, permanent access.
   some shared transit mount. This follows the platform pattern of one
   dedicated mount per hosted service with its own write path
   (vault-config README, coolify-mcp section).
-- Mount tune: `audit_non_hmac_request_keys=context`. Then the Vault audit
-  log records which context, and therefore which `pid`, each decrypt was
-  for (base64 of the context string, see 2.3). Plaintext and ciphertext
-  stay HMAC'd. The context holds a `pid` (a `prn_` principal id) and a link
-  id, both pseudonymous ids that already appear in mctl-api's audit
-  events, and no Glovo data. The audit log is readable by every Grafana
-  viewer (`docs/runbooks/vault-audit.md`), so the reviewer decides whether
-  `pid`s may appear there (question Q6). If not, leave the default
-  (context HMAC'd) and correlate through `sys/audit-hash` when needed.
+- Mount tune: none. The transit `context` stays HMAC'd in the Vault audit
+  log, like plaintext and ciphertext (owner decision Q6, 9.3). The audit
+  log is readable by every Grafana viewer (`docs/runbooks/vault-audit.md`),
+  so `pid`s must not appear there in plaintext.
+  `audit_non_hmac_request_keys` must not include `context`. To find the
+  entries for one `pid`, an admin hashes that row's base64 context with
+  `vault write sys/audit-hash/stdout input=<base64 context>` and filters
+  on the result (the runbook's "one token's entries" method).
 - Key `glovo-session`: `type=aes256-gcm96`, `derived=true`,
   `convergent_encryption=false`, `exportable=false`,
-  `allow_plaintext_backup=false`, `deletion_allowed=false`,
-  `auto_rotate_period=2160h` (90 days; to be confirmed by the reviewer).
+  `allow_plaintext_backup=false`, `deletion_allowed=false`.
+- Key config (`glovo-transit/keys/glovo-session/config`):
+  `auto_rotate_period=2160h` (90 days). The create endpoint also accepts
+  this parameter. It is set on the config path anyway, so that the
+  setting is one explicit, re-runnable call that go criterion 2 can check.
 - Created by the owner with an admin token, as every other Vault object
   in vault-config is today ("applied by hand", README). The commands and
   the HCL are committed to mctl-gitops `infrastructure/.../vault-config/`
@@ -155,18 +157,28 @@ glovo_links            one row per linked pid; DELETEd on unlink
   state             text NOT NULL               -- active | suspended | needs_relink
   ciphertext        text NOT NULL               -- vault:vN:...
   key_version       int  NOT NULL               -- N from the prefix, for the rewrap sweep
-  version           bigint NOT NULL             -- compare-and-swap counter, +1 on every write
-  consent_version   text NOT NULL               -- the /link text version the user agreed to
+  version           bigint NOT NULL             -- nextval('glovo_link_version_seq') on EVERY write
+  consent_version   text NOT NULL               -- copied from the redeemed link code
+  lease_token       uuid                        -- refresh lease (2.5); NULL = free
+  lease_holder      text                        -- replica id, for diagnostics only
+  lease_until       timestamptz
   linked_at, updated_at, last_used_at, last_refresh_at timestamptz
   access_expires_at timestamptz                 -- from the access token, for the keepalive
   refresh_failures  int NOT NULL DEFAULT 0
 
+glovo_link_version_seq one global sequence; never reset, never reused
+
 glovo_link_codes       one-time link codes; swept 24 h after expiry
-  code_hash   bytea PRIMARY KEY                 -- SHA-256 of the raw code
-  pid         text NOT NULL
+  code_hash        bytea PRIMARY KEY            -- SHA-256 of the raw code
+  pid              text NOT NULL
+  consent_version  text NOT NULL                -- the consent mctl-api recorded before the code was minted
   created_at, expires_at, used_at timestamptz
 
-glovo_store_audit      append-only (section 5)
+glovo_audit_subjects   pid -> subject_key; the row is DELETEd on erasure (5)
+  pid          text PRIMARY KEY
+  subject_key  text NOT NULL UNIQUE             -- gas_<random>, never derived from the pid
+
+glovo_store_audit      append-only, keyed by subject_key (section 5)
 
 glovo_control          one row: runtime kill switch and global caps (section 6)
 ```
@@ -186,6 +198,13 @@ API requires:
 read is treated as corruption (refusal, audit event `integrity_error`),
 not ignored.
 
+`version` comes from one global sequence, never from `version + 1`. A
+link, a refresh, a rewrap and a state change each take a new value. A
+relink therefore never brings back a `version` an earlier link had. That
+holds even after an unlink deleted the row, because the sequence
+outlives the row. Every staleness check compares the pair
+(`link_id`, `version`), never `version` alone (4.2).
+
 ### 2.4 KEK rotation and rewrap
 
 - Rotation: `auto_rotate_period` on the key, or a manual
@@ -195,11 +214,12 @@ not ignored.
 - Rewrap: a sweep in mctl-glovo (a subcommand run as a Kubernetes CronJob
   with the same identity, or a background loop) selects rows with
   `key_version < latest` in batches and calls
-  `glovo-transit/rewrap/glovo-session` with each row's context. It then
-  writes `UPDATE ... SET ciphertext, key_version, version = version+1
-  WHERE pid = $1 AND version = $2`, under the same per-`pid` lock as a
-  refresh (2.5). Rewrap returns ciphertext only, so the sweep never
-  handles plaintext.
+  `glovo-transit/rewrap/glovo-session` with each row's context. It takes
+  the row's refresh lease first (2.5) and skips rows whose lease is held.
+  It then writes `UPDATE ... SET ciphertext, key_version, version =
+  nextval('glovo_link_version_seq'), lease_token = NULL, lease_until = NULL
+  WHERE pid = $1 AND link_id = $2 AND version = $3`. Rewrap returns
+  ciphertext only, so the sweep never handles plaintext.
 - Retiring old versions: after a sweep reports zero rows below version N
   (a positive count read, never "the query failed so there are none"),
   the owner raises `min_decryption_version` to N. The app cannot do it:
@@ -216,49 +236,100 @@ replicas. Two concurrent refreshes with a rotating refresh token would
 have the second one present a token the first one already spent.
 
 The in-process `refreshMu` in `glovoapi.Client` is not enough once there
-is more than one replica, or a keepalive job beside the server. Design:
+is more than one replica, or a keepalive job beside the server. The design
+is a **lease with a compare-and-swap fence** (owner decision Q7). No
+database transaction or lock is held while Glovo is called.
 
-1. `Store.Update(ctx, pid, fn)` opens a transaction and takes
-   `pg_advisory_xact_lock(<64-bit hash of "glovo-link:" || pid>)` under
-   `SET LOCAL lock_timeout = '5s'`. A timeout is `ErrBusy` (a refusal),
-   never a silent skip.
-2. Under the lock, it re-reads the row (`state`, `version`, `ciphertext`)
-   and decrypts. If another holder already refreshed (the access token now
-   has more than 60 s left, the same rule `ensureFresh` uses), it returns
-   the fresh session without calling Glovo.
-3. It calls `fn`, which performs the Glovo refresh through the proxy with a
-   hard deadline (15 s) shorter than the transaction's
-   `statement_timeout` / `idle_in_transaction_session_timeout`.
-4. It encrypts the new session (new context = same `pid` and `link_id`)
-   and runs `UPDATE ... WHERE pid=$1 AND version=$2`. Exactly one row must
-   be affected. Anything else is an error. It then commits.
-5. Only after the commit returns success does the new session replace the
-   in-memory client state.
+1. **Take the lease** in one short statement:
+   ```sql
+   UPDATE glovo_links
+      SET lease_token = $new_uuid, lease_holder = $replica,
+          lease_until = now() + interval '30 seconds'
+    WHERE pid = $1 AND state = 'active'
+      AND (lease_until IS NULL OR lease_until < now())
+   RETURNING link_id, version, ciphertext, key_version;
+   ```
+   Zero rows is followed by one plain read that names the reason: no row
+   (`ErrNotLinked`), a state other than `active` (`ErrSuspended` /
+   `ErrNeedsRelink`), or a lease held by someone else (`ErrBusy`, a
+   refusal, never a silent skip). A failed statement is `ErrUnavailable`.
+   The statement runs under `statement_timeout`, which does apply to it.
+   It waits on nothing but the row lock of a concurrent short UPDATE.
+   Taking or releasing a lease changes only the `lease_*` columns, never
+   `version`. A lease is not a session write, so it neither invalidates
+   cached clients nor moves the fence.
+2. **Decrypt** the returned row with the context built from the returned
+   `pid` and `link_id`. If another holder refreshed in the meantime (the
+   access token now has more than 60 s left, the same rule `ensureFresh`
+   uses), release the lease and return the fresh session without calling
+   Glovo.
+3. **Call Glovo** (`fn`, the refresh through the proxy) with a hard
+   deadline of 15 s. That is half the lease, so a refresh that returns has
+   always returned inside its own lease.
+4. **Write behind the fence**: encrypt the new session with the same
+   context, then
+   ```sql
+   UPDATE glovo_links
+      SET ciphertext = $c, key_version = $kv,
+          version = nextval('glovo_link_version_seq'),
+          lease_token = NULL, lease_holder = NULL, lease_until = NULL, ...
+    WHERE pid = $1 AND link_id = $2 AND version = $3;
+   ```
+   Exactly one row means success. The fence is (`link_id`, `version`),
+   **not** the lease token. Every successful writer (refresh, rewrap,
+   relink, state change) takes a new `version`, so a write based on a
+   superseded read can never land, even when its lease has expired. The
+   lease only stops two holders from calling Glovo at once. Correctness
+   does not depend on it.
+5. Only after the write succeeds does the new session replace the
+   in-memory client, under the new (`link_id`, `version`).
+6. **Release** on any other exit:
+   `UPDATE ... SET lease_* = NULL WHERE pid = $1 AND lease_token = $mine`.
+   A crashed holder's lease simply expires after 30 s.
 
 Failure cases, assuming the worst-case rotation from section 1:
-- **The Glovo refresh fails** (4xx): nothing is written except
-  `refresh_failures+1`. After a 401/403 from `/oauth/refresh`, the state
-  becomes `needs_relink` and the owner gets an alert (4.5). A 5xx or a
-  proxy failure is transient: retry later, no state change.
-- **The Glovo refresh succeeded but the commit failed, or its result is
-  unknown** (connection lost on COMMIT): the new tokens exist only in this
-  process. They are kept in memory for this `pid`, marked `unpersisted`,
-  and the write is retried with backoff (same lock and CAS). A reconnect
-  first re-reads `version` to learn whether the commit landed. While
-  unpersisted, the `pid`'s calls are served from memory, and the alert
-  `GlovoSessionUnpersisted` fires. If the process dies before the write
-  lands, the account needs relinking. That loss is accepted and documented;
-  the alternative would be writing plaintext somewhere durable, which is
-  not acceptable.
-- **The transaction is held across an external HTTP call.** That is
-  deliberate: the advisory lock must cover the Glovo refresh. It costs one
-  pooled connection per in-flight refresh. At owner scale this is
-  negligible. Before C2-3 the reviewer may prefer a lease column
-  (`refresh_lease_until`, `refresh_lease_holder`) taken in a short
-  transaction, with the CAS on `version` as the fence (question Q7).
-- The CAS on `version` stays even under the lock. It is the fence against
-  a lock that was lost (a session-level problem, a timeout) and against
-  the rewrap sweep.
+- **The Glovo refresh fails** (4xx): the lease is released and
+  `refresh_failures+1` is written behind the same fence. After a 401/403
+  from `/oauth/refresh`, the state becomes `needs_relink` and the owner
+  gets an alert (4.5). A 5xx or a proxy failure is transient: retry later,
+  no state change.
+- **The write affects zero rows.** Re-read the row: it is gone, or its
+  `link_id` differs, which means an unlink or a relink won the race. In
+  that case the new tokens belong to a link that no longer exists. They
+  are discarded, not kept, and the event is audited. If `link_id` matches
+  and only `version` moved, another writer persisted first. Its session is
+  the live one, and ours is discarded.
+- **The Glovo refresh succeeded, but the write failed or its result is
+  unknown** (DB unreachable, connection lost on COMMIT): the new tokens
+  exist only in this process. The client enters the **`unpersisted`**
+  state for that `pid`:
+  - it is **pinned**. The idle TTL does not evict it, and neither does a
+    (`link_id`, `version`) mismatch in the 4.2 check, because its expected
+    DB state is the *pre-refresh* pair it is trying to replace. Only four
+    things end the pin: a successful write; a re-read showing the row gone
+    or with another `link_id` (discard, as above); a re-read showing
+    another `version` on the same `link_id` (another writer won; discard);
+    or the kill switch (6), which drops every in-memory client, pinned
+    ones included, and accepts the account loss;
+  - the write is retried with backoff behind the same fence, and the
+    first step after a reconnect is a re-read to learn whether the lost
+    COMMIT actually landed;
+  - tool calls for that `pid` are **refused** with `ErrUnavailable` until
+    the pin ends. They are not served from the unpersisted client. This
+    keeps 4.2's rule (a failed DB read is a refusal, never a cache
+    fallback) and leaves exactly one owner of the new refresh token, the
+    retry loop;
+  - the alert `GlovoSessionUnpersisted` fires;
+  - if the process dies while pinned, the account needs relinking. That
+    loss is accepted and documented. The alternative would be writing
+    plaintext somewhere durable, which is not acceptable.
+- **A lease expires while its holder is still pinned**, and another
+  replica takes the lease and refreshes with the old (now spent) refresh
+  token. Glovo refuses it, the state goes to `needs_relink` with a new
+  `version`, and the pinned write then loses the fence and is discarded.
+  Accepted residual (T12): it needs a DB outage longer than the lease
+  together with a second refresher. Running a single replica in
+  C2-1/C2-2 rules out the second refresher.
 
 C2-1 code change this implies: `refreshLocked` persists through
 `SaveSession(c.sessionPath, ...)` today. The hosted client needs a
@@ -282,7 +353,13 @@ and coolify-mcp (vault-config README).
   below write `<ns>`.
 - The Kubernetes auth role is bound to exactly that SA name and namespace,
   with `token_no_default_policy=true`, `token_ttl=15m`,
-  `token_max_ttl=1h`.
+  `token_max_ttl=1h`. Without Vault's `default` policy the token would
+  lose `auth/token/renew-self` and `auth/token/lookup-self`, so the
+  policy grants exactly those two paths and nothing else that `default`
+  carries (cubbyhole, `sys/capabilities-self`, `sys/tools`, and so on).
+  The client renews at 80% of the TTL. It logs in again with its SA token
+  when a renewal is refused or when `token_max_ttl` is reached, which is
+  the Backstage pattern in the vault-config README.
 - The app logs in itself with its projected SA token and keeps the Vault
   token in memory only. **No ExternalSecret carries a Vault token or any
   transit material.** ESO cannot do transit anyway, and the cluster-wide
@@ -316,6 +393,16 @@ path "glovo-transit/rewrap/glovo-session" {
   capabilities = ["update"]
 }
 
+# The two token self-service paths the role needs, because
+# token_no_default_policy=true drops the default policy.
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+
 path "glovo-transit/keys/*" {
   capabilities = ["deny"]
 }
@@ -337,10 +424,12 @@ Role (owner applies, like the other roles in the README):
 
 ```bash
 vault secrets enable -path=glovo-transit transit
-vault secrets tune -audit-non-hmac-request-keys=context glovo-transit   # only if Q6 = yes
+# No `secrets tune -audit-non-hmac-request-keys=context`: the context stays HMAC'd (Q6).
 vault write glovo-transit/keys/glovo-session \
   type=aes256-gcm96 derived=true exportable=false \
-  allow_plaintext_backup=false auto_rotate_period=2160h
+  allow_plaintext_backup=false
+vault write glovo-transit/keys/glovo-session/config \
+  auto_rotate_period=2160h deletion_allowed=false
 vault policy write mctl-glovo-transit vault-policy-mctl-glovo-transit.hcl
 vault write auth/kubernetes/role/mctl-glovo \
   bound_service_account_names=mctl-glovo \
@@ -448,9 +537,12 @@ token (question Q1).
 1. The user opens `/link` (behind api.mctl.ai login, `glovo:c2` grant
    checked as in §9.2). The page shows what linking allows and the consent
    text version. mctl-api records the consent (§9.4 step 1).
-2. `Store.CreateLinkCode(pid)` generates 32 random bytes (`crypto/rand`),
-   shows them once as base64url, and stores only `SHA-256(code)` with the
-   `pid` and a 10-minute expiry. At most one live code per `pid`: a new
+2. `Store.CreateLinkCode(pid, consentVersion)` generates 32 random bytes
+   (`crypto/rand`), shows them once as base64url, and stores only
+   `SHA-256(code)`, with the `pid`, the `consent_version` mctl-api
+   recorded in step 1, and a 10-minute expiry. The consent version is
+   taken from the server-side consent record, never from the request or
+   the later upload body. A code cannot exist without consent. At most one live code per `pid`: a new
    code invalidates the previous one. Audit event `link_code_issued`.
 3. The local helper (PR #4 pattern) reads the code from **stdin** (never
    argv or env), and calls `POST /link/preview` with the code. The answer
@@ -469,7 +561,8 @@ token (question Q1).
    - the kill switch (section 6) is off and `glovo_control` is readable;
    - **atomic redemption**:
      `UPDATE glovo_link_codes SET used_at = now() WHERE code_hash = $1 AND
-     used_at IS NULL AND expires_at > now() RETURNING pid`. Zero rows means
+     used_at IS NULL AND expires_at > now() RETURNING pid,
+     consent_version`. Zero rows means
      the code is unknown, used or expired, and the answer is one identical
      refusal for all three;
    - the session has string `accessToken` and `refreshToken`, a
@@ -477,10 +570,17 @@ token (question Q1).
    - one validating call to Glovo through the proxy with the uploaded
      session (an authenticated read, for example the basket GET the
      keepalive uses). Failure means a refusal and nothing stored.
-5. In one transaction, under the `pid` lock: mint a new `link_id`, encrypt
-   with the new context, upsert the row (`state=active`, `version` reset).
-   An existing link for that `pid` is replaced, and its old ciphertext is
-   gone with the overwritten row. Audit `link` with outcome.
+5. Mint a new `link_id`, encrypt with the new context, then upsert the row
+   in one statement: `state=active`, the new `link_id`, `version =
+   nextval('glovo_link_version_seq')`, `consent_version` from the redeemed
+   code row, lease cleared. The version is **never reset**. The new
+   `link_id` and the new `version` both differ from anything the previous
+   link had, so every replica's cached client for the old link fails the
+   4.2 check on its next call. An existing link for that `pid` is replaced,
+   and its old ciphertext is gone with the overwritten row. A refresh in
+   flight on the old link then loses the fence in 2.5, and its tokens are
+   discarded. The upsert does not wait for a lease: a relink, like an
+   unlink, always wins. Audit `link` with outcome.
 6. The response says "linked" and nothing else. No session data, no Glovo
    account details.
 
@@ -492,12 +592,20 @@ needs a new code. That is simpler than un-burning, and it is safe.
 - A decrypted session lives only inside the per-`pid` `glovoapi.Client`,
   in process memory. A cache keeps the client for an idle TTL (10 min).
   On a miss it calls `Store.Get`, which means one Vault decrypt.
-- Every tool call re-reads `state` and `version` from `glovo_links` (one
-  indexed row, no decrypt). If the row is gone, not `active`, or a
-  different `version`, the cached client is dropped first. That makes
-  unlink, suspension and relink take effect at once on every replica. If
-  the read fails, the call is refused (503). It never falls back to the
-  cache.
+- The cached client remembers the (`link_id`, `version`) pair it was built
+  from (`Lease.LinkID()`, `Lease.Version()` in 10.1). Every tool call
+  re-reads `state`, `link_id` and `version` from `glovo_links` (one
+  indexed row, no decrypt). If the row is gone, not `active`, or either
+  value of the pair differs, the cached client is dropped first. Because
+  `version` comes from a global sequence and `link_id` is new on every
+  link (2.3), a relink can never present the pair of an earlier link,
+  even after an unlink deleted the row. That makes unlink, suspension and
+  relink take effect at once on every replica. If the read fails, the
+  call is refused (503). It never falls back to the cache.
+- The one exception to "a mismatch drops the client" is a client in the
+  `unpersisted` state (2.5). It is pinned, and its tool calls are refused
+  while it is pinned, so it is never served and never evicted by this
+  check. Only the rules in 2.5 end the pin.
 - Never logged, traced or put in errors:
   - the `Lease` redaction above;
   - `glovoapi` errors already carry fixed text for auth failures
@@ -523,6 +631,12 @@ needs a new code. That is simpler than un-burning, and it is safe.
   client, and writes the `unlink` audit event, all in one transaction.
   Unlink works **even when the kill switch is on** and never needs Vault:
   deletion must never depend on the thing that might be broken.
+- Unlink does not take or wait for the refresh lease. A refresh in flight
+  cannot resurrect the link: its write is fenced on (`link_id`,
+  `version`) and hits zero rows, and the re-read then finds the row gone.
+  That is the documented absence, so the new tokens are discarded, not
+  pinned (2.5). A pinned `unpersisted` client for the `pid` is discarded
+  by the same re-read.
 - Triggers: the user (`/link`, Unlink), revocation of the `glovo:c2`
   grant (the next call sees no grant; a sweep unlinks `pid`s without the
   grant for over 24 h), an operator in a breach (section 7), and a data
@@ -541,7 +655,8 @@ needs a new code. That is simpler than un-burning, and it is safe.
 | Session ciphertext in Postgres backups | Until the backups age out. `shared-pg` keeps 14 days (`retentionPolicy: "14d"`, `cnpg/shared/object-store.yaml`). **Unverified:** that mctl-glovo's database lands on `shared-pg` (it would come from the provisioning workflow; C2-2). |
 | Transit key | Not deleted per user (derived key). Vault snapshots keep the last 30 days (`vault-backup.yaml`). |
 | Link codes | 24 h after expiry. |
-| Audit rows | Target 400 days, the same target as mctl-api's `glovo_audit_events`. They hold `pid`, event, outcome and time, no Glovo data. Whether a `pid` may stay in audit after an erasure request is a legal question for the R4 read (Q8). |
+| Audit rows | Target 400 days, the same target as mctl-api's `glovo_audit_events`. They hold a `subject_key`, not the `pid`, plus event, outcome and time, and no Glovo data. On erasure the `pid` is pseudonymised: the `glovo_audit_subjects` row is deleted, so no live data maps the `subject_key` back to the `pid` (owner decision Q8, section 5). |
+| Store log lines (Loki) | 14 days (336 h, `vault-audit.md`). They carry the `subject_key` too. The tool-call audit line from §9.5 carries the `pid` and ages out on the same 14 days. |
 | In-memory client | Idle TTL, and dropped at unlink, on the kill switch, at restart. |
 
 Data subject requests (MCTL's role, controller or processor, is part of
@@ -550,8 +665,11 @@ the R4 legal read):
   younger than 14 days would contain the ciphertext, which still decrypts
   under the derived key if restored together with Vault and if the
   `link_id` row comes back too. The restore runbook therefore re-applies
-  every unlink recorded in the audit table after the backup's timestamp,
-  before the service starts. The answer to the user states the backup
+  every `unlink` and `erasure` recorded in the live audit table after the
+  backup's timestamp, before the service starts. Those rows name a
+  `subject_key`. The restored `glovo_audit_subjects` table still maps it
+  to the `pid` for the 14-day backup tail, so the restore can find the
+  rows to delete. It then deletes the restored mapping rows again. The answer to the user states the backup
   window honestly. It does not claim crypto-erasure.
 - **Access (Art. 15):** we hold the Glovo session, which contains an
   address and an account id, and audit metadata. We export the metadata
@@ -566,7 +684,7 @@ the R4 legal read):
 
 - A keepalive per linked `pid` (one authenticated read a day, the
   glovo-home pattern) runs through `Store.Update` when the access token is
-  near expiry, so it takes the same lock and CAS.
+  near expiry, so it takes the same lease and fence (2.5).
 - It counts against that `pid`'s caps and stops under the kill switch.
   A long kill can therefore let sessions expire. That is accepted and
   stated on the status page.
@@ -587,9 +705,9 @@ structured log line (`slog`, Loki) in the same code path:
 |---|---|
 | `id` | `gsa_<ULID>` |
 | `at` | `clock_timestamp()` |
-| `pid` | subject principal |
+| `subject_key` | `gas_<random>` from `glovo_audit_subjects`, created on the `pid`'s first event. The audit table never stores the `pid` itself. |
 | `link_id` | when one exists |
-| `event` | `link_code_issued`, `link_preview`, `link`, `link_refused`, `decrypt`, `refresh`, `persist_retry`, `rewrap`, `unlink`, `suspend`, `resume`, `kill_on`, `kill_off`, `integrity_error`, `cap_exceeded` |
+| `event` | `link_code_issued`, `link_preview`, `link`, `link_refused`, `decrypt`, `refresh`, `persist_retry`, `persist_discarded`, `rewrap`, `unlink`, `erasure`, `suspend`, `resume`, `kill_on`, `kill_off`, `integrity_error`, `cap_exceeded` |
 | `outcome` | `ok`, `refused`, `error` |
 | `reason` | a fixed code (`code_invalid`, `vault_unavailable`, `glovo_401`, `busy`, ...), never free text from a dependency |
 | `actor_kind` | `user`, `service`, `operator` |
@@ -599,6 +717,20 @@ Never in it: tokens, ciphertexts, Glovo customer ids, addresses, request
 or response bodies, IP addresses of the uploader (**open**: the reviewer
 may want the upload IP for abuse cases; then it becomes a hashed field
 with its own retention).
+
+Pseudonymisation on erasure (owner decision Q8). The audit table stays
+strictly append-only, and erasure does not rewrite it:
+- every audit row and store log line carries `subject_key`, never `pid`.
+  The only link between the two is `glovo_audit_subjects`;
+- a data subject erasure unlinks (4.3), writes one `erasure` event under
+  the `subject_key`, then deletes the `glovo_audit_subjects` row in the
+  same transaction. From then on, the audit history of that user is a
+  pseudonymous sequence that nothing in mctl-glovo can tie back to a
+  `pid`;
+- a new link by the same `pid` later gets a fresh `subject_key`;
+- this is pseudonymisation, not anonymisation. mctl-api still knows the
+  `pid`, and the restored backups of the 14-day tail still hold the
+  mapping (4.4). The answer to the user says so.
 
 Where it lives:
 - **The table is the record.** Insert-only: the app role has `INSERT` and
@@ -637,7 +769,8 @@ What "killed" stops, inside the store, not just at the tool layer:
   stop therefore also stops decrypts, and the Vault audit shows zero
   decrypts during a kill, which is itself checkable;
 - every in-memory `glovoapi.Client` is dropped within the 5 s cache
-  window;
+  window, including pinned `unpersisted` ones (2.5). Their refresh tokens
+  are lost, and those accounts need relinking after the kill;
 - keepalives, refreshes and the rewrap sweep stop;
 - `Link` and `CreateLinkCode` refuse;
 - `Unlink` keeps working (4.3).
@@ -696,9 +829,11 @@ recorded with a timestamp in the incident issue:
    decrypt.
 6. **Find the scope**: the store audit and the Vault audit
    (`vault-audit.md` queries, filtered on `glovo-transit/` and on the
-   attacker's role or entity) give which `pid`s were decrypted, by whom,
-   and when. If context is not HMAC'd (Q6), the `pid` is in the Vault
-   line itself.
+   attacker's role or entity) give how many decrypts happened, by whom,
+   and when. The context is HMAC'd (Q6), so the Vault line does not name
+   the `pid`. To map entries to users, an admin hashes each linked row's
+   base64 context with `sys/audit-hash/stdout` and matches the results.
+   The store audit adds the `subject_key` of every audited decrypt.
 7. **Treat every exposed refresh token as live in the attacker's hands.**
    Step 3 does not help with tokens that were already decrypted: they
    work against Glovo without us.
@@ -739,7 +874,7 @@ go criterion (9.2).
 | T9 | Cross-user access via a tool argument | `store.PID` only from a verified token; A/B isolation test incl. relink | Low. |
 | T10 | Link phishing: the victim uploads their session with the attacker's code | `/link/preview` shows the target account's masked identity before capture; 10 min TTL; single use | A user who confirms without reading. Medium. Q9. |
 | T11 | Code guessing or replay | 256-bit codes; hash at rest; atomic single redemption; rate limits | Negligible. |
-| T12 | Lost refresh on a concurrent or failed write | Advisory lock + CAS; in-memory unpersisted state with retry and alert | A process death between the Glovo refresh and the commit loses that account (needs relink). Low impact. |
+| T12 | Lost refresh on a concurrent or failed write | Lease against concurrent Glovo refreshes; (`link_id`, `version`) CAS fence on every write; pinned `unpersisted` client with retry and alert (2.5) | A process death while pinned, or a DB outage longer than the lease together with a second refresher, loses that account (needs relink). Low impact. |
 | T13 | Operator or agent reads plaintext "to debug" | No endpoint, no policy, no DB credentials for agents; workspace rule against reading Secret data | Cluster admins can still do it; detected by T5's alert only if they use a non-`mctl-glovo` identity. Medium. |
 | T14 | Prompt injection makes the model exfiltrate the token | No tool accepts or returns session material; the store has no MCP surface | Low. |
 | T15 | The proxy (the owner's Mac mini) is compromised | TLS end to end; the mini sees only CONNECT to `api.glovoapp.com` | Traffic metadata and denial of service. Low. |
@@ -749,6 +884,9 @@ go criterion (9.2).
 ## 9. For the security reviewer
 
 ### 9.1 Questions to answer
+
+All ten were decided by the owner on 2026-11-15 (9.3). The questions
+stay here as they were asked, so the decisions can be read against them.
 
 - **Q1. App RCE (T3).** For owner-only C2-1/C2-2, is "RCE = the owner's
   account" acceptable? Before C2-3, must decrypt and Glovo calls move out
@@ -789,12 +927,16 @@ go criterion (9.2).
 
 **Go** when all of these hold:
 1. The reviewer has answered Q1-Q10, and the answers are recorded in this
-   document (or in a follow-up PR to it).
+   document. **Holds** since 2026-11-15: the owner's decisions on all ten
+   are in 9.3.
 2. Vault objects from 3.1 are applied, and proven both ways on the live
    Vault 1.17.2 with a token holding only `mctl-glovo-transit`: encrypt,
-   decrypt and rewrap work; decrypt with a wrong context fails; read,
-   rotate, config, export, backup and datakey on the key, every other key
-   and every other mount return 403.
+   decrypt and rewrap work; `auth/token/renew-self` and `lookup-self` work;
+   decrypt with a wrong context fails; read, rotate, config, export, backup
+   and datakey on the key, every other key and every other mount return
+   403; `glovo-transit/keys/glovo-session/config` reads back
+   `auto_rotate_period` and `deletion_allowed=false` (admin token); the
+   mount's `audit_non_hmac_request_keys` does not contain `context`.
 3. The 3.2 alert and the 5 reconciliation exist and are proven both ways
    (silent on the workload; firing on a test identity's decrypt, and on an
    unreadable window).
@@ -804,9 +946,16 @@ go criterion (9.2).
    implemented and tested **before the first link**. That includes "killed
    means zero Vault decrypts", checked against the Vault audit.
 6. The redaction marker-scan, the A/B isolation test (with relink), the
-   ciphertext-swap test, the concurrent refresh test (two replicas or two
-   goroutines on one `pid`, one Glovo refresh observed) and the audit
-   immutability test pass, each mutation-verified.
+   ciphertext-swap test, the lease test (two replicas or two goroutines on
+   one `pid`, exactly one Glovo refresh observed, the loser gets `ErrBusy`
+   or the fresh session), the fence tests (a write based on a superseded
+   (`link_id`, `version`) lands zero rows; an unlink or relink during an
+   in-flight refresh discards its tokens; a relink invalidates another
+   replica's cached client even when no refresh happened in between),
+   the `unpersisted` pin test (DB down after a successful refresh: the
+   client is neither served nor evicted, and it is written once the DB
+   returns), the erasure pseudonymisation test, and the audit
+   immutability test all pass, each mutation-verified.
 7. The breach runbook steps 1-3 were rehearsed against the real Vault with
    a test key and a test row.
 8. The `glovo:c2` grant exists for the owner's `pid` only, enforced by
@@ -835,8 +984,20 @@ linked user. Each one adds a go criterion for C2-3 (9.4).
 | Q2, plaintext pod-to-Vault traffic (SOC F15) | Accepted for C2-1 and C2-2 | T7 |
 | Q4/Q5, platform residuals: the `admin` policy, the policy-writing identities, unseal keys in a Kubernetes Secret | Detection only (the 3.2 alert on any `glovo-transit/` request not made by the `mctl-glovo` role) is accepted for the owner alone | T5, T6, T13 |
 
-Q3 and Q6-Q10 are still open. Go criterion 1 in 9.2 therefore does not
-hold yet: those answers are still needed before C2-1.
+The remaining questions were decided in a second PR #14 comment of
+2026-11-15. They are design choices rather than accepted residuals, and
+the sections named in the table already follow them:
+
+| Question | Decision | Where |
+|---|---|---|
+| Q3, derived key vs per-`pid` keys | One derived transit key. Erasure means deleting the row, with a 14-day backup tail. To be revisited together with the R4 legal read before C2-3. | 2.1, 2.2, 4.4 |
+| Q6, `pid`s in the Vault audit log | No. The transit context stays HMAC'd, and `audit_non_hmac_request_keys` does not include `context`. | 2.2, 3.1, 7 step 6 |
+| Q7, advisory lock vs lease | A lease with a compare-and-swap fence. No DB lock or transaction is held across the Glovo refresh. | 2.5, 10.1 |
+| Q8, `pid` in audit after erasure | Pseudonymised on erasure, through the `subject_key` mapping. | 2.3, 4.4, 5 |
+| Q9, link phishing | The masked-identity confirmation is enough for owner-only C2-1/C2-2. A fresh MCTL login in the helper is a C2-3 criterion. | 4.1, 9.4 |
+| Q10, `customerId` fingerprint | None now. Decided at C2-3. | — |
+
+With both sets of decisions, go criterion 1 in 9.2 holds.
 
 ### 9.4 Go criteria for C2-3
 
@@ -856,6 +1017,15 @@ flag until every one of them holds:
    keys are moved out of Kubernetes (no `vault-unseal-keys` Secret in the
    cluster). The `argo-workflow-provisioner` identity can no longer write
    `tenant-*` / `eso-tenant-*` policies with arbitrary content.
+4. **Fresh MCTL login in the helper (from Q9).** Before it uploads, the
+   local helper requires a fresh MCTL login (an OAuth device flow against
+   api.mctl.ai). The upload is accepted only when the code's `pid` equals
+   the `pid` of that fresh login. A code the victim did not mint
+   themselves can then no longer link their Glovo account to someone
+   else's MCTL account.
+
+Q3 (derived key) and Q10 (fingerprint) are revisited at C2-3 as well.
+They are reopened decisions, not go criteria.
 
 ## 10. Implementation sketch (after review; no code in this PR)
 
@@ -873,23 +1043,44 @@ func PIDFrom(p *authn.Principal) PID
 type Lease struct{ /* unexported */ }
 
 func (l *Lease) Client(opts ...glovoapi.Option) (*glovoapi.Client, error)
+// LinkID and Version are the pair the lease was decrypted from; a cached
+// client is valid only while Status reports the same pair (4.2).
+func (l *Lease) LinkID() string
 func (l *Lease) Version() int64
+
+// Status is the cheap per-call check: no decrypt, no Vault.
+type Status struct {
+	State   State  // Active, Suspended, NeedsRelink
+	LinkID  string
+	Version int64  // from glovo_link_version_seq; never reused
+}
 
 type Store interface {
 	// CreateLinkCode mints a one-time code for pid and returns it once.
-	CreateLinkCode(ctx context.Context, pid PID) (code string, expires time.Time, err error)
+	// consentVersion comes from the consent record mctl-api wrote, never
+	// from the request; it is stored with the code and copied into the link.
+	CreateLinkCode(ctx context.Context, pid PID, consentVersion string) (code string, expires time.Time, err error)
 	// PreviewLink returns the masked identity a code belongs to, without burning it.
 	PreviewLink(ctx context.Context, code string) (maskedIdentity string, err error)
-	// Link burns code and stores sess for the code's pid, replacing any previous link.
+	// Link burns code and stores sess for the code's pid, replacing any
+	// previous link with a new link_id and a new sequence version. It does
+	// not wait for a refresh lease.
 	Link(ctx context.Context, code string, sess glovoapi.Session) error
 	// Get decrypts pid's session. ErrNotLinked only for a documented absence (no row).
 	Get(ctx context.Context, pid PID) (*Lease, error)
-	// Update runs fn under the per-pid lock on the current session and stores
-	// its result with a compare-and-swap on the version.
+	// Update takes pid's refresh lease (ErrBusy if another holder has it),
+	// decrypts, runs fn with no DB transaction open, and writes the result
+	// fenced on (link_id, version). A lost fence returns ErrSuperseded and
+	// the result is discarded. A failed or unknown write pins the result
+	// as unpersisted and retries (2.5).
 	Update(ctx context.Context, pid PID, fn func(context.Context, glovoapi.Session) (glovoapi.Session, error)) error
-	// Unlink deletes pid's link. It works with the kill switch on and needs no Vault.
+	// Unlink deletes pid's link. It works with the kill switch on, needs no
+	// Vault, and never waits for a lease.
 	Unlink(ctx context.Context, pid PID, reason string) error
-	// Status reports link state without decrypting.
+	// Erase is Unlink plus the erasure audit event and deletion of pid's
+	// glovo_audit_subjects row, in one transaction (5).
+	Erase(ctx context.Context, pid PID) error
+	// Status reports state, link_id and version without decrypting.
 	Status(ctx context.Context, pid PID) (Status, error)
 }
 
@@ -899,7 +1090,8 @@ var (
 	ErrKilled       = errors.New("glovo c2 is switched off")
 	ErrSuspended    = errors.New("glovo link suspended")
 	ErrNeedsRelink  = errors.New("glovo session expired; link again")
-	ErrBusy         = errors.New("glovo link busy; retry")
+	ErrBusy         = errors.New("glovo link busy; retry")              // lease held
+	ErrSuperseded   = errors.New("glovo link changed during the write")  // fence lost
 	ErrIntegrity    = errors.New("glovo link failed integrity check")
 	ErrCodeRefused  = errors.New("link code invalid, used or expired")
 )
@@ -921,6 +1113,11 @@ As in 2.3, plus:
   mismatch, the mctl-api `glovo_schema_version` pattern);
 - `glovo_store_audit` with the immutability trigger and `INSERT, SELECT`
   only for the app role;
+- `glovo_audit_subjects`: `INSERT, SELECT, DELETE` for the app role (DELETE
+  is the erasure path, 5);
+- `glovo_link_version_seq` owned by the migration role, `USAGE` for the
+  app role, never reset by any migration;
+- a CHECK that `lease_token`, `lease_until` are both NULL or both set;
 - an owner role for migrations, separate from the app role (the
   `glovo_migrator` pattern in mctl-api).
 
