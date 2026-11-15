@@ -38,3 +38,28 @@ jobs:
         run: |
           go build ./...
           go test -race -count=1 ./...
+
+  remote-login:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: remote-login
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: remote-login/package-lock.json
+
+      - name: npm ci & test
+        # The helper runs Playwright's chrome-headless-shell, never Google
+        # Chrome (the host kills that by name). Requiring the browser turns
+        # a failed install into a failure instead of skipped tests.
+        env:
+          REMOTE_LOGIN_REQUIRE_BROWSER: "1"
+        run: |
+          npm ci --ignore-scripts
+          npx --no-install playwright-core install --with-deps chromium-headless-shell
+          npm test
