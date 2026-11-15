@@ -10,6 +10,10 @@ MCP client --HTTPS--> Cloudflare tunnel --> 127.0.0.1:8787 glovo-home --stdio-->
 ```
 
 What it does:
+- serves a public landing page at `/` (EN, ES, RU; `?lang=`, then a
+  cookie, then `Accept-Language`): what the server is, how to connect a
+  client, what it never does. No JavaScript; the only inline style is
+  admitted by its CSP hash;
 - serves RFC 9728 metadata at `/.well-known/oauth-protected-resource` and
   `/.well-known/oauth-protected-resource/mcp`, with the same body,
   headers and 401 challenge that mctl-api serves for this host today;
