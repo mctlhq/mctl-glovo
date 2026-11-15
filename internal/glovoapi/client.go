@@ -1,7 +1,11 @@
 package glovoapi
 
 import (
+	"bufio"
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
+	"compress/zlib"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -273,14 +277,19 @@ func (c *Client) configureEgress() error {
 		}
 	}
 	if c.proxyURL != nil {
-		dt, ok := http.DefaultTransport.(*http.Transport)
-		if !ok {
-			return errors.New("glovoapi: http.DefaultTransport is not an *http.Transport")
+		tr, err := newTransport()
+		if err != nil {
+			return err
 		}
-		tr := dt.Clone()
 		tr.Proxy = http.ProxyURL(c.proxyURL)
 		if c.proxyTLS != nil {
-			tr.TLSClientConfig = c.proxyTLS
+			tr.TLSClientConfig = http1Only(c.proxyTLS)
+		}
+		c.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tr}
+	} else if !c.customHTTP {
+		tr, err := newTransport()
+		if err != nil {
+			return err
 		}
 		c.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tr}
 	}
@@ -481,6 +490,23 @@ func (c *Client) locationLocked() Location {
 // headerList keeps header names exactly as glovo-skill spells them.
 type headerList [][2]string
 
+// webVersion is glovo-skill 0.2.1's WEB_VERSION: the client identity the
+// session was issued to. Glovo rejects a refresh that presents another one.
+const webVersion = "v1.2476.1"
+
+// undiciHeaders are the headers Node's fetch (undici, Node 22 and later)
+// adds to every glovo-skill request, in the order and spelling it sends
+// them (testdata/golden/undici_wire.json in internal/glovotools). User-Agent
+// and Accept-Encoding use Go's canonical spelling: net/http looks both up
+// by that key, and would otherwise add its own "Go-http-client/1.1" and
+// "gzip". Header names are case-insensitive on the wire.
+var undiciHeaders = headerList{
+	{"accept-language", "*"},
+	{"sec-fetch-mode", "cors"},
+	{"User-Agent", "node"},
+	{"Accept-Encoding", "gzip, deflate"},
+}
+
 func (c *Client) baseHeaders(auth bool) headerList {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -492,13 +518,13 @@ func (c *Client) baseHeaders(auth bool) headerList {
 	h := headerList{
 		{"Accept", "application/json, text/plain, */*"},
 		{"Content-Type", "application/json"},
-		{"User-Agent", "Glovo/10.0.0 (iPhone; iOS 17.5.1; Scale/3.00)"},
 		{"Glovo-Api-Version", "14"},
-		{"Glovo-App-Context", "customer"},
+		{"Glovo-App-Context", "web"},
 		{"Glovo-App-Development-State", "prod"},
-		{"Glovo-App-Platform", "iOS"},
+		{"Glovo-App-Platform", "web"},
 		{"Glovo-App-Type", "customer"},
-		{"Glovo-App-Version", "10.0.0"},
+		{"Glovo-App-Version", jsString(or(get(loc, "appVersion"), webVersion))},
+		{"Glovo-Client-Info", jsString(or(get(loc, "clientInfo"), "web-customer-web-react/"+webVersion+" project:customer-web"))},
 		{"Glovo-Device-Urn", pick("deviceUrn")},
 		{"Glovo-Language-Code", jsString(or(get(loc, "languageCode"), "en"))},
 		{"Glovo-Location-Country-Code", jsString(get(loc, "countryCode"))},
@@ -513,14 +539,62 @@ func (c *Client) baseHeaders(auth bool) headerList {
 		{"Glovo-Perseus-Consent", jsString(or(get(loc, "perseusConsent"), "essential_functional_marketing"))},
 		{"Glovo-Request-Id", c.newID()},
 		{"Glovo-Request-TTL", "7500"},
-		// Node's fetch (undici) adds these two to every request.
-		{"accept-language", "*"},
-		{"sec-fetch-mode", "cors"},
 	}
 	if tok := get(sess, "accessToken"); auth && truthy(tok) {
 		h = append(h, [2]string{"Authorization", jsString(tok)})
 	}
-	return h
+	return append(h, undiciHeaders...)
+}
+
+// newTransport is the default transport: http.DefaultTransport's settings
+// (including HTTPS_PROXY from the environment) but HTTP/1.1 only, as Node's
+// fetch speaks, and without net/http's transparent gzip, because the
+// request asks for "gzip, deflate" like undici and decodeBody decodes it.
+func newTransport() (*http.Transport, error) {
+	dt, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("glovoapi: http.DefaultTransport is not an *http.Transport")
+	}
+	tr := dt.Clone()
+	tr.ForceAttemptHTTP2 = false
+	tr.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	tr.DisableCompression = true
+	tr.TLSClientConfig = http1Only(tr.TLSClientConfig)
+	return tr, nil
+}
+
+// http1Only returns a copy of cfg that offers only HTTP/1.1 in ALPN. A
+// config copied from a transport that has already spoken HTTP/2 lists
+// "h2", and a server that picks it would then get HTTP/1.1 bytes.
+func http1Only(cfg *tls.Config) *tls.Config {
+	if cfg == nil {
+		cfg = &tls.Config{MinVersion: tls.VersionTLS12}
+	} else {
+		cfg = cfg.Clone()
+	}
+	cfg.NextProtos = []string{"http/1.1"}
+	return cfg
+}
+
+// decodeBody undoes the Content-Encoding the server chose from "gzip,
+// deflate". An encoding it does not know is an error, never raw bytes read
+// as JSON.
+func decodeBody(resp *http.Response) (io.ReadCloser, error) {
+	switch enc := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding"))); enc {
+	case "", "identity":
+		return resp.Body, nil
+	case "gzip", "x-gzip":
+		return gzip.NewReader(resp.Body)
+	case "deflate":
+		// HTTP deflate is zlib-wrapped; some servers send raw DEFLATE.
+		br := bufio.NewReader(resp.Body)
+		if hdr, err := br.Peek(2); err == nil && (uint16(hdr[0])<<8|uint16(hdr[1]))%31 == 0 && hdr[0]&0x0f == 8 {
+			return zlib.NewReader(br)
+		}
+		return flate.NewReader(br), nil
+	default:
+		return nil, fmt.Errorf("unsupported Content-Encoding %q", enc)
+	}
 }
 
 // mutationAllowlist is every non-GET request this client may send. Anything
@@ -646,7 +720,11 @@ func (c *Client) send(ctx context.Context, method, path string, body any, auth b
 		return 0, nil, "", fmt.Errorf("%s %s: %w", method, safePath(strings.SplitN(path, "?", 2)[0]), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	decoded, err := decodeBody(resp)
+	if err != nil {
+		return 0, nil, "", fmt.Errorf("%s %s: %w", method, safePath(strings.SplitN(path, "?", 2)[0]), err)
+	}
+	data, err := io.ReadAll(io.LimitReader(decoded, maxBodyBytes))
 	if err != nil {
 		return 0, nil, "", fmt.Errorf("%s %s: read body: %w", method, safePath(strings.SplitN(path, "?", 2)[0]), err)
 	}
