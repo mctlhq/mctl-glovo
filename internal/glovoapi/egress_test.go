@@ -272,6 +272,23 @@ func TestExplicitProxyBeatsEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Order-independent check: net/http caches the proxy environment once
+	// per process (envProxyFunc), so the request counts below could pass
+	// without this test's environment ever being read. The transport's own
+	// Proxy func is asked directly, with HTTPS_PROXY naming the decoy: it
+	// must answer the explicit proxy.
+	tr, ok := c.httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("transport %T, want *http.Transport", c.httpClient.Transport)
+	}
+	probe, _ := http.NewRequest(http.MethodGet, f.srv.URL+"/v3/customer/orders-list", nil)
+	got, err := tr.Proxy(probe)
+	if err != nil || got == nil || got.Host != p.url(t).Host {
+		t.Fatalf("transport proxy for %s = %v, %v; want the explicit proxy %s", probe.URL, got, err, p.url(t).Host)
+	}
+	if got.Host == decoy.url(t).Host {
+		t.Fatal("transport resolved the environment decoy")
+	}
 	f.on("POST", "/oauth/refresh", refreshReply())
 	if _, err := c.GetOrders(context.Background(), nil, 0); err != nil {
 		t.Fatal(err)
@@ -516,5 +533,54 @@ func TestRedirectsStayOnOriginAndAllowlist(t *testing.T) {
 		if strings.Contains(p, "checkout") {
 			t.Errorf("redirected mutation reached %s", p)
 		}
+	}
+}
+
+// A redirect to exactly the base path (the API root) is on the API, not
+// outside it; a redirect chain longer than 10 is refused.
+func TestRedirectBasePathAndLimit(t *testing.T) {
+	var mu sync.Mutex
+	hops := 0
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v3/customer/orders/1":
+			http.Redirect(w, r, "/api", http.StatusFound)
+		case r.URL.Path == "/api":
+			_, _ = io.WriteString(w, `{"root":true}`)
+		case strings.HasPrefix(r.URL.Path, "/api/v3/customer/orders/loop"):
+			mu.Lock()
+			hops++
+			n := hops
+			mu.Unlock()
+			http.Redirect(w, r, fmt.Sprintf("/api/v3/customer/orders/loop%d", n), http.StatusFound)
+		case r.URL.Path == "/apix/v3":
+			_, _ = io.WriteString(w, `{}`)
+		case r.URL.Path == "/api/v3/customer/orders/2":
+			http.Redirect(w, r, "/apix/v3", http.StatusFound)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(up.Close)
+	c, err := newEgressClient(t, up.URL+"/api", testSession())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	v, err := c.GetOrder(ctx, "1")
+	if err != nil || get(v, "root") != true {
+		t.Errorf("redirect to exactly the base path: %v, %v", v, err)
+	}
+	if _, err := c.GetOrder(ctx, "2"); !errors.Is(err, ErrRedirectRefused) {
+		t.Errorf("redirect to a sibling of the base path: %v, want ErrRedirectRefused", err)
+	}
+	_, err = c.GetOrder(ctx, "loop")
+	if !errors.Is(err, ErrRedirectRefused) || !strings.Contains(err.Error(), "more than 10") {
+		t.Fatalf("endless redirect: %v, want the 10-redirect refusal", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if hops != 10 {
+		t.Errorf("%d redirects followed, want exactly 10 before the refusal", hops)
 	}
 }

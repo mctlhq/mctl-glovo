@@ -354,3 +354,82 @@ func TestJSToFixed2(t *testing.T) {
 		t.Errorf("price %v", it.Price)
 	}
 }
+
+// An id carrying an encoded slash or backslash never reaches a mutation
+// path, and encoded dot segments are refused on every path.
+func TestEncodedSlashAndDotSegmentsAreRefused(t *testing.T) {
+	ctx := context.Background()
+	f := newFake(t)
+	c, _ := newTestClient(t, f, testSession())
+	f.on("GET", basketPath+"/stores/1001", reply{200, fixtureText(t, "basket")})
+	if _, err := c.SetQuantity(ctx, BasketLineRef{StoreID: "1001", BasketProductID: "x/../../orders/1"}, 1); err != nil {
+		t.Fatalf("a basket product id is a body field, not a path segment: %v", err)
+	}
+	if _, err := c.GetProduct(ctx, ProductParams{StoreID: "1001", StoreAddressID: "2001", ProductID: "x/../../../v1/checkout", ExternalID: "e"}); !errors.Is(err, ErrUnsafePath) {
+		t.Errorf("POST with a slash in the product id: %v", err)
+	}
+	if _, err := c.GetProduct(ctx, ProductParams{StoreID: `a\b`, StoreAddressID: "2001", ProductID: "1"}); !errors.Is(err, ErrUnsafePath) {
+		t.Errorf("POST with a backslash in the store id: %v", err)
+	}
+	for _, p := range []string{
+		"/v1/authenticated/customers/1/baskets/x%2F..%2F..%2Forders/products",
+		"/v1/authenticated/customers/1/baskets/x%2f..%2forders/products/quantity",
+		"/v1/authenticated/customers/1%5C2/baskets",
+		"/v4/stores/1/addresses/2/products/a%2Fb/view",
+	} {
+		for _, m := range []string{"POST", "PUT", "PATCH"} {
+			if err := checkMutation(m, p); !errors.Is(err, ErrUnsafePath) {
+				t.Errorf("%s %s: %v, want ErrUnsafePath", m, p, err)
+			}
+		}
+	}
+	for _, p := range []string{"/v3/stores/%2e%2e/addresses", "/v3/customer/orders/%2E", "/v3/stores/%zz"} {
+		if err := checkPathSegments(p); !errors.Is(err, ErrUnsafePath) {
+			t.Errorf("%s: %v, want ErrUnsafePath", p, err)
+		}
+	}
+	// A read may carry an opaque id with a slash: it is escaped, not split.
+	if err := checkPathSegments("/v3/addresslookup/pub/place%2Fwith%20spaces"); err != nil {
+		t.Errorf("read with an escaped slash: %v", err)
+	}
+	if n := f.count("POST", "/v4/stores/1001/addresses/2001/products/x%2F..%2F..%2F..%2Fv1%2Fcheckout/view"); n != 0 {
+		t.Errorf("refused POST reached the network %d times", n)
+	}
+}
+
+// A basket read without a basketId is malformed; writing to it would hit
+// /baskets/undefined/...
+func TestAddToBasketRefusesBasketWithoutID(t *testing.T) {
+	for name, body := range map[string]string{
+		"bump":   `{"products":[{"ids":{"id":"5001","basketProductId":"bp-1"},"quantity":{"increments":1}}]}`,
+		"append": `{"products":[]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			c, _ := newTestClient(t, f, testSession())
+			f.on("GET", basketPath+"/stores/1001", reply{200, body})
+			_, err := c.AddToBasket(context.Background(), AddToBasketParams{StoreID: "1001", ProductID: "5001", ExternalID: "e", StoreProductID: "s"})
+			if err == nil || !strings.Contains(err.Error(), "basketId") {
+				t.Fatalf("err %v, want a missing basketId error", err)
+			}
+			if n := len(f.requests()); n != 1 {
+				t.Fatalf("%d requests: only the basket read may reach the network", n)
+			}
+		})
+	}
+}
+
+// A negative add quantity is refused before the network, so an add never
+// decrements a line.
+func TestAddToBasketRefusesNegativeQuantity(t *testing.T) {
+	f := newFake(t)
+	c, _ := newTestClient(t, f, testSession())
+	f.on("GET", basketPath+"/stores/1001", reply{200, fixtureText(t, "basket")})
+	_, err := c.AddToBasket(context.Background(), AddToBasketParams{StoreID: "1001", ProductID: "5001", ExternalID: "ext-5001", StoreProductID: "sp-5001", Quantity: -2})
+	if err == nil {
+		t.Fatal("negative quantity accepted")
+	}
+	if n := len(f.requests()); n != 0 {
+		t.Fatalf("%d requests reached the network", n)
+	}
+}
