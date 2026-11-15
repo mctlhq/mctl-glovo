@@ -1,0 +1,45 @@
+{
+  "case": "select_location",
+  "tool": "glovo_select_location",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"selected\": true,\n  \"deliverable\": true,\n  \"title\": \"Selected Place\",\n  \"city_code\": \"BCN\",\n  \"country_code\": \"ES\"\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/addresslookup/pub/p1?provider=google",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/customer_profile/api/v1/guest/address_book/delivery_point_info?latitude=41.4&longitude=2.17&countryCode=ES",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "BCN",
+        "latitude": "41.4",
+        "longitude": "2.17",
+        "countryCode": "ES",
+        "accuracy": "12"
+      },
+      "updatedAt": "2026-03-01T12:00:00.000Z"
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

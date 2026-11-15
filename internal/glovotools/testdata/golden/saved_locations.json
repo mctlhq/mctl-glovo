@@ -1,0 +1,38 @@
+{
+  "case": "saved_locations",
+  "tool": "glovo_get_saved_locations",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"count\": 3,\n  \"current_location\": {\n    \"country_code\": \"XX\",\n    \"city_code\": \"TST\",\n    \"latitude\": \"10.5\",\n    \"longitude\": \"-3.25\"\n  },\n  \"selected\": null,\n  \"default\": {\n    \"id\": \"addr-2\",\n    \"label\": \"Office\",\n    \"address_line\": \"Work Avenue 2\",\n    \"country_code\": \"ES\",\n    \"city_code\": \"BCN\",\n    \"latitude\": \"41.5\",\n    \"longitude\": \"2.18\",\n    \"selected\": false,\n    \"default\": true,\n    \"set_location_args\": {\n      \"country_code\": \"ES\",\n      \"city_code\": \"BCN\",\n      \"latitude\": \"41.5\",\n      \"longitude\": \"2.18\"\n    }\n  },\n  \"matched\": null,\n  \"saved_locations\": [\n    {\n      \"id\": \"addr-1\",\n      \"label\": \"Home\",\n      \"subtitle\": \"Testville\",\n      \"address_line\": \"Example Street 1\",\n      \"details\": \"2A\",\n      \"kind\": \"APARTMENT\",\n      \"tag\": \"HOME\",\n      \"city\": \"Testville\",\n      \"country_code\": \"ES\",\n      \"city_code\": \"BCN\",\n      \"selected\": false,\n      \"default\": false\n    },\n    {\n      \"id\": \"addr-2\",\n      \"label\": \"Office\",\n      \"address_line\": \"Work Avenue 2\",\n      \"country_code\": \"ES\",\n      \"city_code\": \"BCN\",\n      \"latitude\": \"41.5\",\n      \"longitude\": \"2.18\",\n      \"selected\": false,\n      \"default\": true,\n      \"set_location_args\": {\n        \"country_code\": \"ES\",\n        \"city_code\": \"BCN\",\n        \"latitude\": \"41.5\",\n        \"longitude\": \"2.18\"\n      }\n    },\n    {\n      \"id\": \"3\",\n      \"address_line\": \"No codes\",\n      \"selected\": false,\n      \"default\": false\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/customer_profile/api/v1/address_book/me/addresses",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

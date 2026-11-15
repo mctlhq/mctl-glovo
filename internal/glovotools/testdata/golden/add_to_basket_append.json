@@ -1,0 +1,157 @@
+{
+  "case": "add_to_basket_append",
+  "tool": "glovo_add_to_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"basket_id\": \"basket-test-1\",\n  \"basket_version\": 3,\n  \"store_id\": 1001,\n  \"store_address_id\": 2001,\n  \"products_count\": 3,\n  \"total\": \"5,40 EUR\",\n  \"lines\": [\n    {\n      \"basket_product_id\": \"bp-test-1\",\n      \"product_id\": \"5001\",\n      \"external_id\": \"ext-5001\",\n      \"store_product_id\": \"sp-5001\",\n      \"name\": \"Test Milk 1L\",\n      \"quantity\": 2,\n      \"price\": \"2,40 EUR\",\n      \"image\": \"https://img.example.test/m.png\",\n      \"selected_options_count\": 0,\n      \"has_selected_options\": false\n    },\n    {\n      \"basket_product_id\": \"bp-test-2\",\n      \"product_id\": \"5004\",\n      \"external_id\": \"ext-5004\",\n      \"store_product_id\": \"sp-5004\",\n      \"name\": \"Test Pizza\",\n      \"quantity\": 1,\n      \"price\": 3,\n      \"selected_options_count\": 2,\n      \"has_selected_options\": true\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/v4/stores/1001/addresses/2001/products/6001/view",
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "translation": null,
+        "trackingOrigin": null,
+        "quantity": 1
+      }
+    },
+    {
+      "method": "GET",
+      "uri": "/v1/authenticated/customers/4242/baskets/stores/1001",
+      "body": null
+    },
+    {
+      "method": "PUT",
+      "uri": "/v1/authenticated/customers/4242/baskets/basket-test-1/products",
+      "body": {
+        "basketId": "basket-test-1",
+        "basketVersion": 3,
+        "storeId": 1001,
+        "storeAddressId": 2001,
+        "handlingStrategy": "DELIVERY",
+        "basketPrice": {
+          "final": {
+            "formatted": "5,40 EUR",
+            "major": 5.4
+          }
+        },
+        "products": [
+          {
+            "ids": {
+              "basketProductId": "bp-test-1",
+              "id": "5001",
+              "externalId": "ext-5001",
+              "storeProductId": "sp-5001"
+            },
+            "name": "Test Milk 1L",
+            "quantity": {
+              "increments": 2
+            },
+            "price": {
+              "final": {
+                "formatted": "2,40 EUR"
+              }
+            },
+            "imageUrl": "https://img.example.test/m.png"
+          },
+          {
+            "ids": {
+              "basketProductId": "bp-test-2",
+              "id": "5004",
+              "externalId": "ext-5004",
+              "storeProductId": "sp-5004"
+            },
+            "productName": "Test Pizza",
+            "quantity": {
+              "increments": 1
+            },
+            "customizations": [
+              {
+                "name": "Large"
+              },
+              {
+                "name": "Cheese"
+              }
+            ],
+            "price": {
+              "final": {
+                "major": 3
+              }
+            }
+          },
+          {
+            "ids": {
+              "id": "6001",
+              "externalId": "ext-6001",
+              "storeProductId": "sp-6001"
+            },
+            "quantity": {
+              "increments": 1
+            },
+            "customizations": [
+              {
+                "ids": {
+                  "groupLegacyId": 71,
+                  "groupId": "ag-71",
+                  "groupExternalId": "gx-71",
+                  "groupPosition": 0,
+                  "legacyId": 701,
+                  "externalId": "ox-701",
+                  "id": "a-701"
+                },
+                "name": "Small",
+                "quantity": {
+                  "increments": 1
+                },
+                "customizationName": "Small",
+                "groupName": "Size"
+              },
+              {
+                "ids": {
+                  "groupLegacyId": 73,
+                  "groupId": "ag-73",
+                  "groupExternalId": "gx-73",
+                  "groupPosition": 2,
+                  "legacyId": 721,
+                  "externalId": "ox-721",
+                  "id": "a-721"
+                },
+                "name": "Tomato",
+                "quantity": {
+                  "increments": 1
+                },
+                "customizationName": "Tomato",
+                "groupName": "Sauce"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

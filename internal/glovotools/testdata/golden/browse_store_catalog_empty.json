@@ -1,0 +1,38 @@
+{
+  "case": "browse_store_catalog_empty",
+  "tool": "glovo_browse_store_catalog",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"kind\": \"all\",\n  \"count\": 0,\n  \"sections\": [],\n  \"products\": [],\n  \"unsupported_reason\": \"This content node exposes no product tiles. Use store item search for the live catalog.\"\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/stores/1001/addresses/2001/content?link=x",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

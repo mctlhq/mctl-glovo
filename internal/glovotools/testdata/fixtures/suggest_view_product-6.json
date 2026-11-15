@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-6",
+    "externalId": "external-6",
+    "storeProductId": "store-product-6",
+    "name": "Calzone",
+    "priceInfo": {
+     "displayText": "EUR 12.00"
+    },
+    "attributeGroups": []
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": true
+      }
+     }
+    ]
+   }
+  }
+ }
+}

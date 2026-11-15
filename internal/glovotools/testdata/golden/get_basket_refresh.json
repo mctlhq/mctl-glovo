@@ -1,0 +1,50 @@
+{
+  "case": "get_basket_refresh",
+  "tool": "glovo_get_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"basket_id\": \"basket-test-1\",\n  \"basket_version\": 3,\n  \"store_id\": 1001,\n  \"store_address_id\": 2001,\n  \"products_count\": 3,\n  \"total\": \"5,40 EUR\",\n  \"lines\": [\n    {\n      \"basket_product_id\": \"bp-test-1\",\n      \"product_id\": \"5001\",\n      \"external_id\": \"ext-5001\",\n      \"store_product_id\": \"sp-5001\",\n      \"name\": \"Test Milk 1L\",\n      \"quantity\": 2,\n      \"price\": \"2,40 EUR\",\n      \"image\": \"https://img.example.test/m.png\",\n      \"selected_options_count\": 0,\n      \"has_selected_options\": false\n    },\n    {\n      \"basket_product_id\": \"bp-test-2\",\n      \"product_id\": \"5004\",\n      \"external_id\": \"ext-5004\",\n      \"store_product_id\": \"sp-5004\",\n      \"name\": \"Test Pizza\",\n      \"quantity\": 1,\n      \"price\": 3,\n      \"selected_options_count\": 2,\n      \"has_selected_options\": true\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/oauth/refresh",
+      "body": {
+        "refreshToken": "refresh-test-old"
+      }
+    },
+    {
+      "method": "GET",
+      "uri": "/v1/authenticated/customers/4242/baskets/stores/1001",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzM2MDB9.sig",
+      "refreshToken": "refresh-test-new",
+      "customerId": 4242,
+      "tokenType": "Bearer",
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      },
+      "expiresIn": 7200,
+      "scope": null,
+      "createdAt": 1772366400000,
+      "updatedAt": "2026-03-01T12:00:00.000Z"
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "case": "add_to_basket_no_category",
+  "tool": "glovo_add_to_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: storeCategoryId is required for new basket creation."
+      }
+    ],
+    "isError": true
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/v4/stores/1001/addresses/2001/products/6001/view",
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "translation": null,
+        "trackingOrigin": null,
+        "quantity": 1
+      }
+    },
+    {
+      "method": "GET",
+      "uri": "/v3/stores/1001?includeClosed=true&includeDisabled=false",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/v1/authenticated/customers/4242/baskets/stores/1001",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

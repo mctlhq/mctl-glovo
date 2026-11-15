@@ -1,0 +1,43 @@
+{
+  "case": "select_location_undeliverable",
+  "tool": "glovo_select_location",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"selected\": false,\n  \"deliverable\": false,\n  \"title\": \"Selected Place\",\n  \"city_code\": \"BCN\",\n  \"country_code\": \"ES\",\n  \"reason\": \"not_deliverable\"\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/addresslookup/pub/p1",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/customer_profile/api/v1/guest/address_book/delivery_point_info?latitude=41.4&longitude=2.17&countryCode=ES",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

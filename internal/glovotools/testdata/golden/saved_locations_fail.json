@@ -1,0 +1,39 @@
+{
+  "case": "saved_locations_fail",
+  "tool": "glovo_get_saved_locations",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: GET /customer_profile/api/v1/address_book/me/addresses -> 500: TEST_FAILURE"
+      }
+    ],
+    "isError": true
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/customer_profile/api/v1/address_book/me/addresses",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "case": "purchase_history_fail",
+  "tool": "glovo_get_purchase_history",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: GET /v3/customer/orders-list -> 500: TEST_FAILURE"
+      }
+    ],
+    "isError": true
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/customer/orders-list?offset=0&limit=15",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

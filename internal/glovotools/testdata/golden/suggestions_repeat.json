@@ -1,0 +1,154 @@
+{
+  "case": "suggestions_repeat",
+  "tool": "glovo_get_suggestions",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"intent\": {\n    \"mode\": \"repeat\",\n    \"query\": \"pizza\",\n    \"venue_query\": null,\n    \"item_mode\": \"repeat\",\n    \"known_liked_constraint\": false,\n    \"quality_preference\": \"personal\",\n    \"novelty_tolerance\": 0.4,\n    \"max_choices\": 3,\n    \"google_reviews_requested\": false,\n    \"history_refresh\": \"incremental\"\n  },\n  \"model\": {\n    \"name\": \"venue-multi-scale-recency-5-20-80\",\n    \"level\": \"venue\",\n    \"evidence\": \"chronological rolling-origin backtest with untouched final holdout\",\n    \"evidence_scope\": \"aggregate benchmark from one private account; not a universal quality guarantee\",\n    \"holdout\": {\n      \"source_snapshot\": \"2026-06-28\",\n      \"usable_orders\": 910,\n      \"train_orders\": 637,\n      \"validation_orders\": 136,\n      \"final_test_orders\": 137,\n      \"precision_at_5\": 0.0832,\n      \"recall_at_5\": 0.4161,\n      \"ndcg_at_5\": 0.2712,\n      \"repeat_recall_at_5\": 0.479,\n      \"novel_target_share\": 0.1314,\n      \"popularity_recall_at_5\": 0.2044,\n      \"popularity_ndcg_at_5\": 0.1599\n    },\n    \"product_model\": \"not_promoted; the benchmark had only 15 detailed orders\"\n  },\n  \"coverage\": {\n    \"order_cards_discovered\": 5,\n    \"order_cursor_pages\": 2,\n    \"order_cursor_pages_fetched_this_call\": 2,\n    \"order_cursor_pages_at_last_full_refresh\": 2,\n    \"order_cursor_stop\": \"no_next_cursor\",\n    \"history_cache\": {\n      \"status\": \"missing_rebuilt\",\n      \"mode\": \"full\",\n      \"stale\": false,\n      \"age_before_refresh_seconds\": null,\n      \"refreshed_at\": \"2026-03-01T12:00:00.000Z\",\n      \"pages_fetched\": 2,\n      \"full_cursor_pages_at_last_full_refresh\": 2\n    },\n    \"venue_model_orders\": 4,\n    \"live_store_candidates\": 6,\n    \"resolved_live_products\": 3,\n    \"product_detail_history_orders_used_for_ranking\": 0,\n    \"benchmark_detailed_orders\": 15,\n    \"product_ranking_source\": \"live Glovo catalog plus Easy Reorder/Top Sellers when available; no learned product model\"\n  },\n  \"choices\": [\n    {\n      \"label\": \"reliable_repeat\",\n      \"store\": {\n        \"store_id\": \"store-1\",\n        \"store_address_id\": \"address-1\",\n        \"name\": \"Favorite Pizza\",\n        \"slug\": \"favorite-pizza\",\n        \"open\": true,\n        \"glovo_rating\": 4.6,\n        \"glovo_rating_count\": 300,\n        \"glovo_count_aware_quality\": 4.5,\n        \"search_position\": 1\n      },\n      \"product\": {\n        \"id\": \"product-1\",\n        \"product_id\": \"product-1\",\n        \"external_id\": \"external-1\",\n        \"store_product_id\": \"store-product-1\",\n        \"name\": \"Pizza Margherita\",\n        \"price\": \"EUR 12.00\",\n        \"available\": true,\n        \"add_enabled\": true,\n        \"is_variant\": null,\n        \"variant_selection\": \"customizations\",\n        \"option_groups\": [\n          {\n            \"id\": \"group-legacy\",\n            \"groupLegacyId\": \"group-legacy\",\n            \"groupId\": \"group-stable\",\n            \"groupExternalId\": \"group-external\",\n            \"name\": \"Size\",\n            \"required\": true,\n            \"min\": 1,\n            \"max\": null,\n            \"options\": [\n              {\n                \"id\": \"option-legacy\",\n                \"legacyId\": \"option-legacy\",\n                \"optionId\": \"option-stable\",\n                \"externalId\": \"option-external\",\n                \"name\": \"Large\"\n              }\n            ]\n          }\n        ],\n        \"required_sections\": [],\n        \"store_id\": \"store-1\",\n        \"store_address_id\": \"address-1\",\n        \"source\": \"easy_reorder\",\n        \"required_option_groups\": 1\n      },\n      \"personalized_evidence\": {\n        \"familiar\": true,\n        \"venue_orders\": 2,\n        \"last_order_event_age\": 0,\n        \"recency_score\": 1,\n        \"components\": {\n          \"half_life_5\": 1.445,\n          \"half_life_20\": 1.836,\n          \"half_life_80\": 1.957,\n          \"weights\": [\n            0.5,\n            0.3,\n            0.2\n          ]\n        }\n      },\n      \"reasons\": [\n        \"Previously ordered from this venue 2 time(s); ranked by the validated multi-scale recency model.\",\n        \"Glovo currently exposes Pizza Margherita at EUR 12.00.\",\n        \"1 required option group(s) must be selected before a basket add.\"\n      ],\n      \"google_maps\": null\n    },\n    {\n      \"label\": \"familiar_alternative\",\n      \"store\": {\n        \"store_id\": \"store-4\",\n        \"store_address_id\": \"address-4\",\n        \"name\": \"Fourth Pizza\",\n        \"slug\": \"fourth-pizza\",\n        \"open\": true,\n        \"glovo_rating\": 4.6,\n        \"glovo_rating_count\": 40,\n        \"glovo_count_aware_quality\": 4.314,\n        \"search_position\": 4\n      },\n      \"product\": {\n        \"id\": \"product-5\",\n        \"product_id\": \"product-5\",\n        \"external_id\": \"external-5\",\n        \"store_product_id\": \"store-product-5\",\n        \"name\": \"Pizza Marinara\",\n        \"price\": \"EUR 9.50\",\n        \"available\": true,\n        \"add_enabled\": true,\n        \"is_variant\": null,\n        \"variant_selection\": \"not_exposed\",\n        \"option_groups\": [],\n        \"required_sections\": [],\n        \"store_id\": \"store-4\",\n        \"store_address_id\": \"address-4\",\n        \"category_id\": \"cat-1\",\n        \"source\": \"global_search\",\n        \"required_option_groups\": 0\n      },\n      \"personalized_evidence\": {\n        \"familiar\": true,\n        \"venue_orders\": 1,\n        \"last_order_event_age\": 2,\n        \"recency_score\": 0.478,\n        \"components\": {\n          \"half_life_5\": 0.66,\n          \"half_life_20\": 0.901,\n          \"half_life_80\": 0.974,\n          \"weights\": [\n            0.5,\n            0.3,\n            0.2\n          ]\n        }\n      },\n      \"reasons\": [\n        \"Previously ordered from this venue 1 time(s); ranked by the validated multi-scale recency model.\",\n        \"Glovo currently exposes Pizza Marinara at EUR 9.50.\"\n      ],\n      \"google_maps\": null\n    },\n    {\n      \"label\": \"new_high_rated_option\",\n      \"store\": {\n        \"store_id\": \"store-2\",\n        \"store_address_id\": \"address-2\",\n        \"name\": \"New Pizza\",\n        \"slug\": \"new-pizza\",\n        \"open\": true,\n        \"glovo_rating\": 4.8,\n        \"glovo_rating_count\": 800,\n        \"glovo_count_aware_quality\": 4.733,\n        \"search_position\": 2\n      },\n      \"product\": {\n        \"id\": \"product-3\",\n        \"product_id\": \"product-3\",\n        \"external_id\": \"external-3\",\n        \"store_product_id\": \"store-product-3\",\n        \"name\": \"Pizza Truffle\",\n        \"price\": \"EUR 12.00\",\n        \"available\": true,\n        \"add_enabled\": true,\n        \"is_variant\": null,\n        \"variant_selection\": \"not_exposed\",\n        \"option_groups\": [],\n        \"required_sections\": [],\n        \"store_id\": \"store-2\",\n        \"store_address_id\": \"address-2\",\n        \"category_id\": \"cat-1\",\n        \"source\": \"global_search\",\n        \"required_option_groups\": 0\n      },\n      \"personalized_evidence\": {\n        \"familiar\": false,\n        \"venue_orders\": 0,\n        \"recency_score\": 0\n      },\n      \"reasons\": [\n        \"Not found in the card-level venue history; included as a separate live-catalog exploration option.\",\n        \"Glovo currently exposes Pizza Truffle at EUR 12.00.\"\n      ],\n      \"google_maps\": null\n    }\n  ],\n  \"google_quality\": {\n    \"requested\": false,\n    \"available\": false,\n    \"enriched\": 0,\n    \"ambiguous_or_unmatched\": 0,\n    \"failures\": 0,\n    \"ranking_effect\": \"none; Google evidence is not part of the backtested venue model\",\n    \"reviews_requested\": false,\n    \"review_venues_enriched\": 0,\n    \"reason\": \"GOOGLE_MAPS_API_KEY is not configured; Glovo and personalized evidence remain available.\"\n  },\n  \"limitations\": [\n    \"Order cards support venue prediction across full cursor discovery; product history covers only a bounded 15-order detailed subset.\",\n    \"A past order proves familiarity, not satisfaction. known_liked_only is honored only as an explicit user constraint.\",\n    \"Exploration ordering is a transparent live-catalog heuristic, not the backtested repeat model.\",\n    \"Current product availability and required options are re-fetched; the suggestion tool never changes the basket.\"\n  ],\n  \"mutates_basket\": false\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/v1/web/store_wall/search?searchQuery=pizza",
+      "body": {
+        "searchContext": {
+          "searchId": "00000000-0000-4000-8000-000000000003"
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "uri": "/v3/customer/orders-list?offset=0&limit=15",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/v3/customer/orders-list?offset=o3&limit=15",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/v4/stores/store-1/addresses/address-1/content/main",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "/v4/stores/store-1/addresses/address-1/products/product-1/view?productExternalId=external-1",
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "translation": null,
+        "trackingOrigin": null,
+        "quantity": 1
+      }
+    },
+    {
+      "method": "GET",
+      "uri": "/v4/stores/store-4/addresses/address-4/content/main",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "/v4/stores/store-4/addresses/address-4/products/product-5/view?productExternalId=external-5",
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "categoryId": "cat-1",
+        "translation": null,
+        "searchId": "search-1",
+        "trackingOrigin": null,
+        "quantity": 1
+      }
+    },
+    {
+      "method": "GET",
+      "uri": "/v4/stores/store-2/addresses/address-2/content/main",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "/v4/stores/store-2/addresses/address-2/products/product-3/view?productExternalId=external-3",
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "categoryId": "cat-1",
+        "translation": null,
+        "searchId": "search-1",
+        "trackingOrigin": null,
+        "quantity": 1
+      }
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "version": 1,
+      "account_hash": "0315b4020af3eccab7706679580ac87a710d82970733b8719e70af9b57e7b9e6",
+      "updated_at": "2026-03-01T12:00:00.000Z",
+      "complete": true,
+      "full_cursor_pages": 2,
+      "orders": [
+        {
+          "order_id": "o5",
+          "store": "Favorite Pizza",
+          "status": "DELIVERED",
+          "date": 1767225600000,
+          "items": [],
+          "url": "https://glovoapp.com/en/profile/past-orders/o5"
+        },
+        {
+          "order_id": "o4",
+          "store": "Other Venue",
+          "status": "DELIVERED",
+          "date": 1767139200000,
+          "items": [],
+          "url": "https://glovoapp.com/en/profile/past-orders/o4"
+        },
+        {
+          "order_id": "o3",
+          "store": "Fourth Pizza",
+          "status": "DELIVERED",
+          "date": 1767052800000,
+          "items": [],
+          "url": "https://glovoapp.com/en/profile/past-orders/o3"
+        },
+        {
+          "order_id": "o2",
+          "store": "Favorite Pizza",
+          "status": "DELIVERED",
+          "date": 1766966400000,
+          "items": [],
+          "url": "https://glovoapp.com/en/profile/past-orders/o2"
+        },
+        {
+          "order_id": "o1",
+          "store": "Third Pizza",
+          "status": "CANCELLED",
+          "date": 1766880000000,
+          "items": [],
+          "url": "https://glovoapp.com/en/profile/past-orders/o1"
+        }
+      ]
+    }
+  }
+}

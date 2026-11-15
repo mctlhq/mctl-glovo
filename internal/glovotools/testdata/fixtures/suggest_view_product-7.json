@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-7",
+    "externalId": "external-7",
+    "storeProductId": "store-product-7",
+    "name": "Pizza Funghi",
+    "priceInfo": {
+     "displayText": "EUR 12.00"
+    },
+    "attributeGroups": []
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": true
+      }
+     }
+    ]
+   }
+  }
+ }
+}

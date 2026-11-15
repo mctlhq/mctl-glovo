@@ -1,0 +1,20 @@
+{
+  "case": "get_basket_signed_out",
+  "tool": "glovo_get_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "No customer id in Glovo session. Run glovo_login again."
+      }
+    ],
+    "isError": true
+  },
+  "requests": [],
+  "session_after": {
+    "exists": false
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

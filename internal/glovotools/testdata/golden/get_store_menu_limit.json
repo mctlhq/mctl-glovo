@@ -1,0 +1,38 @@
+{
+  "case": "get_store_menu_limit",
+  "tool": "glovo_get_store_menu",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"type\": \"STORE_MENU\",\n  \"count\": 2,\n  \"sections\": [\n    {\n      \"name\": \"Dairy\",\n      \"slug\": \"dairy\",\n      \"depth\": 0,\n      \"path\": \"Dairy\",\n      \"content_uri\": \"/v3/stores/1001/addresses/2001/content?nodeType=DEEP_LINK&link=dairy\",\n      \"tracking\": {\n        \"id\": \"t1\"\n      }\n    },\n    {\n      \"name\": \"Milk\",\n      \"slug\": \"milk\",\n      \"depth\": 1,\n      \"path\": \"Dairy > Milk\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/stores/1001/addresses/2001/node/store_menu",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

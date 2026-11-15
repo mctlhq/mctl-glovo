@@ -1,0 +1,38 @@
+{
+  "case": "get_store_slug",
+  "tool": "glovo_get_store",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"id\": \"1001\",\n  \"store_id\": \"1001\",\n  \"store_address_id\": 2001,\n  \"name\": \"Example Market\",\n  \"slug\": \"example-market\",\n  \"category_id\": 1,\n  \"store_class\": \"restaurant\",\n  \"open\": false,\n  \"rating\": null,\n  \"image\": \"https://glovo.dhmedia.io/image/img-1\",\n  \"url\": \"https://glovoapp.com/en/es/barcelona/stores/example-market\"\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/stores/example-market?includeClosed=true&includeDisabled=false",
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

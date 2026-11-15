@@ -1,0 +1,112 @@
+{
+  "case": "add_to_basket_create",
+  "tool": "glovo_add_to_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"basket_id\": \"basket-test-1\",\n  \"basket_version\": 3,\n  \"store_id\": 1001,\n  \"store_address_id\": 2001,\n  \"products_count\": 3,\n  \"total\": \"5,40 EUR\",\n  \"lines\": [\n    {\n      \"basket_product_id\": \"bp-test-1\",\n      \"product_id\": \"5001\",\n      \"external_id\": \"ext-5001\",\n      \"store_product_id\": \"sp-5001\",\n      \"name\": \"Test Milk 1L\",\n      \"quantity\": 2,\n      \"price\": \"2,40 EUR\",\n      \"image\": \"https://img.example.test/m.png\",\n      \"selected_options_count\": 0,\n      \"has_selected_options\": false\n    },\n    {\n      \"basket_product_id\": \"bp-test-2\",\n      \"product_id\": \"5004\",\n      \"external_id\": \"ext-5004\",\n      \"store_product_id\": \"sp-5004\",\n      \"name\": \"Test Pizza\",\n      \"quantity\": 1,\n      \"price\": 3,\n      \"selected_options_count\": 2,\n      \"has_selected_options\": true\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/v4/stores/1001/addresses/2001/products/6001/view",
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "translation": null,
+        "trackingOrigin": null,
+        "quantity": 2
+      }
+    },
+    {
+      "method": "GET",
+      "uri": "/v3/stores/1001?includeClosed=true&includeDisabled=false",
+      "body": null
+    },
+    {
+      "method": "GET",
+      "uri": "/v1/authenticated/customers/4242/baskets/stores/1001",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "uri": "/v1/authenticated/customers/4242/baskets",
+      "body": {
+        "products": [
+          {
+            "ids": {
+              "id": "6001",
+              "externalId": "ext-6001",
+              "storeProductId": "sp-6001"
+            },
+            "quantity": {
+              "increments": 2
+            },
+            "customizations": [
+              {
+                "ids": {
+                  "groupLegacyId": 71,
+                  "groupId": "ag-71",
+                  "groupExternalId": "gx-71",
+                  "groupPosition": 0,
+                  "legacyId": 702,
+                  "externalId": "ox-702",
+                  "id": "a-702"
+                },
+                "name": "Large",
+                "quantity": {
+                  "increments": 1
+                },
+                "customizationName": "Large",
+                "groupName": "Size"
+              },
+              {
+                "ids": {
+                  "groupLegacyId": 73,
+                  "groupId": "ag-73",
+                  "groupExternalId": "gx-73",
+                  "groupPosition": 2,
+                  "legacyId": 721,
+                  "externalId": "ox-721",
+                  "id": "a-721"
+                },
+                "name": "Tomato",
+                "quantity": {
+                  "increments": 1
+                },
+                "customizationName": "Tomato",
+                "groupName": "Sauce"
+              }
+            ]
+          }
+        ],
+        "storeId": 1001,
+        "storeAddressId": 2001,
+        "storeCategoryId": 4,
+        "handlingStrategy": "DELIVERY"
+      }
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

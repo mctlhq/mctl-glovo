@@ -1,0 +1,43 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-1",
+    "externalId": "external-1",
+    "storeProductId": "store-product-1",
+    "name": "Pizza Margherita",
+    "priceInfo": {
+     "displayText": "EUR 12.00"
+    },
+    "attributeGroups": [
+     {
+      "id": "group-legacy",
+      "attributeGroupId": "group-stable",
+      "externalId": "group-external",
+      "name": "Size",
+      "minSelection": 1,
+      "attributes": [
+       {
+        "id": "option-legacy",
+        "attributeId": "option-stable",
+        "externalId": "option-external",
+        "name": "Large"
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": true
+      }
+     }
+    ]
+   }
+  }
+ }
+}

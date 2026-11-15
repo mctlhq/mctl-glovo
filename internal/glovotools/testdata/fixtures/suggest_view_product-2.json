@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-2",
+    "externalId": "external-2",
+    "storeProductId": "store-product-2",
+    "name": "Pizza Diavola",
+    "priceInfo": {
+     "displayText": "EUR 12.00"
+    },
+    "attributeGroups": []
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": true
+      }
+     }
+    ]
+   }
+  }
+ }
+}
