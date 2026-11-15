@@ -1,0 +1,81 @@
+{
+ "money": [
+  12.5,
+  10,
+  null,
+  7.2,
+  -3.1,
+  null,
+  1.005,
+  0.125,
+  1,
+  1.2,
+  4,
+  5.5,
+  0,
+  null
+ ],
+ "handler": {
+  "orders": 10,
+  "detailed_orders": 1,
+  "card_only_orders": 9,
+  "stores": 8,
+  "parseable_visible_totals": 8,
+  "visible_total_amount": 28.85,
+  "top_stores": [
+   {
+    "store": "Pizzeria Sol",
+    "orders": 2,
+    "visible_total_amount": 22.5,
+    "parseable_visible_totals": 2
+   },
+   {
+    "store": "Unknown store",
+    "orders": 2,
+    "visible_total_amount": -3.1,
+    "parseable_visible_totals": 1
+   },
+   {
+    "store": "Bakery Lune",
+    "orders": 1,
+    "visible_total_amount": 7.2,
+    "parseable_visible_totals": 1
+   },
+   {
+    "store": "Épicerie Verte",
+    "orders": 1,
+    "visible_total_amount": 1,
+    "parseable_visible_totals": 1
+   },
+   {
+    "store": "Zeta",
+    "orders": 1,
+    "visible_total_amount": 1,
+    "parseable_visible_totals": 1
+   },
+   {
+    "store": "apple Market",
+    "orders": 1,
+    "visible_total_amount": 0.13,
+    "parseable_visible_totals": 1
+   },
+   {
+    "store": "Apple Market",
+    "orders": 1,
+    "visible_total_amount": 0.13,
+    "parseable_visible_totals": 1
+   },
+   {
+    "store": "bakery Lune",
+    "orders": 1,
+    "visible_total_amount": 0,
+    "parseable_visible_totals": 0
+   }
+  ],
+  "discovery": {
+   "pages": 2,
+   "stopped_reason": "no_next_cursor",
+   "strategy": "order-id-cursor"
+  }
+ }
+}

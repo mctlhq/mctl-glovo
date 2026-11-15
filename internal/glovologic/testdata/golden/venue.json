@@ -1,0 +1,594 @@
+{
+ "prepared": [
+  [
+   "sushi mar",
+   "Sushi Mar",
+   42
+  ],
+  [
+   "ramen oeste",
+   "Ramen Oeste",
+   41
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   40
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   39
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   38
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   37
+  ],
+  [
+   "ramen oeste",
+   "Ramen Oeste",
+   36
+  ],
+  [
+   "taqueria este",
+   "Taqueria Este",
+   35
+  ],
+  [
+   "ramen oeste",
+   "Ramen Oeste",
+   34
+  ],
+  [
+   "burger norte",
+   "Burger Norte",
+   33
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   32
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   31
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   30
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   29
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   28
+  ],
+  [
+   "burger norte",
+   "Burger Norte",
+   27
+  ],
+  [
+   "burger norte",
+   "Burger Norte",
+   26
+  ],
+  [
+   "burger norte",
+   "Burger Norte",
+   25
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   24
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   23
+  ],
+  [
+   "poke sur",
+   "Poke Sur",
+   22
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   21
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   20
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   19
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   18
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   16
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   15
+  ],
+  [
+   "cafe central",
+   "Café Central",
+   14
+  ],
+  [
+   "poke sur",
+   "Poke Sur",
+   13
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   12
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   11
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   9
+  ],
+  [
+   "burger norte",
+   "Burger Norte",
+   8
+  ],
+  [
+   "burger norte",
+   "Burger Norte",
+   7
+  ],
+  [
+   "sushi mar",
+   "Sushi Mar",
+   6
+  ],
+  [
+   "taqueria este",
+   "Taqueria Este",
+   5
+  ],
+  [
+   "poke sur",
+   "Poke Sur",
+   4
+  ],
+  [
+   "burger norte",
+   "Burger Norte",
+   3
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   2
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   1
+  ],
+  [
+   "pizzeria sol",
+   "Pizzeria Sol",
+   0
+  ]
+ ],
+ "prepared_indexed": [
+  [
+   "sushi mar",
+   6
+  ],
+  [
+   "sushi mar",
+   12
+  ],
+  [
+   "burger norte",
+   3
+  ],
+  [
+   "burger norte",
+   8
+  ],
+  [
+   "taqueria este",
+   5
+  ],
+  [
+   "pizzeria sol",
+   11
+  ],
+  [
+   "pizzeria sol",
+   2
+  ],
+  [
+   "cafe central",
+   14
+  ],
+  [
+   "poke sur",
+   4
+  ],
+  [
+   "sushi mar",
+   16
+  ],
+  [
+   "pizzeria sol",
+   1
+  ],
+  [
+   "burger norte",
+   7
+  ],
+  [
+   "poke sur",
+   13
+  ],
+  [
+   "pizzeria sol",
+   9
+  ],
+  [
+   "sushi mar",
+   15
+  ],
+  [
+   "pizzeria sol",
+   0
+  ]
+ ],
+ "split": [
+  28,
+  6,
+  7
+ ],
+ "rank": {
+  "cards": 41,
+  "venues": [
+   [
+    "pizzeria sol",
+    {
+     "name": "Pizzeria Sol",
+     "order_count": 14,
+     "last_order_age": 0,
+     "raw_score": 6.223931145,
+     "score": 1,
+     "short": 3.051547106,
+     "medium": 7.747106664,
+     "long": 11.870127963
+    }
+   ],
+   [
+    "sushi mar",
+    {
+     "name": "Sushi Mar",
+     "order_count": 11,
+     "last_order_age": 6,
+     "raw_score": 3.892023792,
+     "score": 0.625332077,
+     "short": 1.023801921,
+     "medium": 5.247093178,
+     "long": 9.029974389
+    }
+   ],
+   [
+    "burger norte",
+    {
+     "name": "Burger Norte",
+     "order_count": 7,
+     "last_order_age": 3,
+     "raw_score": 3.033971882,
+     "score": 0.487468741,
+     "short": 1.297593808,
+     "medium": 3.95217836,
+     "long": 5.99760735
+    }
+   ],
+   [
+    "poke sur",
+    {
+     "name": "Poke Sur",
+     "order_count": 3,
+     "last_order_age": 4,
+     "raw_score": 1.48496158,
+     "score": 0.238589011,
+     "short": 0.719347899,
+     "medium": 1.961144893,
+     "long": 2.68472081
+    }
+   ],
+   [
+    "taqueria este",
+    {
+     "name": "Taqueria Este",
+     "order_count": 2,
+     "last_order_age": 5,
+     "raw_score": 0.896972464,
+     "score": 0.144116707,
+     "short": 0.444249488,
+     "medium": 1.1200385,
+     "long": 1.694180853
+    }
+   ],
+   [
+    "ramen oeste",
+    {
+     "name": "Ramen Oeste",
+     "order_count": 3,
+     "last_order_age": 32,
+     "raw_score": 0.710164316,
+     "score": 0.114102213,
+     "short": 0.022027406,
+     "medium": 0.865941936,
+     "long": 2.19684016
+    }
+   ],
+   [
+    "cafe central",
+    {
+     "name": "Café Central",
+     "order_count": 1,
+     "last_order_age": 13,
+     "raw_score": 0.433618813,
+     "score": 0.069669603,
+     "short": 0.143587294,
+     "medium": 0.615572207,
+     "long": 0.885767519
+    }
+   ]
+  ]
+ },
+ "rank_small": {
+  "cards": 3,
+  "venues": [
+   [
+    "old",
+    {
+     "name": "Old",
+     "order_count": 2,
+     "last_order_age": 1,
+     "raw_score": 1.650523654,
+     "score": 1,
+     "short": 1.417612239,
+     "medium": 1.834283454,
+     "long": 1.95716249
+    }
+   ],
+   [
+    "recent",
+    {
+     "name": "Recent",
+     "order_count": 1,
+     "last_order_age": 0,
+     "raw_score": 0.923330798,
+     "score": 0.559416883,
+     "short": 0.870550563,
+     "medium": 0.965936329,
+     "long": 0.991373087
+    }
+   ]
+  ]
+ },
+ "evaluation": {
+  "dataset": {
+   "captured_orders": 46,
+   "usable_venue_orders": 41,
+   "excluded_cancelled_or_invalid": 5,
+   "unique_venues": 7,
+   "product_model": "not_evaluated_from_order_cards"
+  },
+  "split": {
+   "strategy": "70/15/15 chronological holdout",
+   "train_orders": 28,
+   "validation_orders": 6,
+   "final_test_orders": 7,
+   "rolling_updates_after_scoring": true
+  },
+  "selection": {
+   "model": {
+    "name": "transition",
+    "complexity": 2,
+    "frequency": 0,
+    "recency": 0,
+    "transition": 1,
+    "halfLife": 50
+   },
+   "validation": {
+    "events": 6,
+    "precision_at_5": 0.1667,
+    "recall_at_5": 0.8333,
+    "ndcg_at_5": 0.627,
+    "ndcg_at_5_se": 0.1514,
+    "repeat_recall_at_5": 0.8333,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.8571
+   },
+   "rule": "simplest model within one standard error of best validation NDCG@5",
+   "selection_used_test_data": false
+  },
+  "final_test": {
+   "popularity": {
+    "events": 7,
+    "precision_at_5": 0.1714,
+    "recall_at_5": 0.8571,
+    "ndcg_at_5": 0.6454,
+    "ndcg_at_5_se": 0.1449,
+    "repeat_recall_at_5": 0.8571,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.7143
+   },
+   "selected": {
+    "events": 7,
+    "precision_at_5": 0.1714,
+    "recall_at_5": 0.8571,
+    "ndcg_at_5": 0.5553,
+    "ndcg_at_5_se": 0.1329,
+    "repeat_recall_at_5": 0.8571,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.8571
+   }
+  }
+ },
+ "evaluation_oldest_first": {
+  "dataset": {
+   "captured_orders": 46,
+   "usable_venue_orders": 41,
+   "excluded_cancelled_or_invalid": 5,
+   "unique_venues": 7,
+   "product_model": "not_evaluated_from_order_cards"
+  },
+  "split": {
+   "strategy": "70/15/15 chronological holdout",
+   "train_orders": 28,
+   "validation_orders": 6,
+   "final_test_orders": 7,
+   "rolling_updates_after_scoring": true
+  },
+  "selection": {
+   "model": {
+    "name": "popularity",
+    "complexity": 1,
+    "frequency": 1,
+    "recency": 0,
+    "transition": 0,
+    "halfLife": 50
+   },
+   "validation": {
+    "events": 6,
+    "precision_at_5": 0.1333,
+    "recall_at_5": 0.6667,
+    "ndcg_at_5": 0.377,
+    "ndcg_at_5_se": 0.1216,
+    "repeat_recall_at_5": 0.8,
+    "novel_target_share": 0.1667,
+    "catalog_coverage_at_5": 0.7143
+   },
+   "rule": "simplest model within one standard error of best validation NDCG@5",
+   "selection_used_test_data": false
+  },
+  "final_test": {
+   "popularity": {
+    "events": 7,
+    "precision_at_5": 0.1714,
+    "recall_at_5": 0.8571,
+    "ndcg_at_5": 0.6641,
+    "ndcg_at_5_se": 0.143,
+    "repeat_recall_at_5": 0.8571,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.8571
+   },
+   "selected": {
+    "events": 7,
+    "precision_at_5": 0.1714,
+    "recall_at_5": 0.8571,
+    "ndcg_at_5": 0.6641,
+    "ndcg_at_5_se": 0.143,
+    "repeat_recall_at_5": 0.8571,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.8571
+   }
+  }
+ },
+ "evaluation_indexed": {
+  "dataset": {
+   "captured_orders": 20,
+   "usable_venue_orders": 16,
+   "excluded_cancelled_or_invalid": 4,
+   "unique_venues": 6,
+   "product_model": "not_evaluated_from_order_cards"
+  },
+  "split": {
+   "strategy": "70/15/15 chronological holdout",
+   "train_orders": 11,
+   "validation_orders": 2,
+   "final_test_orders": 3,
+   "rolling_updates_after_scoring": true
+  },
+  "selection": {
+   "model": {
+    "name": "popularity",
+    "complexity": 1,
+    "frequency": 1,
+    "recency": 0,
+    "transition": 0,
+    "halfLife": 50
+   },
+   "validation": {
+    "events": 2,
+    "precision_at_5": 0.2,
+    "recall_at_5": 1,
+    "ndcg_at_5": 0.4434,
+    "ndcg_at_5_se": 0.0566,
+    "repeat_recall_at_5": 1,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.8333
+   },
+   "rule": "simplest model within one standard error of best validation NDCG@5",
+   "selection_used_test_data": false
+  },
+  "final_test": {
+   "popularity": {
+    "events": 3,
+    "precision_at_5": 0.2,
+    "recall_at_5": 1,
+    "ndcg_at_5": 0.7103,
+    "ndcg_at_5_se": 0.1497,
+    "repeat_recall_at_5": 1,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.8333
+   },
+   "selected": {
+    "events": 3,
+    "precision_at_5": 0.2,
+    "recall_at_5": 1,
+    "ndcg_at_5": 0.7103,
+    "ndcg_at_5_se": 0.1497,
+    "repeat_recall_at_5": 1,
+    "novel_target_share": 0,
+    "catalog_coverage_at_5": 0.8333
+   }
+  }
+ },
+ "too_few_error": "At least 3 usable orders are required.",
+ "normalized": [
+  "cafe delice",
+  "aeiou n",
+  "",
+  "a b c"
+ ]
+}

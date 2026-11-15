@@ -1,0 +1,809 @@
+{
+ "inputs": {
+  "easy_reorder": {
+   "20": [
+    {
+     "id": "1",
+     "product_id": "1",
+     "external_id": "ext-1",
+     "store_product_id": "sp-1",
+     "name": "Whole Milk 1L",
+     "price": "1.50 EUR",
+     "amount": 1.5,
+     "available": true,
+     "collection_type": "EasyReorder",
+     "ordered_before": true,
+     "source": "easy_reorder"
+    },
+    {
+     "id": "2",
+     "product_id": "2",
+     "external_id": "ext-2",
+     "store_product_id": "sp-2",
+     "name": "Pan de Molde Blanco",
+     "price": "1.20 EUR",
+     "available": null,
+     "collection_type": "EasyReorder",
+     "ordered_before": true,
+     "source": "easy_reorder"
+    },
+    {
+     "id": "3",
+     "product_id": "3",
+     "external_id": "ext-3",
+     "store_product_id": "sp-3",
+     "name": "Huevos Frescos M",
+     "available": null,
+     "collection_type": "EasyReorder",
+     "ordered_before": true,
+     "source": "easy_reorder"
+    }
+   ],
+   "22": []
+  },
+  "search": {
+   "20|Pan de Molde Integral": [
+    {
+     "id": "11",
+     "product_id": "11",
+     "external_id": "ext-11",
+     "store_product_id": "sp-11",
+     "name": "Pan de Molde Integral 500g",
+     "price": "€1.80",
+     "amount": 1.8,
+     "available": null
+    },
+    {
+     "id": "12",
+     "product_id": "12",
+     "external_id": "ext-12",
+     "store_product_id": "sp-12",
+     "name": "PAN DE MOLDE INTEGRAL",
+     "available": false
+    },
+    {
+     "id": "13",
+     "product_id": "13",
+     "external_id": "ext-13",
+     "store_product_id": "sp-13",
+     "name": "pan de molde integral",
+     "available": true
+    },
+    {
+     "id": "2",
+     "product_id": "2",
+     "external_id": "ext-2",
+     "store_product_id": "sp-2",
+     "name": "Pan de Molde Blanco",
+     "available": null
+    }
+   ],
+   "20|Huevos Camperos": [
+    {
+     "id": "21",
+     "product_id": "21",
+     "external_id": "ext-21",
+     "name": "Huevos Camperos L",
+     "available": null
+    },
+    {
+     "id": "22",
+     "product_id": "22",
+     "external_id": "ext-22",
+     "store_product_id": "sp-22",
+     "name": "Huevos camperos XL",
+     "available": null,
+     "category_id": 7
+    }
+   ],
+   "20|Tomate Triturado": [
+    {
+     "id": "31",
+     "product_id": "31",
+     "external_id": "ext-31",
+     "store_product_id": "sp-31",
+     "name": "Tomate triturado 400g",
+     "available": null
+    },
+    {
+     "id": "32",
+     "product_id": "32",
+     "external_id": "ext-32",
+     "store_product_id": "sp-32",
+     "name": "Tomate frito",
+     "available": null
+    }
+   ],
+   "22|Arroz Bomba": [
+    {
+     "id": "41",
+     "product_id": "41",
+     "external_id": "ext-41",
+     "store_product_id": "sp-41",
+     "name": "Arroz Bomba",
+     "available": null
+    }
+   ],
+   "22|Aceite de Oliva": []
+  }
+ },
+ "plans": {
+  "defaults": {
+   "order_id": 201,
+   "store": "Market Uno",
+   "store_id": 20,
+   "store_address_id": 30,
+   "native_reorder_allowed": true,
+   "items_count": 5,
+   "resolved_items": 3,
+   "unresolved_items": 2,
+   "searches_used": 3,
+   "search_limit": 5,
+   "can_prepare_after_review": false,
+   "mutates_basket": false,
+   "next_step": "Inspect each selected candidate with glovo_get_product, reselect required options, obtain explicit approval, then call glovo_add_to_basket. This plan never places an order.",
+   "items": [
+    {
+     "index": 0,
+     "previous_name": "Whole Milk 1L",
+     "previous_quantity": 2,
+     "previous_customizations": "Cold",
+     "requires_option_reselection": true,
+     "resolved_current_product": true,
+     "requires_live_product_check": true,
+     "candidates": [
+      {
+       "id": "1",
+       "product_id": "1",
+       "external_id": "ext-1",
+       "store_product_id": "sp-1",
+       "name": "Whole Milk 1L",
+       "price": "1.50 EUR",
+       "amount": 1.5,
+       "available": true,
+       "collection_type": "EasyReorder",
+       "ordered_before": true,
+       "source": "easy_reorder",
+       "match_score": 1
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "previous_name": "Pan de Molde Integral",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": true,
+     "requires_live_product_check": true,
+     "candidates": [
+      {
+       "id": "13",
+       "product_id": "13",
+       "external_id": "ext-13",
+       "store_product_id": "sp-13",
+       "name": "pan de molde integral",
+       "available": true,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 1
+      },
+      {
+       "id": "12",
+       "product_id": "12",
+       "external_id": "ext-12",
+       "store_product_id": "sp-12",
+       "name": "PAN DE MOLDE INTEGRAL",
+       "available": false,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 1
+      },
+      {
+       "id": "11",
+       "product_id": "11",
+       "external_id": "ext-11",
+       "store_product_id": "sp-11",
+       "name": "Pan de Molde Integral 500g",
+       "price": "€1.80",
+       "amount": 1.8,
+       "available": null,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 0.9
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "previous_name": "Huevos Camperos",
+     "previous_quantity": 12,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": [
+      {
+       "id": "21",
+       "product_id": "21",
+       "external_id": "ext-21",
+       "name": "Huevos Camperos L",
+       "available": null,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 0.9
+      },
+      {
+       "id": "22",
+       "product_id": "22",
+       "external_id": "ext-22",
+       "store_product_id": "sp-22",
+       "name": "Huevos camperos XL",
+       "available": null,
+       "category_id": 7,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 0.9
+      },
+      {
+       "id": "3",
+       "product_id": "3",
+       "external_id": "ext-3",
+       "store_product_id": "sp-3",
+       "name": "Huevos Frescos M",
+       "available": null,
+       "collection_type": "EasyReorder",
+       "ordered_before": true,
+       "source": "easy_reorder",
+       "match_score": 0.25
+      }
+     ]
+    },
+    {
+     "index": 3,
+     "previous_name": "Tomate Triturado",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": true,
+     "requires_live_product_check": true,
+     "candidates": [
+      {
+       "id": "31",
+       "product_id": "31",
+       "external_id": "ext-31",
+       "store_product_id": "sp-31",
+       "name": "Tomate triturado 400g",
+       "available": null,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 0.9
+      },
+      {
+       "id": "32",
+       "product_id": "32",
+       "external_id": "ext-32",
+       "store_product_id": "sp-32",
+       "name": "Tomate frito",
+       "available": null,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 0.333
+      }
+     ]
+    },
+    {
+     "index": 4,
+     "previous_name": null,
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": []
+    }
+   ]
+  },
+  "search_limit_one": {
+   "order_id": 201,
+   "store": "Market Uno",
+   "store_id": 20,
+   "store_address_id": 30,
+   "native_reorder_allowed": true,
+   "items_count": 5,
+   "resolved_items": 2,
+   "unresolved_items": 3,
+   "searches_used": 1,
+   "search_limit": 1,
+   "can_prepare_after_review": false,
+   "mutates_basket": false,
+   "next_step": "Inspect each selected candidate with glovo_get_product, reselect required options, obtain explicit approval, then call glovo_add_to_basket. This plan never places an order.",
+   "items": [
+    {
+     "index": 0,
+     "previous_name": "Whole Milk 1L",
+     "previous_quantity": 2,
+     "previous_customizations": "Cold",
+     "requires_option_reselection": true,
+     "resolved_current_product": true,
+     "requires_live_product_check": true,
+     "candidates": [
+      {
+       "id": "1",
+       "product_id": "1",
+       "external_id": "ext-1",
+       "store_product_id": "sp-1",
+       "name": "Whole Milk 1L",
+       "price": "1.50 EUR",
+       "amount": 1.5,
+       "available": true,
+       "collection_type": "EasyReorder",
+       "ordered_before": true,
+       "source": "easy_reorder",
+       "match_score": 1
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "previous_name": "Pan de Molde Integral",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": true,
+     "requires_live_product_check": true,
+     "candidates": [
+      {
+       "id": "13",
+       "product_id": "13",
+       "external_id": "ext-13",
+       "store_product_id": "sp-13",
+       "name": "pan de molde integral",
+       "available": true,
+       "store_id": "20",
+       "store_address_id": 30,
+       "source": "store_search",
+       "match_score": 1
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "previous_name": "Huevos Camperos",
+     "previous_quantity": 12,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": [
+      {
+       "id": "3",
+       "product_id": "3",
+       "external_id": "ext-3",
+       "store_product_id": "sp-3",
+       "name": "Huevos Frescos M",
+       "available": null,
+       "collection_type": "EasyReorder",
+       "ordered_before": true,
+       "source": "easy_reorder",
+       "match_score": 0.25
+      }
+     ]
+    },
+    {
+     "index": 3,
+     "previous_name": "Tomate Triturado",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": []
+    },
+    {
+     "index": 4,
+     "previous_name": null,
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": []
+    }
+   ]
+  },
+  "no_searches": {
+   "order_id": 201,
+   "store": "Market Uno",
+   "store_id": 20,
+   "store_address_id": 30,
+   "native_reorder_allowed": true,
+   "items_count": 5,
+   "resolved_items": 1,
+   "unresolved_items": 4,
+   "searches_used": 0,
+   "search_limit": 0,
+   "can_prepare_after_review": false,
+   "mutates_basket": false,
+   "next_step": "Inspect each selected candidate with glovo_get_product, reselect required options, obtain explicit approval, then call glovo_add_to_basket. This plan never places an order.",
+   "items": [
+    {
+     "index": 0,
+     "previous_name": "Whole Milk 1L",
+     "previous_quantity": 2,
+     "previous_customizations": "Cold",
+     "requires_option_reselection": true,
+     "resolved_current_product": true,
+     "requires_live_product_check": true,
+     "candidates": [
+      {
+       "id": "1",
+       "product_id": "1",
+       "external_id": "ext-1",
+       "store_product_id": "sp-1",
+       "name": "Whole Milk 1L",
+       "price": "1.50 EUR",
+       "amount": 1.5,
+       "available": true,
+       "collection_type": "EasyReorder",
+       "ordered_before": true,
+       "source": "easy_reorder",
+       "match_score": 1
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "previous_name": "Pan de Molde Integral",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": [
+      {
+       "id": "2",
+       "product_id": "2",
+       "external_id": "ext-2",
+       "store_product_id": "sp-2",
+       "name": "Pan de Molde Blanco",
+       "price": "1.20 EUR",
+       "available": null,
+       "collection_type": "EasyReorder",
+       "ordered_before": true,
+       "source": "easy_reorder",
+       "match_score": 0.6
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "previous_name": "Huevos Camperos",
+     "previous_quantity": 12,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": [
+      {
+       "id": "3",
+       "product_id": "3",
+       "external_id": "ext-3",
+       "store_product_id": "sp-3",
+       "name": "Huevos Frescos M",
+       "available": null,
+       "collection_type": "EasyReorder",
+       "ordered_before": true,
+       "source": "easy_reorder",
+       "match_score": 0.25
+      }
+     ]
+    },
+    {
+     "index": 3,
+     "previous_name": "Tomate Triturado",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": []
+    },
+    {
+     "index": 4,
+     "previous_name": null,
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": []
+    }
+   ]
+  },
+  "missing_address": {
+   "order_id": "202",
+   "store": "Sin Direccion",
+   "store_id": "21",
+   "store_address_id": null,
+   "native_reorder_allowed": false,
+   "items_count": 1,
+   "resolved_items": 0,
+   "unresolved_items": 1,
+   "searches_used": 0,
+   "search_limit": 5,
+   "can_prepare_after_review": false,
+   "mutates_basket": false,
+   "next_step": "Inspect each selected candidate with glovo_get_product, reselect required options, obtain explicit approval, then call glovo_add_to_basket. This plan never places an order.",
+   "items": [
+    {
+     "index": 0,
+     "previous_name": "Agua Mineral",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": []
+    }
+   ]
+  },
+  "null_order": {
+   "store_id": null,
+   "store_address_id": null,
+   "items_count": 0,
+   "resolved_items": 0,
+   "unresolved_items": 0,
+   "searches_used": 0,
+   "search_limit": 5,
+   "can_prepare_after_review": false,
+   "mutates_basket": false,
+   "next_step": "Inspect each selected candidate with glovo_get_product, reselect required options, obtain explicit approval, then call glovo_add_to_basket. This plan never places an order.",
+   "items": []
+  },
+  "store_object_ids": {
+   "order_id": "X-204",
+   "store": null,
+   "store_id": 22,
+   "store_address_id": "33",
+   "native_reorder_allowed": true,
+   "items_count": 2,
+   "resolved_items": 1,
+   "unresolved_items": 1,
+   "searches_used": 2,
+   "search_limit": 5,
+   "can_prepare_after_review": false,
+   "mutates_basket": false,
+   "next_step": "Inspect each selected candidate with glovo_get_product, reselect required options, obtain explicit approval, then call glovo_add_to_basket. This plan never places an order.",
+   "items": [
+    {
+     "index": 0,
+     "previous_name": "Arroz Bomba",
+     "previous_quantity": 1,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": true,
+     "requires_live_product_check": true,
+     "candidates": [
+      {
+       "id": "41",
+       "product_id": "41",
+       "external_id": "ext-41",
+       "store_product_id": "sp-41",
+       "name": "Arroz Bomba",
+       "available": null,
+       "store_id": "22",
+       "store_address_id": "33",
+       "source": "store_search",
+       "match_score": 1
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "previous_name": "Aceite de Oliva",
+     "previous_quantity": 2,
+     "previous_customizations": null,
+     "requires_option_reselection": false,
+     "resolved_current_product": false,
+     "requires_live_product_check": false,
+     "candidates": []
+    }
+   ]
+  }
+ },
+ "calls": {
+  "defaults": [
+   [
+    "content",
+    "20",
+    "30",
+    true
+   ],
+   [
+    "search",
+    "20",
+    "30",
+    "Pan de Molde Integral"
+   ],
+   [
+    "search",
+    "20",
+    "30",
+    "Huevos Camperos"
+   ],
+   [
+    "search",
+    "20",
+    "30",
+    "Tomate Triturado"
+   ]
+  ],
+  "search_limit_one": [
+   [
+    "content",
+    "20",
+    "30",
+    true
+   ],
+   [
+    "search",
+    "20",
+    "30",
+    "Pan de Molde Integral"
+   ]
+  ],
+  "no_searches": [
+   [
+    "content",
+    "20",
+    "30",
+    true
+   ]
+  ],
+  "missing_address": [],
+  "null_order": [],
+  "store_object_ids": [
+   [
+    "content",
+    "22",
+    "33",
+    true
+   ],
+   [
+    "search",
+    "22",
+    "33",
+    "Arroz Bomba"
+   ],
+   [
+    "search",
+    "22",
+    "33",
+    "Aceite de Oliva"
+   ]
+  ]
+ },
+ "direct": {
+  "order_id": 201,
+  "store": "Market Uno",
+  "store_id": 20,
+  "store_address_id": 30,
+  "native_reorder_allowed": true,
+  "items_count": 5,
+  "resolved_items": 1,
+  "unresolved_items": 4,
+  "searches_used": 1,
+  "search_limit": 2,
+  "can_prepare_after_review": false,
+  "mutates_basket": false,
+  "next_step": "Inspect each selected candidate with glovo_get_product, reselect required options, obtain explicit approval, then call glovo_add_to_basket. This plan never places an order.",
+  "items": [
+   {
+    "index": 0,
+    "previous_name": "Whole Milk 1L",
+    "previous_quantity": 2,
+    "previous_customizations": "Cold",
+    "requires_option_reselection": true,
+    "resolved_current_product": true,
+    "requires_live_product_check": true,
+    "candidates": [
+     {
+      "product_id": "1",
+      "external_id": "e",
+      "store_product_id": "s",
+      "name": "Whole Milk 1L",
+      "available": true,
+      "match_score": 1
+     }
+    ]
+   },
+   {
+    "index": 1,
+    "previous_name": "Pan de Molde Integral",
+    "previous_quantity": 1,
+    "previous_customizations": null,
+    "requires_option_reselection": false,
+    "resolved_current_product": false,
+    "requires_live_product_check": false,
+    "candidates": [
+     {
+      "product_id": "2",
+      "external_id": "e",
+      "store_product_id": "s",
+      "name": "Pan",
+      "available": false,
+      "match_score": 0.95
+     }
+    ]
+   },
+   {
+    "index": 2,
+    "previous_name": "Huevos Camperos",
+    "previous_quantity": 12,
+    "previous_customizations": null,
+    "requires_option_reselection": false,
+    "resolved_current_product": false,
+    "requires_live_product_check": false,
+    "candidates": [
+     {
+      "product_id": "3",
+      "external_id": "",
+      "store_product_id": "s",
+      "name": "Huevos",
+      "match_score": 0.9
+     }
+    ]
+   },
+   {
+    "index": 3,
+    "previous_name": "Tomate Triturado",
+    "previous_quantity": 1,
+    "previous_customizations": null,
+    "requires_option_reselection": false,
+    "resolved_current_product": false,
+    "requires_live_product_check": false,
+    "candidates": [
+     {
+      "product_id": "4",
+      "external_id": "e",
+      "store_product_id": "s",
+      "name": "Tomate",
+      "match_score": 0.899
+     }
+    ]
+   },
+   {
+    "index": 4,
+    "previous_name": null,
+    "previous_quantity": 1,
+    "previous_customizations": null,
+    "requires_option_reselection": false,
+    "resolved_current_product": false,
+    "requires_live_product_check": false,
+    "candidates": []
+   }
+  ]
+ },
+ "match_scores": [
+  1,
+  0,
+  1,
+  0.9,
+  0.5,
+  1,
+  0.059,
+  0,
+  0,
+  0.9,
+  0.429,
+  0.2
+ ]
+}

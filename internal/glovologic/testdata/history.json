@@ -1,0 +1,189 @@
+{
+ "discovery": {
+  "orders": [
+   {
+    "order_id": 101,
+    "store": "Market Uno",
+    "total": "6,70 €"
+   },
+   {
+    "order_id": 102,
+    "store": "Market Uno",
+    "total": "3,50 €"
+   },
+   {
+    "order_id": 108,
+    "store": "Market Dos",
+    "total": "2,00 €"
+   },
+   {
+    "order_id": "103",
+    "store": "Market Uno",
+    "total": "1,00 €"
+   },
+   {
+    "order_id": 104,
+    "store": "Panaderia Tres",
+    "total": "2,40 €"
+   },
+   {
+    "order_id": "105",
+    "store": "Fruteria Cuatro",
+    "total": "0,90 €"
+   },
+   {
+    "order_id": 106,
+    "store": "Market Uno",
+    "total": "Cancelled"
+   },
+   {
+    "order_id": 107,
+    "store": "Fruteria Cuatro",
+    "total": "1,10 €"
+   },
+   {
+    "order_id": 109,
+    "store": "Market Dos"
+   },
+   {
+    "order_id": 110,
+    "store": "Market Dos",
+    "total": "9,99 €"
+   }
+  ],
+  "pages": [
+   {
+    "cursor": 0,
+    "count": 10,
+    "next_offset": null
+   }
+  ],
+  "count": 10,
+  "stopped_reason": "no_next_cursor",
+  "strategy": "order-id-cursor"
+ },
+ "detail_errors": {
+  "108": "server",
+  "109": "rate_limit"
+ },
+ "details": {
+  "101": {
+   "id": 101,
+   "storeId": 20,
+   "storeAddressId": 30,
+   "storeName": "Market Uno",
+   "currentStatus": {
+    "type": "DELIVERED",
+    "creationTime": 1767225600000
+   },
+   "boughtProducts": [
+    {
+     "name": "Whole Milk 1L",
+     "quantity": "2",
+     "price": "3,00 EUR",
+     "customizationsDescription": "Cold"
+    },
+    {
+     "name": "Pan de Molde",
+     "quantity": {
+      "increments": 1
+     },
+     "price": {
+      "formatted": "1.20 €"
+     }
+    },
+    {
+     "name": "Café Molido",
+     "quantity": "1,5",
+     "price": 2.5
+    }
+   ]
+  },
+  "102": {
+   "id": 102,
+   "creationTime": 1767830400,
+   "products": [
+    {
+     "productName": "whole milk 1 l",
+     "quantity": 1,
+     "price": "1.50 EUR",
+     "description": "Cold"
+    },
+    {
+     "title": "cafe molido",
+     "amount": "2"
+    },
+    {
+     "name": null
+    },
+    null
+   ]
+  },
+  "103": {
+   "id": "103",
+   "createdAt": "2026-01-20T08:30:00Z",
+   "items": [
+    {
+     "name": "Whole Milk 1L",
+     "quantity": "abc",
+     "customizationsDescription": "Warm"
+    },
+    {
+     "name": "Whole Milk 1L",
+     "quantity": "1"
+    }
+   ]
+  },
+  "104": {
+   "id": 104,
+   "orderTime": "2026-02-03T10:00:00.250+01:00",
+   "boughtProducts": [
+    {
+     "name": "Pan de molde",
+     "quantity": "3 units",
+     "price": "2,40 €"
+    }
+   ]
+  },
+  "105": {
+   "orderId": "105",
+   "deliveredAt": "1770000000000",
+   "order": {
+    "products": [
+     {
+      "name": "Zumo Naranja",
+      "quantity": "0"
+     }
+    ]
+   }
+  },
+  "106": {
+   "id": 106,
+   "boughtProducts": [],
+   "products": [
+    {
+     "name": "Ignored Line"
+    }
+   ]
+  },
+  "107": {
+   "id": 107,
+   "createdAt": "not a date",
+   "creationTime": "",
+   "boughtProducts": [
+    {
+     "name": "Zumo naranja"
+    },
+    {
+     "name": "Null Fields",
+     "quantity": {
+      "increments": null
+     },
+     "price": {
+      "formatted": null
+     }
+    }
+   ]
+  }
+ }
+}

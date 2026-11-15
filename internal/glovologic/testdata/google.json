@@ -1,0 +1,38 @@
+{
+  "location": {"latitude": 41.38, "longitude": 2.17},
+  "match_cases": [
+    {"name": "ambiguous", "venue": "Same Pizza", "places": [
+      {"id": "a", "displayName": {"text": "Same Pizza"}, "location": {"latitude": 41.381, "longitude": 2.17}, "businessStatus": "OPERATIONAL"},
+      {"id": "b", "displayName": {"text": "Same Pizza"}, "location": {"latitude": 41.382, "longitude": 2.17}, "businessStatus": "OPERATIONAL"}]},
+    {"name": "closed_and_far", "venue": "Same Pizza", "places": [
+      {"id": "a", "displayName": {"text": "Same Pizza"}, "location": {"latitude": 41.381, "longitude": 2.17}, "businessStatus": "CLOSED_PERMANENTLY"},
+      {"id": "b", "displayName": {"text": "Same Pizza"}, "location": {"latitude": 41.6, "longitude": 2.17}}]},
+    {"name": "best_name_wins", "venue": "Favorite Pizza", "places": [
+      {"id": "a", "displayName": {"text": "Favorite Pizza Gracia"}, "location": {"latitude": 41.381, "longitude": 2.17}},
+      {"id": "b", "displayName": {"text": "Favorite Pizza"}, "location": {"latitude": 41.39, "longitude": 2.17}},
+      null,
+      {"id": "c", "displayName": {"text": "Other"}, "location": {"latitude": 41.38, "longitude": 2.17}}]},
+    {"name": "missing_location", "venue": "Favorite Pizza", "places": [{"id": "a", "displayName": {"text": "Favorite Pizza"}}]},
+    {"name": "far_tie_ok", "venue": "Same Pizza", "places": [
+      {"id": "a", "displayName": {"text": "Same Pizza"}, "location": {"latitude": 41.381, "longitude": 2.17}},
+      {"id": "b", "displayName": {"text": "Same Pizza"}, "location": {"latitude": 41.40, "longitude": 2.17}}]}
+  ],
+  "provider_cases": [
+    {"name": "matched_with_reviews", "venue": "Favorite Pizza", "city": "BCN", "include_reviews": true, "review_limit": 3,
+     "search": {"status": 200, "body": {"places": [{"id": "place 1/x", "displayName": {"text": "Favorite Pizza"}, "location": {"latitude": 41.381, "longitude": 2.17}, "rating": 4.6, "userRatingCount": 700, "googleMapsUri": "https://maps.example.test/place-1", "businessStatus": "OPERATIONAL", "attributions": [{"provider": "Example"}]}]}},
+     "details": {"status": 200, "body": {"attributions": [{"provider": "Review Provider"}], "reviews": [
+        {"text": {"text": "Carefully prepared.", "languageCode": "en"}, "rating": 5, "publishTime": "2026-01-01T00:00:00Z", "relativePublishTimeDescription": "6 months ago", "googleMapsUri": "https://maps.example.test/review-1", "authorAttribution": {"displayName": "Reviewer One", "uri": "https://maps.example.test/profile"}},
+        {"text": {"text": "Fine."}, "rating": "4"},
+        {"rating": 3, "authorAttribution": {}},
+        {"text": {"text": "Not shown"}, "rating": 1}]}}},
+    {"name": "matched_no_reviews", "venue": "Favorite Pizza", "city": "", "include_reviews": false, "review_limit": 3,
+     "search": {"status": 200, "body": {"places": [{"id": "p2", "displayName": {"text": "favorite pizza"}, "location": {"latitude": "41.3805", "longitude": "2.1702"}, "rating": 96, "userRatingCount": "12"}]}}},
+    {"name": "review_failure", "venue": "Favorite Pizza", "city": "BCN", "include_reviews": true, "review_limit": 1,
+     "search": {"status": 200, "body": {"places": [{"id": "p3", "displayName": {"text": "Favorite Pizza"}, "location": {"latitude": 41.381, "longitude": 2.17}}]}},
+     "details": {"status": 500, "body": {}}},
+    {"name": "no_match", "venue": "Favorite Pizza", "city": "BCN", "include_reviews": false, "review_limit": 3,
+     "search": {"status": 200, "body": {}}},
+    {"name": "search_error", "venue": "Favorite Pizza", "city": "BCN", "include_reviews": false, "review_limit": 3,
+     "search": {"status": 503, "body": {}}}
+  ]
+}

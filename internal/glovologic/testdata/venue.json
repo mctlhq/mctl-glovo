@@ -1,0 +1,450 @@
+{
+ "cards": [
+  {
+   "order_id": "1000",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "5,00 €"
+  },
+  {
+   "order_id": "999",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "6,00 €"
+  },
+  {
+   "order_id": "998",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "7,00 €"
+  },
+  {
+   "order_id": "997",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "8,00 €"
+  },
+  {
+   "order_id": "996",
+   "store": "Ramen Oeste",
+   "status": "CANCELLED",
+   "total": "9,00 €"
+  },
+  {
+   "order_id": "995",
+   "store": "Poke Sur",
+   "status": "DELIVERED",
+   "total": "10,00 €"
+  },
+  {
+   "order_id": "994",
+   "store": "Taqueria Este",
+   "status": "DELIVERED",
+   "total": "11,00 €"
+  },
+  {
+   "order_id": "993",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "12,00 €"
+  },
+  {
+   "order_id": "992",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "13,00 €"
+  },
+  {
+   "order_id": "991",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "Order cancelled"
+  },
+  {
+   "order_id": "990",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "6,00 €"
+  },
+  {
+   "order_id": "989",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "7,00 €"
+  },
+  {
+   "order_id": "988",
+   "store": "",
+   "status": "DELIVERED",
+   "total": "8,00 €",
+   "store_name": "Kiosko"
+  },
+  {
+   "order_id": "987",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "9,00 €"
+  },
+  {
+   "order_id": "986",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "10,00 €"
+  },
+  {
+   "order_id": "985",
+   "store": "Poke Sur",
+   "status": "DELIVERED",
+   "total": "11,00 €"
+  },
+  {
+   "order_id": "984",
+   "store": "Café Central",
+   "status": "DELIVERED",
+   "total": "12,00 €"
+  },
+  {
+   "order_id": "983",
+   "store": "Ramen Oeste",
+   "status": "CANCELLED",
+   "total": "13,00 €"
+  },
+  {
+   "order_id": "982",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "5,00 €"
+  },
+  {
+   "order_id": "981",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "6,00 €"
+  },
+  {
+   "order_id": "980",
+   "store": "!!!",
+   "status": "DELIVERED",
+   "total": "7,00 €"
+  },
+  {
+   "order_id": "979",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "8,00 €"
+  },
+  {
+   "order_id": "978",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "9,00 €"
+  },
+  {
+   "order_id": "977",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "10,00 €"
+  },
+  {
+   "order_id": "976",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "11,00 €"
+  },
+  {
+   "order_id": "975",
+   "store": "Poke Sur",
+   "status": "DELIVERED",
+   "total": "12,00 €"
+  },
+  {
+   "order_id": "974",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "13,00 €"
+  },
+  {
+   "order_id": "973",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "5,00 €"
+  },
+  {
+   "order_id": "972",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "6,00 €"
+  },
+  {
+   "order_id": "971",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "7,00 €"
+  },
+  {
+   "order_id": "970",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "8,00 €"
+  },
+  {
+   "order_id": "969",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "9,00 €"
+  },
+  {
+   "order_id": "968",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "10,00 €"
+  },
+  {
+   "order_id": "967",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "11,00 €"
+  },
+  {
+   "order_id": "966",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "12,00 €"
+  },
+  {
+   "order_id": "965",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "13,00 €"
+  },
+  {
+   "order_id": "964",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "5,00 €"
+  },
+  {
+   "order_id": "963",
+   "store": "Ramen Oeste",
+   "status": "DELIVERED",
+   "total": "6,00 €"
+  },
+  {
+   "order_id": "962",
+   "store": "Taqueria Este",
+   "status": "DELIVERED",
+   "total": "7,00 €"
+  },
+  {
+   "order_id": "961",
+   "store": "Ramen Oeste",
+   "status": "DELIVERED",
+   "total": "8,00 €"
+  },
+  {
+   "order_id": "960",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "9,00 €"
+  },
+  {
+   "order_id": "959",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "10,00 €"
+  },
+  {
+   "order_id": "958",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "11,00 €"
+  },
+  {
+   "order_id": "957",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "12,00 €"
+  },
+  {
+   "order_id": "956",
+   "store": "Ramen Oeste",
+   "status": "DELIVERED",
+   "total": "13,00 €"
+  },
+  {
+   "order_id": "955",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "5,00 €"
+  }
+ ],
+ "indexed_cards": [
+  {
+   "order_id": "1000",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "5,00 €",
+   "history_index": 0
+  },
+  {
+   "order_id": "999",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "6,00 €",
+   "history_index": 13
+  },
+  {
+   "order_id": "998",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "7,00 €",
+   "history_index": 26
+  },
+  {
+   "order_id": "997",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "8,00 €",
+   "history_index": 39
+  },
+  {
+   "order_id": "996",
+   "store": "Ramen Oeste",
+   "status": "CANCELLED",
+   "total": "9,00 €",
+   "history_index": 6
+  },
+  {
+   "order_id": "995",
+   "store": "Poke Sur",
+   "status": "DELIVERED",
+   "total": "10,00 €",
+   "history_index": 19
+  },
+  {
+   "order_id": "994",
+   "store": "Taqueria Este",
+   "status": "DELIVERED",
+   "total": "11,00 €",
+   "history_index": 32
+  },
+  {
+   "order_id": "993",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "12,00 €",
+   "history_index": 45
+  },
+  {
+   "order_id": "992",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "13,00 €",
+   "history_index": 12
+  },
+  {
+   "order_id": "991",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "Order cancelled",
+   "history_index": 25
+  },
+  {
+   "order_id": "990",
+   "store": "Burger Norte",
+   "status": "DELIVERED",
+   "total": "6,00 €",
+   "history_index": 38
+  },
+  {
+   "order_id": "989",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "7,00 €",
+   "history_index": 5
+  },
+  {
+   "order_id": "988",
+   "store": "",
+   "status": "DELIVERED",
+   "total": "8,00 €",
+   "store_name": "Kiosko",
+   "history_index": 18
+  },
+  {
+   "order_id": "987",
+   "store": "Pizzeria Sol",
+   "status": "DELIVERED",
+   "total": "9,00 €",
+   "history_index": 31
+  },
+  {
+   "order_id": "986",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "10,00 €",
+   "history_index": 44
+  },
+  {
+   "order_id": "985",
+   "store": "Poke Sur",
+   "status": "DELIVERED",
+   "total": "11,00 €",
+   "history_index": 11
+  },
+  {
+   "order_id": "984",
+   "store": "Café Central",
+   "status": "DELIVERED",
+   "total": "12,00 €",
+   "history_index": 24
+  },
+  {
+   "order_id": "983",
+   "store": "Ramen Oeste",
+   "status": "CANCELLED",
+   "total": "13,00 €",
+   "history_index": 37
+  },
+  {
+   "order_id": "982",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "5,00 €",
+   "history_index": 4
+  },
+  {
+   "order_id": "981",
+   "store": "Sushi Mar",
+   "status": "DELIVERED",
+   "total": "6,00 €",
+   "history_index": 17
+  }
+ ],
+ "rank_small": [
+  {
+   "store": "Recent",
+   "status": "DELIVERED"
+  },
+  {
+   "store": "Old",
+   "status": "DELIVERED"
+  },
+  {
+   "store": "Old",
+   "status": "DELIVERED"
+  }
+ ],
+ "too_few": [
+  {
+   "store": "A"
+  },
+  {
+   "store": "B",
+   "status": "CANCELED"
+  },
+  {
+   "store": "B"
+  }
+ ]
+}

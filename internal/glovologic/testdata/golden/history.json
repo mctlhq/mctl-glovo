@@ -1,0 +1,292 @@
+{
+ "analysis_all": {
+  "analyzed_orders": 7,
+  "distinct_products": 5,
+  "top_products": [
+   {
+    "product": "Whole Milk 1L",
+    "orders": 3,
+    "quantity": 5,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-20T08:30:00.000Z",
+    "average_interval_days": 9.7,
+    "median_interval_days": 9.7,
+    "parseable_visible_line_amounts": 2,
+    "visible_line_amount": 4.5,
+    "top_customizations": [
+     {
+      "name": "Cold",
+      "orders": 2
+     },
+     {
+      "name": "Warm",
+      "orders": 1
+     }
+    ]
+   },
+   {
+    "product": "Pan de Molde",
+    "orders": 2,
+    "quantity": 4,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-02-03T09:00:00.250Z",
+    "average_interval_days": 33.4,
+    "median_interval_days": 33.4,
+    "parseable_visible_line_amounts": 2,
+    "visible_line_amount": 3.6,
+    "top_customizations": []
+   },
+   {
+    "product": "Café Molido",
+    "orders": 2,
+    "quantity": 3.5,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-08T00:00:00.000Z",
+    "average_interval_days": 7,
+    "median_interval_days": 7,
+    "parseable_visible_line_amounts": 1,
+    "visible_line_amount": 2.5,
+    "top_customizations": []
+   },
+   {
+    "product": "Zumo Naranja",
+    "orders": 2,
+    "quantity": 2,
+    "first_order_at": "2026-02-02T02:40:00.000Z",
+    "last_order_at": "2026-02-02T02:40:00.000Z",
+    "average_interval_days": null,
+    "median_interval_days": null,
+    "parseable_visible_line_amounts": 0,
+    "visible_line_amount": 0,
+    "top_customizations": []
+   },
+   {
+    "product": "Null Fields",
+    "orders": 1,
+    "quantity": 1,
+    "first_order_at": null,
+    "last_order_at": null,
+    "average_interval_days": null,
+    "median_interval_days": null,
+    "parseable_visible_line_amounts": 0,
+    "visible_line_amount": 0,
+    "top_customizations": []
+   }
+  ],
+  "limitation": "Product cadence and customization statistics cover only successfully enriched order details; card-only orders are excluded from item analysis."
+ },
+ "analyze": {
+  "analyzed_orders": 7,
+  "distinct_products": 5,
+  "top_products": [
+   {
+    "product": "Whole Milk 1L",
+    "orders": 3,
+    "quantity": 5,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-20T08:30:00.000Z",
+    "average_interval_days": 9.7,
+    "median_interval_days": 9.7,
+    "parseable_visible_line_amounts": 2,
+    "visible_line_amount": 4.5,
+    "top_customizations": [
+     {
+      "name": "Cold",
+      "orders": 2
+     },
+     {
+      "name": "Warm",
+      "orders": 1
+     }
+    ]
+   },
+   {
+    "product": "Pan de Molde",
+    "orders": 2,
+    "quantity": 4,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-02-03T09:00:00.250Z",
+    "average_interval_days": 33.4,
+    "median_interval_days": 33.4,
+    "parseable_visible_line_amounts": 2,
+    "visible_line_amount": 3.6,
+    "top_customizations": []
+   },
+   {
+    "product": "Café Molido",
+    "orders": 2,
+    "quantity": 3.5,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-08T00:00:00.000Z",
+    "average_interval_days": 7,
+    "median_interval_days": 7,
+    "parseable_visible_line_amounts": 1,
+    "visible_line_amount": 2.5,
+    "top_customizations": []
+   },
+   {
+    "product": "Zumo Naranja",
+    "orders": 2,
+    "quantity": 2,
+    "first_order_at": "2026-02-02T02:40:00.000Z",
+    "last_order_at": "2026-02-02T02:40:00.000Z",
+    "average_interval_days": null,
+    "median_interval_days": null,
+    "parseable_visible_line_amounts": 0,
+    "visible_line_amount": 0,
+    "top_customizations": []
+   },
+   {
+    "product": "Null Fields",
+    "orders": 1,
+    "quantity": 1,
+    "first_order_at": null,
+    "last_order_at": null,
+    "average_interval_days": null,
+    "median_interval_days": null,
+    "parseable_visible_line_amounts": 0,
+    "visible_line_amount": 0,
+    "top_customizations": []
+   }
+  ],
+  "limitation": "Product cadence and customization statistics cover only successfully enriched order details; card-only orders are excluded from item analysis.",
+  "card_statistics": {
+   "orders": 10,
+   "detailed_orders": 0,
+   "card_only_orders": 10,
+   "stores": 4,
+   "parseable_visible_totals": 8,
+   "visible_total_amount": 27.59,
+   "top_stores": [
+    {
+     "store": "Market Uno",
+     "orders": 4,
+     "visible_total_amount": 11.2,
+     "parseable_visible_totals": 3
+    },
+    {
+     "store": "Market Dos",
+     "orders": 3,
+     "visible_total_amount": 11.99,
+     "parseable_visible_totals": 2
+    },
+    {
+     "store": "Fruteria Cuatro",
+     "orders": 2,
+     "visible_total_amount": 2,
+     "parseable_visible_totals": 2
+    },
+    {
+     "store": "Panaderia Tres",
+     "orders": 1,
+     "visible_total_amount": 2.4,
+     "parseable_visible_totals": 1
+    }
+   ]
+  },
+  "coverage": {
+   "discovered_orders": 10,
+   "cursor_pages": 1,
+   "detail_limit": 10,
+   "detail_attempts": 9,
+   "detailed_orders": 7,
+   "detail_errors": 1,
+   "detail_rate_limited": true,
+   "stopped_reason": "no_next_cursor",
+   "strategy": "order-id-cursor"
+  }
+ },
+ "analyze_limit_2": {
+  "analyzed_orders": 2,
+  "distinct_products": 3,
+  "top_products": [
+   {
+    "product": "Café Molido",
+    "orders": 2,
+    "quantity": 3.5,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-08T00:00:00.000Z",
+    "average_interval_days": 7,
+    "median_interval_days": 7,
+    "parseable_visible_line_amounts": 1,
+    "visible_line_amount": 2.5,
+    "top_customizations": []
+   },
+   {
+    "product": "Whole Milk 1L",
+    "orders": 2,
+    "quantity": 3,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-08T00:00:00.000Z",
+    "average_interval_days": 7,
+    "median_interval_days": 7,
+    "parseable_visible_line_amounts": 2,
+    "visible_line_amount": 4.5,
+    "top_customizations": [
+     {
+      "name": "Cold",
+      "orders": 2
+     }
+    ]
+   },
+   {
+    "product": "Pan de Molde",
+    "orders": 1,
+    "quantity": 1,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-01T00:00:00.000Z",
+    "average_interval_days": null,
+    "median_interval_days": null,
+    "parseable_visible_line_amounts": 1,
+    "visible_line_amount": 1.2,
+    "top_customizations": []
+   }
+  ],
+  "limitation": "Product cadence and customization statistics cover only successfully enriched order details; card-only orders are excluded from item analysis.",
+  "card_statistics": {
+   "orders": 10,
+   "detailed_orders": 0,
+   "card_only_orders": 10,
+   "stores": 4,
+   "parseable_visible_totals": 8,
+   "visible_total_amount": 27.59,
+   "top_stores": [
+    {
+     "store": "Market Uno",
+     "orders": 4,
+     "visible_total_amount": 11.2,
+     "parseable_visible_totals": 3
+    },
+    {
+     "store": "Market Dos",
+     "orders": 3,
+     "visible_total_amount": 11.99,
+     "parseable_visible_totals": 2
+    },
+    {
+     "store": "Fruteria Cuatro",
+     "orders": 2,
+     "visible_total_amount": 2,
+     "parseable_visible_totals": 2
+    },
+    {
+     "store": "Panaderia Tres",
+     "orders": 1,
+     "visible_total_amount": 2.4,
+     "parseable_visible_totals": 1
+    }
+   ]
+  },
+  "coverage": {
+   "discovered_orders": 10,
+   "cursor_pages": 1,
+   "detail_limit": 2,
+   "detail_attempts": 2,
+   "detailed_orders": 2,
+   "detail_errors": 0,
+   "detail_rate_limited": false,
+   "stopped_reason": "no_next_cursor",
+   "strategy": "order-id-cursor"
+  }
+ }
+}
