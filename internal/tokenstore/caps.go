@@ -60,22 +60,49 @@ func newWindow(limit int, period time.Duration) *window {
 
 // allow records a hit for key at now and reports whether it is within the
 // cap. A refused hit is not recorded.
-func (w *window) allow(key string, now time.Time) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+// pruneLocked drops hits older than the window and reports whether one
+// more fits. w.mu must be held.
+func (w *window) pruneLocked(key string, now time.Time) bool {
 	cut := now.Add(-w.period)
 	h := w.hits[key]
 	i := 0
 	for i < len(h) && !h[i].After(cut) {
 		i++
 	}
-	h = h[i:]
-	if len(h) >= w.limit {
-		w.hits[key] = h
-		return false
+	w.hits[key] = h[i:]
+	return len(w.hits[key]) < w.limit
+}
+
+// capHit names one window and the key counted in it.
+type capHit struct {
+	w   *window
+	key string
+}
+
+// allowAll checks every window first and records the hit in all of them
+// only when all pass, so a request refused by one cap is never counted
+// against another (a capped pid must not burn the global quota). It
+// returns -1 on success, or the index of the first window that refused.
+// Callers always pass windows in the same order, so the locks cannot
+// deadlock.
+func allowAll(now time.Time, hits ...capHit) int {
+	for _, h := range hits {
+		h.w.mu.Lock()
 	}
-	w.hits[key] = append(h, now)
-	return true
+	defer func() {
+		for _, h := range hits {
+			h.w.mu.Unlock()
+		}
+	}()
+	for i, h := range hits {
+		if !h.w.pruneLocked(h.key, now) {
+			return i
+		}
+	}
+	for _, h := range hits {
+		h.w.hits[h.key] = append(h.w.hits[h.key], now)
+	}
+	return -1
 }
 
 // limiter groups the windows.

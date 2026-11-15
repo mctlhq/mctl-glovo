@@ -438,6 +438,30 @@ func TestCaps(t *testing.T) {
 		}
 	})
 
+	t.Run("refused request not counted against other caps", func(t *testing.T) {
+		caps := DefaultCaps()
+		caps.PIDRequestsPerMinute = 2
+		caps.GlobalRequestsPerMinute = 5
+		m := newMemDB()
+		h := newHarness(t, m, m, nil, caps)
+		h.link(pidA, testSession("A1"))
+		h.link(pidB, testSession("B1"))
+		la, _ := h.st.Get(ctx, h.pid(pidA))
+		lb, _ := h.st.Get(ctx, h.pid(pidB))
+		ca, _ := la.Client()
+		cb, _ := lb.Client()
+		for i := 0; i < 10; i++ {
+			_, _ = ca.GetBaskets(ctx) // 2 pass, 8 refused by A's own cap
+		}
+		// The global window holds only A's 2 real requests, so B still
+		// gets its own 2.
+		for i := 0; i < 2; i++ {
+			if _, err := cb.GetBaskets(ctx); err != nil {
+				t.Fatalf("pid B starved by pid A's refused requests: %v", err)
+			}
+		}
+	})
+
 	t.Run("link attempts", func(t *testing.T) {
 		h := memHarness(t, small)
 		for i := 0; i < 2; i++ {
@@ -947,8 +971,17 @@ func TestEraseIsPseudonymisedInAudit(t *testing.T) {
 	if _, err := h.st.Get(ctx, a); err != nil {
 		t.Fatal(err)
 	}
+	if _, _, err := h.st.CreateLinkCode(ctx, a, "v1"); err != nil { // a live code beside the used one
+		t.Fatal(err)
+	}
+	if m.codeRows(pidA) != 2 {
+		t.Fatalf("setup: %d code rows", m.codeRows(pidA))
+	}
 	if err := h.st.Erase(ctx, a); err != nil {
 		t.Fatal(err)
+	}
+	if n := m.codeRows(pidA); n != 0 {
+		t.Fatalf("erasure left %d code rows with the pid", n)
 	}
 	if _, err := h.st.Get(ctx, a); !errors.Is(err, ErrNotLinked) {
 		t.Fatalf("after erase: %v", err)
@@ -998,6 +1031,39 @@ func TestRewrapSweep(t *testing.T) {
 	})
 }
 
+// A sweep with the key unchanged writes nothing: the version stays, a
+// cached client stays, and no extra decrypt is spent.
+func TestRewrapNoOpWhenKeyUnchanged(t *testing.T) {
+	forEachDB(t, func(t *testing.T, h *harness) {
+		ctx := context.Background()
+		a := h.pid(pidA)
+		h.link(pidA, testSession("A1"))
+		sessions, _ := NewSessions(h.st, 0)
+		c1, err := sessions.Client(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := h.row(pidA).Version
+		decrypts := h.transit.decrypts.Load()
+		for i := 0; i < 3; i++ {
+			rep, err := h.st.Rewrap(ctx)
+			if err != nil || rep.Rewrapped != 0 || rep.Current != 1 {
+				t.Fatalf("sweep %d: %+v %v", i, rep, err)
+			}
+		}
+		if got := h.row(pidA).Version; got != v {
+			t.Fatalf("version moved without a key change: %d -> %d", v, got)
+		}
+		c2, err := sessions.Client(ctx, a)
+		if err != nil || c2 != c1 {
+			t.Fatalf("cached client evicted by a no-op sweep: %v", err)
+		}
+		if h.transit.decrypts.Load() != decrypts {
+			t.Fatal("no-op sweep cost a decrypt")
+		}
+	})
+}
+
 func TestKeyVersionMismatchIsIntegrity(t *testing.T) {
 	m := newMemDB()
 	h := newHarness(t, m, m, nil, Caps{})
@@ -1037,4 +1103,66 @@ func TestHostedClientNeverUsesAFile(t *testing.T) {
 func memHarness(t *testing.T, caps Caps) *harness {
 	m := newMemDB()
 	return newHarness(t, m, m, nil, caps)
+}
+
+// A caller that gives up while waiting for a held lease gets its context
+// error, audited as a cancellation, never ErrBusy.
+func TestAcquireCancellationIsNotBusy(t *testing.T) {
+	m := newMemDB()
+	h := newHarness(t, m, m, nil, Caps{})
+	h.link(pidA, testSession("A1"))
+	h.st.sleep = sleepCtx
+	h.st.busyWait = time.Minute
+	if _, err := h.raw.AcquireLease(context.Background(), pidA, "", "glh_other", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	err := h.st.Update(ctx, h.pid(pidA), func(ctx context.Context, s glovoapi.Session) (glovoapi.Session, error) {
+		t.Error("fn ran without the lease")
+		return s, nil
+	})
+	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrBusy) {
+		t.Fatalf("cancelled wait: %v", err)
+	}
+	var reasons []string
+	for _, e := range m.events("refresh") {
+		reasons = append(reasons, e.Reason)
+	}
+	if len(reasons) != 1 || reasons[0] != "canceled" {
+		t.Fatalf("audit reasons %v", reasons)
+	}
+}
+
+// A state change is a write: it takes a new version (2.3), so a refresh
+// in flight across a suspension loses the fence and cannot land.
+func TestStateChangeTakesVersionAndFencesRefresh(t *testing.T) {
+	forEachDB(t, func(t *testing.T, h *harness) {
+		ctx := context.Background()
+		a := h.pid(pidA)
+		h.link(pidA, testSession("A1"))
+		r := h.row(pidA)
+		if err := h.raw.SetState(ctx, pidA, r.LinkID, StateActive); err != nil {
+			t.Fatal(err)
+		}
+		if v := h.row(pidA).Version; v <= r.Version {
+			t.Fatalf("state change kept version %d (was %d)", v, r.Version)
+		}
+		err := h.st.Update(ctx, a, func(ctx context.Context, s glovoapi.Session) (glovoapi.Session, error) {
+			if err := h.raw.SetState(ctx, pidA, r.LinkID, StateSuspended); err != nil {
+				return nil, err
+			}
+			s["accessToken"] = "access-after-suspend"
+			return s, nil
+		})
+		if !errors.Is(err, ErrSuperseded) {
+			t.Fatalf("refresh across a suspension: %v", err)
+		}
+		if got := h.row(pidA); got.State != StateSuspended {
+			t.Fatalf("state %s", got.State)
+		}
+		if got := h.stored(pidA)["accessToken"]; got != "access-A1" {
+			t.Fatalf("refresh landed on a suspended link: %v", got)
+		}
+	})
 }

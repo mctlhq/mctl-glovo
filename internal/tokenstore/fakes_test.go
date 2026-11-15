@@ -287,7 +287,8 @@ func (m *memDB) ReleaseLease(_ context.Context, pid, linkID, holder string, addF
 		r.RefreshFailures++
 	}
 	if newState != "" {
-		r.State = newState
+		m.seq++
+		r.State, r.Version = newState, m.seq
 	}
 	return nil
 }
@@ -341,7 +342,8 @@ func (m *memDB) SetState(_ context.Context, pid, linkID, state string) error {
 	if !ok || r.LinkID != linkID {
 		return errNoRow
 	}
-	r.State = state
+	m.seq++
+	r.State, r.Version = state, m.seq
 	return nil
 }
 
@@ -398,15 +400,34 @@ func (m *memDB) UpsertLink(_ context.Context, w LinkWrite) (int64, error) {
 }
 
 func (m *memDB) DeleteLink(ctx context.Context, pid string, ev AuditEvent) error {
+	m.deleteLink(pid, false)
+	return m.InsertAudit(ctx, ev)
+}
+
+// deleteLink mirrors Postgres: unlink deletes the pid's unused codes,
+// erasure deletes all of them.
+func (m *memDB) deleteLink(pid string, all bool) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.links, pid)
-	for _, c := range m.codes {
-		if c.pid == pid && c.used.IsZero() {
-			c.used = time.Now()
+	for k, c := range m.codes {
+		if c.pid == pid && (all || c.used.IsZero()) {
+			delete(m.codes, k)
 		}
 	}
-	m.mu.Unlock()
-	return m.InsertAudit(ctx, ev)
+}
+
+// codeRows counts pid's link code rows, used or not.
+func (m *memDB) codeRows(pid string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, c := range m.codes {
+		if c.pid == pid {
+			n++
+		}
+	}
+	return n
 }
 
 func (m *memDB) InsertAudit(_ context.Context, ev AuditEvent) error {
@@ -430,7 +451,8 @@ func (m *memDB) InsertAudit(_ context.Context, ev AuditEvent) error {
 }
 
 func (m *memDB) EraseLink(ctx context.Context, pid string, unlink, erasure AuditEvent) error {
-	if err := m.DeleteLink(ctx, pid, unlink); err != nil {
+	m.deleteLink(pid, true)
+	if err := m.InsertAudit(ctx, unlink); err != nil {
 		return err
 	}
 	if err := m.InsertAudit(ctx, erasure); err != nil {

@@ -100,7 +100,7 @@ func (l *Lease) gate(ctx context.Context) error {
 		return ErrUnavailable
 	}
 	now := s.now()
-	if !s.lim.globalReqMin.allow("", now) || !s.lim.pidReqMin.allow(l.pid.id, now) || !s.lim.pidReqDay.allow(l.pid.id, now) {
+	if allowAll(now, capHit{s.lim.globalReqMin, ""}, capHit{s.lim.pidReqMin, l.pid.id}, capHit{s.lim.pidReqDay, l.pid.id}) >= 0 {
 		s.log.LogAttrs(ctx, slog.LevelWarn, "tokenstore", slog.String("event", "cap_exceeded"), slog.String("reason", "rate_limited"), slog.String("link_id", l.LinkID()))
 		return ErrRateLimited
 	}

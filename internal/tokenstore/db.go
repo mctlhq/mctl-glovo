@@ -46,7 +46,9 @@ type DB interface {
 	// linkID and baseVersion and no unexpired lease. A failed fence is
 	// errFenceLost.
 	CommitRewrap(ctx context.Context, pid, linkID string, baseVersion int64, ciphertext string, keyVersion int, writeID string) (int64, error)
-	// SetState changes the state of pid's row if it still has linkID.
+	// SetState changes the state of pid's row if it still has linkID, and
+	// takes a new version like every other write (2.3), so a refresh in
+	// flight across the change loses its fence.
 	// Nothing matched is errNoRow.
 	SetState(ctx context.Context, pid, linkID, state string) error
 

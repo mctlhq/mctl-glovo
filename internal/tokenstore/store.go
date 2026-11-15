@@ -69,6 +69,7 @@ type Status struct {
 // sweep whose listing failed is an error, never "zero rows to rewrap".
 type RewrapReport struct {
 	Rewrapped int
+	Current   int // already on the latest key version: nothing written
 	Skipped   int // fence lost (concurrent write or live lease)
 	Failed    int // transit refused the row (integrity)
 }
@@ -246,14 +247,15 @@ func (s *store) decryptRow(ctx context.Context, pid PID, row LinkRow) (glovoapi.
 		return nil, ErrKilled
 	}
 	now := s.now()
-	if !s.lim.globalDecrypt.allow("", now) {
+	breach := allowAll(now, capHit{s.lim.globalDecrypt, ""}, capHit{s.lim.pidDecrypt, pid.id})
+	if breach == 0 {
 		// The exfiltration pattern of threat row R: stop everything.
 		_ = s.kill.Trip(ctx, "tokenstore:global_decrypt_cap")
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "global_decrypt_cap"})
 		_ = s.audit(ctx, AuditEvent{Event: "kill_on", Outcome: outcomeOK, Reason: "global_decrypt_cap"})
 		return nil, ErrKilled
 	}
-	if !s.lim.pidDecrypt.allow(pid.id, now) {
+	if breach == 1 {
 		_ = s.db.SetState(ctx, pid.id, row.LinkID, StateSuspended)
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "pid_decrypt_cap"})
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "suspend", Outcome: outcomeOK, Reason: "pid_decrypt_cap"})
@@ -392,9 +394,22 @@ func (s *store) acquire(ctx context.Context, pid PID, linkID, holder string) (Li
 			return LinkRow{}, ErrBusy
 		}
 		if err := s.sleep(ctx, 100*time.Millisecond); err != nil {
-			return LinkRow{}, ErrBusy
+			// The caller gave up: that is a cancellation, not contention.
+			return LinkRow{}, ctxErr(ctx, err)
 		}
 	}
+}
+
+// ctxErr returns ctx's own error when it is done, else err when err is a
+// context error, else ErrBusy (a sleep that failed for another reason).
+func ctxErr(ctx context.Context, err error) error {
+	if cerr := ctx.Err(); cerr != nil {
+		return cerr
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return ErrBusy
 }
 
 // classifyRefreshErr maps a failed fn to (addFailure, newState).
@@ -451,8 +466,12 @@ func (s *store) update(ctx context.Context, pid PID, linkID string, actor string
 	holder := newID("glh_")
 	row, err := s.acquire(ctx, pid, linkID, holder)
 	if err != nil {
-		if errors.Is(err, ErrBusy) {
+		switch {
+		case errors.Is(err, ErrBusy):
 			_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: linkID, Event: "refresh", Outcome: outcomeRefused, Reason: "busy", Actor: actor})
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			// ctx is done, so the audit write runs detached from it.
+			_ = s.audit(context.WithoutCancel(ctx), AuditEvent{PID: pid.id, LinkID: linkID, Event: "refresh", Outcome: outcomeRefused, Reason: "canceled", Actor: actor})
 		}
 		return nil, 0, nil, err
 	}
@@ -604,7 +623,7 @@ func (s *store) CreateLinkCode(ctx context.Context, pid PID, consentVersion stri
 // LinkAttempt implements Store.
 func (s *store) LinkAttempt(ip string) error {
 	now := s.now()
-	if ip == "" || !s.lim.linkIP.allow(ip, now) || !s.lim.linkGlobal.allow("", now) {
+	if ip == "" || allowAll(now, capHit{s.lim.linkIP, ip}, capHit{s.lim.linkGlobal, ""}) >= 0 {
 		return ErrRateLimited
 	}
 	return nil
@@ -758,6 +777,14 @@ func (s *store) Rewrap(ctx context.Context) (RewrapReport, error) {
 			kv, err := keyVersionOf(ct)
 			if err != nil {
 				return RewrapReport{}, ErrUnavailable
+			}
+			if kv <= row.KeyVersion {
+				// Already on the latest key. Writing would take a new
+				// version for nothing: it would evict every cached client
+				// (each then decrypts again against the caps) and could
+				// win the fence against a pinned unpersisted write.
+				rep.Current++
+				continue
 			}
 			_, err = s.db.CommitRewrap(ctx, pid.id, row.LinkID, row.Version, ct, kv, newID("glw_"))
 			switch {

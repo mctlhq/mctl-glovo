@@ -166,6 +166,7 @@ func (p *Postgres) ReleaseLease(ctx context.Context, pid, linkID, holder string,
 		   SET lease_token = NULL, lease_until = NULL,
 		       refresh_failures = refresh_failures + $4,
 		       state = CASE WHEN $5 = '' THEN state ELSE $5 END,
+		       version = CASE WHEN $5 = '' THEN version ELSE nextval('glovo_link_version_seq') END,
 		       updated_at = now()
 		 WHERE pid = $1 AND link_id = $2 AND lease_token = $3`,
 		pid, linkID, holder, inc, newState)
@@ -229,7 +230,8 @@ func (p *Postgres) CommitRewrap(ctx context.Context, pid, linkID string, baseVer
 // SetState implements DB.
 func (p *Postgres) SetState(ctx context.Context, pid, linkID, state string) error {
 	res, err := p.db.ExecContext(ctx,
-		`UPDATE glovo_links SET state = $3, updated_at = now() WHERE pid = $1 AND link_id = $2`, pid, linkID, state)
+		`UPDATE glovo_links SET state = $3, version = nextval('glovo_link_version_seq'), updated_at = now()
+		  WHERE pid = $1 AND link_id = $2`, pid, linkID, state)
 	if err != nil {
 		return unavailable("set state")
 	}
@@ -330,7 +332,13 @@ func (p *Postgres) deleteLink(ctx context.Context, pid string, ev AuditEvent, er
 	if _, err := tx.ExecContext(ctx, `DELETE FROM glovo_links WHERE pid = $1`, pid); err != nil {
 		return unavailable("unlink")
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM glovo_link_codes WHERE pid = $1 AND used_at IS NULL`, pid); err != nil {
+	// Unlink kills the live codes; erasure removes every code row of the
+	// pid, used ones included, so no table keeps the pid in clear.
+	codes := `DELETE FROM glovo_link_codes WHERE pid = $1 AND used_at IS NULL`
+	if erasure != nil {
+		codes = `DELETE FROM glovo_link_codes WHERE pid = $1`
+	}
+	if _, err := tx.ExecContext(ctx, codes, pid); err != nil {
 		return unavailable("unlink")
 	}
 	if err := insertAudit(ctx, tx, ev); err != nil {

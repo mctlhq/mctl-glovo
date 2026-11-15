@@ -1,11 +1,13 @@
 package tokenstore
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"os"
 	"testing"
+	"time"
 )
 
 // These run only against a real Postgres (TOKENSTORE_TEST_PG_DSN). CI has
@@ -39,12 +41,25 @@ func TestPostgresAuditIsInsertOnlyAndErasable(t *testing.T) {
 			t.Fatalf("%s succeeded", stmt)
 		}
 	}
+	for i, h := range [][]byte{bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)} {
+		if err := p.InsertLinkCode(ctx, h, pidA, "v1", time.Now().Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			if _, _, err := p.RedeemLinkCode(ctx, h); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
 	unlink := AuditEvent{PID: pidA, Event: "unlink", Outcome: outcomeOK, Reason: "erasure", Actor: actorOperator}
 	erasure := AuditEvent{PID: pidA, Event: "erasure", Outcome: outcomeOK, Reason: "erasure", Actor: actorOperator}
 	if err := p.EraseLink(ctx, pidA, unlink, erasure); err != nil {
 		t.Fatal(err)
 	}
 	var n int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM glovo_link_codes WHERE pid = $1`, pidA).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("erasure left code rows with the pid: %d %v", n, err)
+	}
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM glovo_audit_subjects WHERE pid = $1`, pidA).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("pid survives erasure: %d %v", n, err)
 	}
