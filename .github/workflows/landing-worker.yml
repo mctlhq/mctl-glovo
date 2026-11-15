@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: '22'
       - working-directory: landing-worker
-        run: node --test test/
+        run: node --test test/*.test.js
 
   deploy:
     needs: test

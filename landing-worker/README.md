@@ -11,7 +11,7 @@ through the tunnel to glovo-home.
   fails while the file is stale.
 - `src/index.js` repeats glovo-home's language choice (`?lang`, then the
   `glovo_lang` cookie, then `Accept-Language`) and its headers.
-- Tests: `node --test test/` (Node 22, no dependencies).
+- Tests: `node --test test/*.test.js` (Node 22, no dependencies).
 
 Deploy: `.github/workflows/landing-worker.yml` runs `wrangler deploy` after a
 merge to main, with the repository secrets `CLOUDFLARE_API_TOKEN` (an
