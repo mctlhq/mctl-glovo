@@ -96,6 +96,26 @@ is discarded. It never receives token, session or result content. Every
 check writes one `session_keepalive` log line with its outcome and
 duration.
 
+`deploy/mac-mini/glovo-alert` is the hook used on the mini. It sends the
+message to the owner through a dedicated Telegram bot:
+
+```sh
+install -m 755 deploy/mac-mini/glovo-alert ~/.local/bin/glovo-alert
+umask 077; mkdir -p ~/.config/glovo-alert
+# bot-token: the BotFather token (pipe it from the clipboard, never type it)
+# chat-id:   the owner's Telegram user id; the owner sends /start to the bot once
+/usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:GLOVO_HOME_ALERT_CMD string $HOME/.local/bin/glovo-alert" \
+  ~/Library/LaunchAgents/com.mctl.glovo-home.plist
+```
+
+The token never appears in argv (curl reads its URL from stdin). The hook
+exits non-zero when a file is missing or Telegram refuses the message, so
+the failure shows up as `alert command failed` in glovo-home's log. After
+editing the plist, `launchctl bootout` and wait until
+`launchctl print gui/$(id -u)/com.mctl.glovo-home` reports the service gone
+before `launchctl bootstrap`; bootstrapping while the old instance is still
+unloading fails with `5: Input/output error`.
+
 ## Session hot-reload and re-login
 
 glovo-home checks a reload marker next to the session file

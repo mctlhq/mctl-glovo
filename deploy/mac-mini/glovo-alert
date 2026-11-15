@@ -1,0 +1,39 @@
+#!/bin/sh
+# glovo-alert: GLOVO_HOME_ALERT_CMD hook that sends its single argument to
+# the owner through a Telegram bot.
+#
+# Reads the bot token and the chat id from files that only the owner can
+# read (mode 0600), by default:
+#   ~/.config/glovo-alert/bot-token
+#   ~/.config/glovo-alert/chat-id
+# Override the directory with GLOVO_ALERT_DIR.
+#
+# The token never appears in argv: curl reads its URL from a config on
+# stdin. Exits non-zero when the files are missing or Telegram refuses the
+# message, so glovo-home logs "alert command failed".
+set -eu
+
+[ "$#" -eq 1 ] || { echo "usage: glovo-alert <message>" >&2; exit 2; }
+
+dir=${GLOVO_ALERT_DIR:-"$HOME/.config/glovo-alert"}
+token_file="$dir/bot-token"
+chat_file="$dir/chat-id"
+for f in "$token_file" "$chat_file"; do
+  [ -r "$f" ] || { echo "glovo-alert: cannot read $f" >&2; exit 1; }
+done
+
+token=$(tr -d ' \r\n' < "$token_file")
+chat=$(tr -d ' \r\n' < "$chat_file")
+case "$token" in *[!A-Za-z0-9:_-]*|"") echo "glovo-alert: malformed bot token" >&2; exit 1;; esac
+case "$chat" in *[!0-9-]*|"") echo "glovo-alert: malformed chat id" >&2; exit 1;; esac
+
+resp=$(printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" |
+  curl -sS --max-time 20 -K - \
+    --data-urlencode "chat_id=$chat" \
+    --data-urlencode "text=$1" \
+    --data-urlencode "disable_web_page_preview=true")
+
+case "$resp" in
+  *'"ok":true'*) exit 0 ;;
+  *) echo "glovo-alert: Telegram refused the message" >&2; exit 1 ;;
+esac
