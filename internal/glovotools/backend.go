@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -286,6 +285,3 @@ func (b *Backend) Drain(ctx context.Context) error {
 func (b *Backend) historyCache() glovologic.HistoryCache {
 	return glovologic.HistoryCache{Dir: filepath.Dir(b.cfg.SessionPath), Now: b.cfg.Now}
 }
-
-// GoogleAPIKeyFromEnv is upstream's GOOGLE_MAPS_API_KEY.
-func GoogleAPIKeyFromEnv() string { return os.Getenv("GOOGLE_MAPS_API_KEY") }
