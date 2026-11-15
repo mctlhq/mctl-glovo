@@ -401,11 +401,11 @@ func (s *store) acquire(ctx context.Context, pid PID, linkID, holder string) (Li
 func (s *store) classifyRefreshErr(err error, failures int) (bool, string, string) {
 	var ae *glovoapi.AuthError
 	if errors.As(err, &ae) {
-		switch {
-		case ae.Status == 401 || ae.Status == 403:
-			return true, StateNeedsRelink, "glovo_401"
-		case ae.Status >= 500:
-			return false, "", "glovo_5xx"
+		// glovoapi returns AuthError only when Glovo rejected the refresh
+		// token itself (400/401/403: invalid_grant and the like); 429 and
+		// 5xx arrive as *glovoapi.APIError and fall through to transient.
+		if ae.Status == 400 || ae.Status == 401 || ae.Status == 403 {
+			return true, StateNeedsRelink, "glovo_rejected"
 		}
 		if failures+1 >= s.caps.RefreshFailuresInARow {
 			return true, StateNeedsRelink, "refresh_failures"
@@ -420,6 +420,22 @@ func (s *store) classifyRefreshErr(err error, failures int) (bool, string, strin
 	}
 	// Proxy, network, deadline: transient, no state change.
 	return false, "", "transient"
+}
+
+// publicRefreshErr maps a failed refresh to a fixed-text error. glovoapi's
+// errors may carry a sanitised piece of Glovo's response; this package's
+// errors carry none (errors.go), so only its own sentinels and context
+// errors pass through.
+func publicRefreshErr(err error, counted bool) error {
+	for _, e := range []error{ErrKilled, ErrRateLimited, ErrUnavailable, ErrSuperseded, ErrSessionRefused, ErrBusy, context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, e) {
+			return e
+		}
+	}
+	if counted {
+		return ErrSessionRefused
+	}
+	return ErrUnavailable
 }
 
 // update is the refresh path. It returns the session to use, its version
@@ -464,7 +480,7 @@ func (s *store) update(ctx context.Context, pid PID, linkID string, actor string
 		if state == StateNeedsRelink {
 			return nil, 0, nil, ErrNeedsRelink
 		}
-		return nil, 0, nil, ferr
+		return nil, 0, nil, publicRefreshErr(ferr, add)
 	}
 	if !changed {
 		// Another holder already rotated it; nothing to write.

@@ -549,6 +549,7 @@ type fakeGlovo struct {
 	reads     atomic.Int64
 	delay     time.Duration
 	status    atomic.Int64 // non-zero: /oauth/refresh answers this status
+	noAccess  atomic.Bool  // /oauth/refresh answers 200 without an access token
 
 	mu      sync.Mutex
 	valid   map[string]string // refresh token -> access token it was issued with
@@ -581,6 +582,10 @@ func (g *fakeGlovo) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		var body map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		if g.noAccess.Load() {
+			_, _ = w.Write([]byte(`{"expiresIn":3600}`))
+			return
+		}
 		if st := g.status.Load(); st != 0 {
 			// Echo the refresh token, as a hostile upstream might.
 			w.WriteHeader(int(st))

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -457,7 +458,9 @@ func TestCaps(t *testing.T) {
 		h := newHarness(t, m, m, nil, Caps{})
 		h.link(pidA, testSession("A1"))
 		a := h.pid(pidA)
-		h.glovo.status.Store(400)
+		// A refresh answer glovoapi refuses (no access token) is counted;
+		// the third in a row means relink.
+		h.glovo.noAccess.Store(true)
 		for i := 0; i < 2; i++ {
 			l, _ := h.st.Get(ctx, a)
 			c, _ := l.Client()
@@ -476,8 +479,13 @@ func TestCaps(t *testing.T) {
 		if st := h.row(pidA).State; st != StateNeedsRelink {
 			t.Fatalf("state %s", st)
 		}
-		// 5xx is transient: no count.
+		h.glovo.noAccess.Store(false)
+		// 5xx and 429 are transient: no count.
 		h.link(pidB, testSession("B1"))
+		h.glovo.status.Store(429)
+		lb0, _ := h.st.Get(ctx, h.pid(pidB))
+		cb0, _ := lb0.Client()
+		_ = cb0.Refresh(ctx)
 		h.glovo.status.Store(503)
 		lb, _ := h.st.Get(ctx, h.pid(pidB))
 		cb, _ := lb.Client()
@@ -485,10 +493,16 @@ func TestCaps(t *testing.T) {
 		if r := h.row(pidB); r.RefreshFailures != 0 || r.State != StateActive {
 			t.Fatalf("5xx counted: %+v", r)
 		}
-		// 401 is immediate.
-		h.glovo.status.Store(401)
-		if err := cb.Refresh(ctx); !errors.Is(err, ErrNeedsRelink) {
-			t.Fatalf("401: %v", err)
+		// A rejection of the refresh token (400 invalid_grant, 401, 403)
+		// is immediate.
+		for _, st := range []int64{400, 401, 403} {
+			h.link(pidB, testSession("B"+strconv.FormatInt(st, 10)))
+			h.glovo.status.Store(st)
+			lr, _ := h.st.Get(ctx, h.pid(pidB))
+			cr, _ := lr.Client()
+			if err := cr.Refresh(ctx); !errors.Is(err, ErrNeedsRelink) {
+				t.Fatalf("%d: %v", st, err)
+			}
 		}
 	})
 }
@@ -533,10 +547,20 @@ func TestRedactionMarkerScan(t *testing.T) {
 	c, _ := l.Client()
 	_, err = c.GetBaskets(ctx)
 	keep(err)
-	// Glovo errors that echo the refresh token.
-	for _, st := range []int64{400, 401, 500} {
+	// Glovo errors that echo the refresh token. A refresh error is always
+	// one of this package's fixed-text errors, never glovoapi's own.
+	fixed := []error{ErrNeedsRelink, ErrUnavailable, ErrSessionRefused, ErrKilled, ErrRateLimited, ErrSuperseded, ErrBusy}
+	for _, st := range []int64{400, 401, 403, 429, 500, 503} {
 		h.glovo.status.Store(st)
-		keep(c.Refresh(ctx))
+		err := c.Refresh(ctx)
+		keep(err)
+		ok := false
+		for _, f := range fixed {
+			ok = ok || err == f
+		}
+		if !ok {
+			t.Errorf("refresh %d: error is not a fixed-text sentinel: %T", st, err)
+		}
 		_ = h.raw.SetState(ctx, pidA, h.row(pidA).LinkID, StateActive)
 	}
 	h.glovo.status.Store(0)
