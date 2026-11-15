@@ -75,7 +75,38 @@ type golden struct {
 type recorded struct {
 	Method string `json:"method"`
 	URI    string `json:"uri"`
-	Body   any    `json:"body"`
+	// Headers are name/value pairs: in a golden, as glovo-skill passed them
+	// to fetch; from the fake, as received (minus Content-Length).
+	Headers [][2]string `json:"headers"`
+	Body    any         `json:"body"`
+}
+
+// undiciAdded is what Node's fetch adds to every glovo-skill request
+// (golden/undici_wire.json, recorded by gen/wire.mjs).
+func undiciAdded(t *testing.T) [][2]string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "golden", "undici_wire.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w struct {
+		Added [][2]string `json:"added"`
+	}
+	if err := json.Unmarshal(raw, &w); err != nil || len(w.Added) == 0 {
+		t.Fatalf("undici_wire.json: %v", err)
+	}
+	return w.Added
+}
+
+// withUndici is a golden request as it reaches the server: glovo-skill's
+// headers plus undici's.
+func withUndici(rs []recorded, added [][2]string) []recorded {
+	out := make([]recorded, len(rs))
+	for i, r := range rs {
+		r.Headers = append(append([][2]string(nil), r.Headers...), added...)
+		out[i] = r
+	}
+	return out
 }
 
 type fileState struct {
@@ -144,7 +175,16 @@ func (f *fakeGlovo) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	f.mu.Lock()
-	f.log = append(f.log, recorded{Method: r.Method, URI: r.URL.RequestURI(), Body: parsed})
+	var hs [][2]string
+	for k, vs := range r.Header {
+		if k == "Content-Length" {
+			continue // framing, not client identity
+		}
+		for _, v := range vs {
+			hs = append(hs, [2]string{k, v})
+		}
+	}
+	f.log = append(f.log, recorded{Method: r.Method, URI: r.URL.RequestURI(), Headers: hs, Body: parsed})
 	var rt *route
 	for i := range f.routes {
 		if f.routes[i].Method == r.Method && f.routes[i].Path == r.URL.Path {
@@ -300,11 +340,20 @@ func readState(t *testing.T, path string) fileState {
 
 var reUUID = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
 
+// normalizeRequests renders each request as method, URI, body and every
+// header (name lower-cased, sorted; names are case-insensitive, and the
+// fake receives them canonicalized). A missing, extra or different header
+// is a parity failure, like a different body.
 func normalizeRequests(rs []recorded) []string {
 	out := make([]string, len(rs))
 	for i, r := range rs {
 		b, _ := json.Marshal(r.Body)
-		out[i] = reUUID.ReplaceAllString(r.Method+" "+r.URI+" "+string(b), "<uuid>")
+		hs := make([]string, len(r.Headers))
+		for j, h := range r.Headers {
+			hs[j] = strings.ToLower(h[0]) + ": " + h[1]
+		}
+		sort.Strings(hs)
+		out[i] = reUUID.ReplaceAllString(r.Method+" "+r.URI+" "+string(b)+"\n       "+strings.Join(hs, "\n       "), "<uuid>")
 	}
 	return out
 }
@@ -351,7 +400,7 @@ func TestParityWithUpstream(t *testing.T) {
 				t.Fatalf("Call: %v", err)
 			}
 			checkResult(t, c, got, want.Result)
-			checkRequests(t, c, normalizeRequests(h.fake.requests()), normalizeRequests(want.Requests))
+			checkRequests(t, c, normalizeRequests(h.fake.requests()), normalizeRequests(withUndici(want.Requests, undiciAdded(t))))
 			if sa := readState(t, h.session); !reflect.DeepEqual(sa, want.SessionAfter) {
 				t.Errorf("session after:\n got %s\nwant %s", pretty(sa), pretty(want.SessionAfter))
 			}

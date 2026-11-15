@@ -1,0 +1,23 @@
+{
+ "node": "v22.22.1",
+ "request_line": "HTTP/1.1",
+ "given_kept_as_sent": true,
+ "added": [
+  [
+   "accept-language",
+   "*"
+  ],
+  [
+   "sec-fetch-mode",
+   "cors"
+  ],
+  [
+   "user-agent",
+   "node"
+  ],
+  [
+   "accept-encoding",
+   "gzip, deflate"
+  ]
+ ]
+}
