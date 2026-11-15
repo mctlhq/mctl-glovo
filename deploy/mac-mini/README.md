@@ -232,3 +232,178 @@ Out of scope here. The tunnel must forward `glovo.mctl.ai` to
 `http://127.0.0.1:8787` and keep the `Host: glovo.mctl.ai` header.
 glovo-home accepts only that host and loopback names, and answers 421 for
 any other host.
+
+## Glovo egress proxy (tinyproxy)
+
+This section prepares slice E2 of epic #11. Nothing here is installed by
+this repository; the owner runs these steps on the mini and in the Tailscale
+admin console.
+
+The hosted mctl-glovo service (cluster) reaches Glovo only through the mini,
+over the tailnet, through a standard forward proxy. TLS stays end to end:
+the proxy sees the CONNECT target host and the byte counts, never a request,
+a header or a bearer token.
+
+```
+mctl-glovo pod --explicit proxy--> tailscale sidecar (userspace, tag:glovo-egress)
+  --tailnet--> mini:3128 tinyproxy --CONNECT, TLS end to end--> api.glovoapp.com
+```
+
+glovo-home is not affected: it runs on the mini and calls Glovo directly
+through glovo-skill, as before.
+
+### Risk the owner accepts (R3, design doc #2 §8)
+
+Every linked account leaves from one home IP. Glovo may block that IP or
+ban accounts, the owner's own included, and that would also break
+glovo-home on the same connection. The proxy cannot see accounts, so the
+mitigations live in mctl-glovo and are not optional: a per-account and a
+global request rate cap, a kill switch that stops all outbound Glovo calls,
+an alert when Glovo starts answering 403 or 429, and no traffic at all when
+the proxy is down (refusal or 503, never a direct call from the cluster).
+
+### Install
+
+```bash
+brew install tinyproxy
+mkdir -p ~/.config/tinyproxy
+install -m 644 deploy/mac-mini/tinyproxy.conf ~/.config/tinyproxy/tinyproxy.conf
+install -m 644 deploy/mac-mini/tinyproxy-filter ~/.config/tinyproxy/tinyproxy-filter
+```
+
+In `~/.config/tinyproxy/tinyproxy.conf` replace `<mini-tailscale-ip>` with
+the output of `tailscale ip -4`, and every `REPLACE_ME` with the account
+name. Do not use `brew services start tinyproxy`: that runs Homebrew's
+default configuration, which listens on every interface. The LaunchAgent
+below runs this configuration only.
+
+What the configuration does (each directive is annotated in the file with
+its tinyproxy.conf(5) meaning, checked against tinyproxy 1.11.3):
+
+- `Listen` on the Tailscale address only, `Port 3128`;
+- `Allow 100.64.0.0/10` (the Tailscale CGNAT range) and nothing else;
+- `ConnectPort 443` only;
+- `Filter` with the single rule `^api\.glovoapp\.com$`, `FilterType ere`,
+  `FilterURLs No` (match the host; for HTTPS that is the CONNECT target) and
+  `FilterDefaultDeny Yes` (anything else is refused with 403). In 1.11
+  `FilterExtended` is deprecated in favour of `FilterType ere`;
+- `DisableViaHeader Yes`, no `XTinyproxy`;
+- `MaxClients 20`, `Timeout 60`, `LogLevel Notice` to
+  `~/Library/Logs/mctl-tinyproxy.log`.
+
+`ConnectPort` does not restrict plain-HTTP (absolute-form) requests, so a
+tailnet client could still send cleartext HTTP to `api.glovoapp.com:80`
+through the proxy. The cluster client refuses that: `glovoapi.WithRequireProxy`
+requires an https base URL.
+
+### launchd
+
+Save as `~/Library/LaunchAgents/com.mctl.tinyproxy.plist`, replace every
+`REPLACE_ME`, then run
+`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mctl.tinyproxy.plist`.
+`-d` keeps tinyproxy in the foreground, which launchd needs; `-c` names the
+configuration file (tinyproxy(8)). The Homebrew path is `/usr/local/bin`
+on the x86_64 mini (`/opt/homebrew/bin` on Apple silicon).
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mctl.tinyproxy</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/tinyproxy</string>
+    <string>-d</string>
+    <string>-c</string>
+    <string>/Users/REPLACE_ME/.config/tinyproxy/tinyproxy.conf</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/REPLACE_ME/Library/Logs/mctl-tinyproxy.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/REPLACE_ME/Library/Logs/mctl-tinyproxy.stdout.log</string>
+</dict>
+</plist>
+```
+
+At login the Tailscale address may not exist yet, so the first start can
+fail to bind; `KeepAlive` restarts it every 10s until Tailscale is up. A
+failed bind is never a fallback to another address, because `Listen` names
+exactly one.
+
+After editing the configuration or the plist, `launchctl bootout
+gui/$(id -u)/com.mctl.tinyproxy` and wait until `launchctl print
+gui/$(id -u)/com.mctl.tinyproxy` reports the service gone before
+`launchctl bootstrap`; bootstrapping while the old instance is still
+unloading fails with `5: Input/output error`.
+
+### Tailnet ACL
+
+tinyproxy's `Allow` admits any tailnet address; the tailnet policy is what
+limits the proxy to the cluster's sidecar. In the Tailscale admin console
+(Access controls), tag the mini (here `tag:glovo-proxy-host`, an example
+name) and add a grant that lets only `tag:glovo-egress` reach it, on
+`tcp:3128` only:
+
+```json
+{
+  "tagOwners": {
+    "tag:glovo-egress":     ["autogroup:admin"],
+    "tag:glovo-proxy-host": ["autogroup:admin"]
+  },
+  "grants": [
+    {
+      "src": ["tag:glovo-egress"],
+      "dst": ["tag:glovo-proxy-host"],
+      "ip":  ["tcp:3128"]
+    }
+  ]
+}
+```
+
+Merge this into the existing policy rather than replacing it, and check
+that no broader rule (for example the default allow-all) also lets other
+nodes reach the mini on 3128. Tagging a node that was owned by a user
+changes its ownership to the tag; check what else relies on the mini's
+current identity first. `tag:glovo-egress` should carry nothing but this
+grant, and the sidecar's auth key should be ephemeral and pre-tagged.
+
+### Checks
+
+From another tailnet node that the ACL allows (or, before the ACL is
+narrowed, any tailnet node):
+
+```bash
+# reaches Glovo: any HTTP status from api.glovoapp.com (often 404 for /) means the tunnel works
+curl -sS -o /dev/null -w '%{http_code}\n' -x http://<mini-tailscale-ip>:3128 https://api.glovoapp.com/
+# refused by the filter: curl reports "CONNECT tunnel failed, response 403"
+curl -sS -o /dev/null -x http://<mini-tailscale-ip>:3128 https://example.com/
+# refused by ConnectPort: a port other than 443
+curl -sS -o /dev/null -x http://<mini-tailscale-ip>:3128 https://api.glovoapp.com:8443/
+```
+
+On the mini, `curl -x http://127.0.0.1:3128 ...` must fail to connect (the
+proxy is not on loopback), and `grep -i filtered
+~/Library/Logs/mctl-tinyproxy.log` shows the refused requests. After the
+ACL is in place, the same curl from a node without `tag:glovo-egress` must
+time out.
+
+### Cluster side (out of scope here)
+
+The mctl-glovo pod reaches the proxy through a Tailscale userspace sidecar
+(ephemeral node, `tag:glovo-egress`, auth key in Vault via ExternalSecret).
+That is slice E3 in mctl-gitops. A userspace tailscaled gives the pod no
+route to tailnet addresses, so E3 has to expose the mini's port 3128 to the
+service container as a plain TCP forward on loopback (glovoapi talks to one
+HTTP proxy and does not chain proxies). The service then builds its
+glovoapi client with `WithProxy(http://<that address>:3128)` and
+`WithRequireProxy()`, so `HTTPS_PROXY`/`NO_PROXY` are never consulted, a
+missing proxy setting is a start-up error, and an unreachable proxy fails
+the call. JWKS, mctl-api and Vault traffic does not use this proxy.
