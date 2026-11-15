@@ -39,7 +39,9 @@ ws.addEventListener("message", async (ev) => {
     try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "meta") vp = { w: m.w, h: m.h };
     if (m.t === "status") {
-      statusEl.textContent = STATUS_TEXT[m.state] || m.state;
+      statusEl.textContent = m.reason === "browser_exited"
+        ? "The browser on the server closed before sign-in finished. Nothing was saved. Ask for a new link."
+        : STATUS_TEXT[m.state] || m.state;
       live = m.state === "ready";
     }
     return;
@@ -55,7 +57,7 @@ ws.addEventListener("message", async (ev) => {
 
 ws.addEventListener("close", () => {
   live = false;
-  if (!/linked|expired|wrong/.test(statusEl.textContent)) statusEl.textContent = "Disconnected. Reload to reconnect.";
+  if (!/linked|expired|wrong|closed/.test(statusEl.textContent)) statusEl.textContent = "Disconnected. Reload to reconnect.";
 });
 
 function send(obj) {

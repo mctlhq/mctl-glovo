@@ -264,7 +264,9 @@ export function startServer({ helperToken, allowedOrigin, createBrowser, audit, 
     finished = true;
     lastFrame = null;
     const state = outcome.status === "captured" ? "done" : outcome.status;
-    send(current, { t: "status", state });
+    // Only enumerated reasons reach the viewer.
+    const reason = outcome.reason === "browser_exited" ? outcome.reason : undefined;
+    send(current, { t: "status", state, reason });
     if (current) current.close(1000, state);
     if (browser) browser.close().catch(() => {});
     setTimeout(() => {

@@ -1,4 +1,4 @@
-import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, renameSync, rmSync, writeSync } from "node:fs";
+import { closeSync, fsyncSync, lstatSync, openSync, renameSync, rmSync, writeSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, isAbsolute } from "node:path";
 
@@ -21,7 +21,16 @@ export function writeSessionAtomic(target, session) {
     if (e.code !== "ENOENT") throw e;
   }
 
-  const body = JSON.stringify({ ...session, updatedAt: new Date().toISOString() }, null, 2);
+  writeFileAtomic(target, JSON.stringify({ ...session, updatedAt: new Date().toISOString() }, null, 2));
+}
+
+function writeFileAtomic(target, body) {
+  const dir = dirname(target);
+  try {
+    if (lstatSync(target).isSymbolicLink()) throw new Error("target is a symlink");
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+  }
   const tmp = `${target}.${randomBytes(6).toString("hex")}.tmp`;
   const fd = openSync(tmp, "wx", 0o600);
   try {
@@ -48,6 +57,9 @@ export function writeSessionAtomic(target, session) {
   }
 }
 
-export function ensurePrivateDir(dir) {
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+// writeReloadMarker writes <session>.reload (a timestamp only) the same way.
+// glovo-home stats this marker, not the session file, because glovo-skill
+// rewrites the session file itself on every token refresh.
+export function writeReloadMarker(sessionPath) {
+  writeFileAtomic(`${sessionPath}.reload`, `${new Date().toISOString()}\n`);
 }

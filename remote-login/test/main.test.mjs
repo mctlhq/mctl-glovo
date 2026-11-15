@@ -28,6 +28,19 @@ test("bad configuration exits 64 before reading the token", async () => {
   assert.equal(await run({ ...OK_ENV, GLOVO_REMOTE_LOGIN_ORIGIN: "https://x/path" }, "").exit, 64);
   assert.equal(await run({ ...OK_ENV, GLOVO_REMOTE_LOGIN_PROVIDERS: "apple" }, "").exit, 64);
   assert.equal(await run({ ...OK_ENV, GLOVO_REMOTE_LOGIN_TIMEOUT_MS: "1" }, "").exit, 64);
+  assert.equal(await run({ ...OK_ENV, GLOVO_REMOTE_LOGIN_HEADLESS: "0" }, "").exit, 64);
+  assert.equal(
+    await run({ ...OK_ENV, GLOVO_REMOTE_LOGIN_EXECUTABLE: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" }, "").exit,
+    64,
+  );
+  assert.equal(await run({ ...OK_ENV, GLOVO_REMOTE_LOGIN_EXECUTABLE: "chrome" }, "").exit, 64);
+});
+
+test("GLOVO_SESSION_PATH, glovo-home's name, is accepted as the session path", async () => {
+  const env = { GLOVO_SESSION_PATH: OK_ENV.GLOVO_REMOTE_LOGIN_SESSION_OUT, GLOVO_REMOTE_LOGIN_ORIGIN: OK_ENV.GLOVO_REMOTE_LOGIN_ORIGIN };
+  const r = run(env, "short\n");
+  assert.equal(await r.exit, 64);
+  assert.match(r.err(), /helper token/, "got past the path check to the token check");
 });
 
 test("a short or missing helper token exits 64", async () => {

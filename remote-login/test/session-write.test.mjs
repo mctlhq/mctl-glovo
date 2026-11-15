@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeSessionAtomic } from "../src/session-write.mjs";
+import { writeReloadMarker, writeSessionAtomic } from "../src/session-write.mjs";
 
 function privateDir() {
   const d = mkdtempSync(join(process.env.TMPDIR || tmpdir(), "rl-session-"));
@@ -54,4 +54,15 @@ test("refuses relative paths, symlink targets and shared directories", () => {
 test("refuses a missing directory instead of creating it", () => {
   const dir = privateDir();
   assert.throws(() => writeSessionAtomic(join(dir, "nope", "session.json"), {}), { code: "ENOENT" });
+});
+
+test("reload marker is written next to the session, 0600, timestamp only", () => {
+  const dir = privateDir();
+  const target = join(dir, "session.json");
+  writeSessionAtomic(target, { accessToken: "a", refreshToken: "r" });
+  writeReloadMarker(target);
+  const marker = join(dir, "session.json.reload");
+  assert.equal(statSync(marker).mode & 0o777, 0o600);
+  assert.match(readFileSync(marker, "utf8"), /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\n$/);
+  assert.deepEqual(readdirSync(dir).sort(), ["session.json", "session.json.reload"]);
 });

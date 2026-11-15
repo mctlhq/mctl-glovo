@@ -6,17 +6,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { customAllowlist } from "../src/allowlist.mjs";
-import { LoginBrowser, pidAlive } from "../src/browser.mjs";
+import { assertNotKillable, assertRunningNotKillable, KILL_PATTERN, LoginBrowser, pidAlive } from "../src/browser.mjs";
 
 const fixture = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
-const CHANNEL = process.env.GLOVO_BROWSER_CHANNEL || "chrome";
 
 async function chromeAvailable() {
   const { chromium } = await import("playwright-core");
   try {
-    const b = await chromium.launch({ channel: CHANNEL, headless: true });
+    const b = await chromium.launch({ headless: true });
     await b.close();
     return true;
   } catch {
@@ -25,9 +25,9 @@ async function chromeAvailable() {
 }
 const haveChrome = await chromeAvailable();
 if (!haveChrome && process.env.REMOTE_LOGIN_REQUIRE_BROWSER === "1") {
-  throw new Error(`Chrome channel "${CHANNEL}" is required but could not be launched`);
+  throw new Error("Playwright chrome-headless-shell is required but could not be launched");
 }
-const skip = haveChrome ? false : `Chrome channel "${CHANNEL}" not available`;
+const skip = haveChrome ? false : "chrome-headless-shell not installed (npx playwright-core install chromium-headless-shell)";
 
 function listen(handler) {
   return new Promise((resolve) => {
@@ -95,7 +95,6 @@ test("lockdown blocks every off-list request and navigation", { skip, timeout: 6
     audit,
     startUrl: `${w.site.origin}/escape`,
     apiOrigin: w.api.origin,
-    channel: CHANNEL,
     timeoutMs: 30_000,
   });
   try {
@@ -125,7 +124,6 @@ test("capture: a fixture token response finishes the run with a session", { skip
     audit,
     startUrl: `${w.site.origin}/login`,
     apiOrigin: w.api.origin,
-    channel: CHANNEL,
     viewport: { width: 390, height: 844, dpr: 2, mobile: true },
     timeoutMs: 30_000,
     profileSettleMs: 5_000,
@@ -158,7 +156,6 @@ test("screencast streams JPEG frames with viewport metadata", { skip, timeout: 6
     onMeta: (m) => metas.push(m),
     startUrl: `${w.site.origin}/`,
     apiOrigin: w.api.origin,
-    channel: CHANNEL,
     viewport: { width: 390, height: 844, dpr: 2, mobile: true },
     timeoutMs: 30_000,
   });
@@ -185,7 +182,6 @@ test("timeout ends the run and kills the browser process", { skip, timeout: 60_0
     audit,
     startUrl: `${w.site.origin}/`,
     apiOrigin: w.api.origin,
-    channel: CHANNEL,
     timeoutMs: 1500,
   });
   try {
@@ -198,6 +194,81 @@ test("timeout ends the run and kills the browser process", { skip, timeout: 60_0
     const deadline = Date.now() + 10_000;
     while (pidAlive(pid) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
     assert.equal(pidAlive(pid), false, "browser process is gone after timeout");
+  } finally {
+    await b.close();
+    await w.close();
+  }
+});
+
+test("a Google Chrome channel or executable is refused before launch", () => {
+  assert.throws(() => assertNotKillable({ channel: "chrome" }), /kills/);
+  assert.throws(() => assertNotKillable({ channel: "chromium" }), /kills/);
+  assert.throws(
+    () => assertNotKillable({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" }),
+    /kill pattern/,
+  );
+  assert.doesNotThrow(() => assertNotKillable({}));
+});
+
+test("the running browser's command line is checked, and unreadable means refused", () => {
+  const chrome = () => "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=/x";
+  assert.throws(() => assertRunningNotKillable(123, chrome), /kill pattern/);
+  assert.throws(() => assertRunningNotKillable(123, () => { throw new Error("ps failed"); }), /ps failed/);
+  assert.throws(() => assertRunningNotKillable(null, () => "ok"), /pid unknown/);
+  assert.doesNotThrow(() => assertRunningNotKillable(123, () => "/cache/chrome-headless-shell --headless"));
+});
+
+// Every process of the default browser, as `ps` (and so `pkill -f`) sees it.
+function processTree(rootPid) {
+  const r = spawnSync("ps", ["-ww", "-axo", "pid=,ppid=,command="], { encoding: "utf8" });
+  assert.equal(r.status, 0, "ps must be readable");
+  const rows = r.stdout.split("\n").filter(Boolean).map((l) => {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l);
+    return m && { pid: Number(m[1]), ppid: Number(m[2]), cmd: m[3] };
+  }).filter(Boolean);
+  const out = [];
+  const want = new Set([rootPid]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const row of rows) {
+      if (!want.has(row.pid) && want.has(row.ppid)) {
+        want.add(row.pid);
+        grew = true;
+      }
+    }
+  }
+  for (const row of rows) if (want.has(row.pid)) out.push(row.cmd);
+  return out;
+}
+
+test("the default browser's processes do not match the host's pkill pattern", { skip, timeout: 60_000 }, async () => {
+  const w = await fakeWorld();
+  const { audit } = auditSink();
+  const b = new LoginBrowser({ allowlist: w.allowlist, audit, startUrl: `${w.site.origin}/`, apiOrigin: w.api.origin, timeoutMs: 30_000 });
+  try {
+    await b.start();
+    const cmds = processTree(b.browserPid);
+    assert.ok(cmds.length >= 2, "browser and at least one child process found");
+    for (const c of cmds) assert.ok(!c.includes(KILL_PATTERN), "no process command line contains the kill pattern");
+  } finally {
+    await b.close();
+    await w.close();
+  }
+});
+
+test("an unexpected browser exit is a failed login, not a capture", { skip, timeout: 60_000 }, async () => {
+  const w = await fakeWorld();
+  const { events, audit } = auditSink();
+  const b = new LoginBrowser({ allowlist: w.allowlist, audit, startUrl: `${w.site.origin}/`, apiOrigin: w.api.origin, timeoutMs: 30_000 });
+  try {
+    await b.start();
+    process.kill(b.browserPid, "SIGKILL"); // what the host's pkill does
+    const out = await b.result;
+    assert.equal(out.status, "error");
+    assert.equal(out.reason, "browser_exited");
+    assert.equal(out.session, undefined);
+    assert.ok(events.some((e) => e.event === "finished" && e.reason === "error"));
   } finally {
     await b.close();
     await w.close();

@@ -7,14 +7,18 @@ glovo-home integration are in
 [docs/design/remote-glovo-login.md](../docs/design/remote-glovo-login.md).
 
 This is a helper process, meant to be started and proxied by glovo-home. It
-listens on 127.0.0.1 only.
+listens on 127.0.0.1 only. It runs Playwright's chrome-headless-shell and
+refuses any Google Chrome build, because the home server periodically runs
+`pkill -f "Google Chrome"`. After writing the session it writes
+`<session>.reload`, the marker glovo-home watches.
 
 ```bash
 npm ci --ignore-scripts
-npm test        # needs Google Chrome; REMOTE_LOGIN_REQUIRE_BROWSER=1 makes a missing Chrome fail
+npx --no-install playwright-core install chromium-headless-shell
+npm test        # REMOTE_LOGIN_REQUIRE_BROWSER=1 makes a missing browser fail instead of skip
 
 # one run (the helper token goes on stdin, never in argv or env)
-GLOVO_REMOTE_LOGIN_SESSION_OUT=/abs/path/session.json \
+GLOVO_SESSION_PATH=/abs/path/session.json \
 GLOVO_REMOTE_LOGIN_ORIGIN=https://glovo.example \
   node src/main.mjs <<< "$(openssl rand -hex 32)"
 ```

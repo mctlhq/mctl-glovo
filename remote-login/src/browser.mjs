@@ -3,6 +3,7 @@
 // Glovo auth responses. Nothing here logs URLs beyond the host, frames,
 // keystrokes or token contents.
 
+import { spawnSync } from "node:child_process";
 import { hostOf, isAllowed } from "./allowlist.mjs";
 import {
   buildSession,
@@ -27,6 +28,36 @@ const LAUNCH_ARGS = [
   "--password-store=basic",
   "--use-mock-keychain",
 ];
+
+// The home server runs a periodic `pkill -f "Google Chrome"`. pkill -f
+// matches the whole command line, so any browser whose executable path or
+// arguments contain this string would be killed mid-login. Both the system
+// Chrome ("Google Chrome.app") and Playwright's bundled full Chromium
+// ("Google Chrome for Testing.app") match. Playwright's chrome-headless-shell
+// does not, and it is the default here.
+export const KILL_PATTERN = "Google Chrome";
+
+// assertNotKillable refuses a launch whose executable would be hit by the
+// host's kill pattern, instead of starting a run that can die halfway.
+export function assertNotKillable({ channel, executablePath }) {
+  if (channel) throw new Error(`browser channel "${channel}" runs a Google Chrome build, which the host kills; use the default headless shell`);
+  if (executablePath && executablePath.includes(KILL_PATTERN)) throw new Error("browser executable path matches the host's kill pattern");
+}
+
+// assertRunningNotKillable checks the live command line of the browser
+// process. A missing pid or an unreadable command line is a refusal.
+export function assertRunningNotKillable(pid, read = commandLine) {
+  if (!pid) throw new Error("browser pid unknown");
+  if (read(pid).includes(KILL_PATTERN)) throw new Error("browser command line matches the host's kill pattern");
+}
+
+// commandLine returns the full command line of a process as `ps` shows it
+// (what pkill -f matches against), or throws if it cannot be read.
+export function commandLine(pid) {
+  const r = spawnSync("ps", ["-ww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" });
+  if (r.status !== 0 || !r.stdout.trim()) throw new Error("could not read the browser command line");
+  return r.stdout.trim();
+}
 
 const VIEWPORT_LIMITS = { minW: 320, maxW: 1600, minH: 480, maxH: 1600, maxDpr: 3 };
 
@@ -55,7 +86,8 @@ export class LoginBrowser {
     timeoutMs = 10 * 60_000,
     startUrl = DEFAULT_START_URL,
     apiOrigin = DEFAULT_API_ORIGIN,
-    channel = "chrome",
+    channel,
+    executablePath,
     headless = true,
     viewport = {},
     profileSettleMs = 15_000,
@@ -71,6 +103,7 @@ export class LoginBrowser {
     this.startUrl = startUrl;
     this.apiOrigin = apiOrigin;
     this.channel = channel;
+    this.executablePath = executablePath;
     this.headless = headless;
     this.viewport = clampViewport(viewport);
     this.profileSettleMs = profileSettleMs;
@@ -88,17 +121,32 @@ export class LoginBrowser {
 
   async start() {
     const launcher = this.launcher ?? (await import("playwright-core")).chromium;
+    // Without a channel and headless, Playwright launches chrome-headless-shell.
+    // A headful window needs full Chromium, whose bundled build is named
+    // "Google Chrome for Testing" and is therefore refused below unless a
+    // custom executable outside the kill pattern is given.
+    assertNotKillable({ channel: this.channel, executablePath: this.executablePath });
     this.browser = await launcher.launch({
-      channel: this.channel,
+      executablePath: this.executablePath,
       headless: this.headless,
       args: LAUNCH_ARGS,
       // Playwright launches with a fresh temporary profile and removes it on
       // close; nothing is reused between runs.
     });
     this.browserPid = await this._readBrowserPid();
+    // The authoritative check: the real command line of the running
+    // browser. An unreadable one is a refusal too, not a pass.
+    try {
+      assertRunningNotKillable(this.browserPid);
+    } catch (e) {
+      await this.close();
+      throw e;
+    }
     this._timer = setTimeout(() => this._finish({ status: "timeout" }), this.timeoutMs);
     this._timer.unref?.();
-    this.browser.on("disconnected", () => this._finish({ status: "error", reason: "browser_disconnected" }));
+    // An exit we did not ask for (the host's pkill, a crash, OOM) is a failed
+    // login: nothing is written and the viewer is told the browser closed.
+    this.browser.on("disconnected", () => this._finish({ status: "error", reason: "browser_exited" }));
 
     const v = this.viewport;
     this.context = await this.browser.newContext({

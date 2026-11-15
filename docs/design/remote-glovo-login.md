@@ -6,7 +6,9 @@ integration is a follow-up and is described here, not implemented.
 ## Problem
 
 The Glovo connector reaches the owner's real Glovo account through a home
-server: Cloudflare tunnel, then `glovo-home` (Go, loopback only), then a
+server: Cloudflare tunnel (cloudflared 2026.11.0), then `glovo-home` (Go,
+`cmd/glovo-home`, listening on `127.0.0.1:8787` by default, see
+`deploy/mac-mini/README.md`), then a
 stdio child `glovo-skill` (node), then `api.glovoapp.com`. The Glovo session
 (access token, refresh token, device urn, location headers) lives in a 0600
 `session.json` on that server.
@@ -69,8 +71,9 @@ MCP client          glovo-home (Go)                 remote-login helper (node)  
     |<========= JPEG frames / input events =================================>| CDP screencast/input ->|
     |                    |                                 | /oauth/token seen        |
     |                    |                                 | write session.json 0600  |
+    |                    |                                 | write <session>.reload   |
     |                    |<-- {"result":"captured"}, exit 0| kill browser             |
-    |                    | mtime watch -> restart glovo-skill child                    |
+    |                    | marker watch -> restart glovo-skill child                   |
 ```
 
 ### 1. `glovo_link_start` (glovo-home, follow-up)
@@ -153,8 +156,12 @@ the first cut.
 
 A node ESM program on playwright-core. One process per attempt:
 
-- configuration from the environment (`GLOVO_REMOTE_LOGIN_SESSION_OUT`,
-  `GLOVO_REMOTE_LOGIN_ORIGIN`, timeout, providers); the per-run helper token
+- configuration from the environment: the session path from
+  `GLOVO_REMOTE_LOGIN_SESSION_OUT`, falling back to `GLOVO_SESSION_PATH`
+  (the name glovo-home and glovo-skill already use), plus
+  `GLOVO_REMOTE_LOGIN_ORIGIN`, timeout, providers and an optional
+  `GLOVO_REMOTE_LOGIN_EXECUTABLE`. glovo-skill's `GLOVO_BROWSER_CHANNEL` is
+  deliberately not read (see "Which browser binary"). The per-run helper token
   on **stdin**, never argv or env, which other local processes can read;
 - listens on `127.0.0.1` only, on a random port it prints as
   `{"port":N}`;
@@ -273,7 +280,44 @@ Defense in depth on top of `route()`:
 - Chrome flags: no extensions, no sync, no background networking, no
   component updates, no first-run UI.
 
-### 6. Browser lifecycle
+### 6. Which browser binary: the host kills "Google Chrome"
+
+The home server runs a LaunchAgent, at load and every 4 hours, that does
+`pkill -f "Google Chrome"`. `pkill -f` matches the whole command line, so
+it kills any process whose executable path or arguments contain that
+string. That includes:
+
+- the system Chrome (`/Applications/Google Chrome.app/...`), which is what
+  playwright's `channel: "chrome"` and glovo-skill's `glovo_login` use;
+- Playwright's bundled full Chromium, which since Chrome for Testing ships as
+  `Google Chrome for Testing.app/.../Google Chrome for Testing`.
+
+A run on either could be killed in the middle of a sign-in. The helper
+therefore runs Playwright's **chrome-headless-shell** (the default for a
+headless launch without a channel; its binary is
+`chromium_headless_shell-<rev>/chrome-headless-shell-<platform>/chrome-headless-shell`
+and its arguments contain no such string). Enforcement, fail closed:
+
+1. Before launch: any `channel` is refused (every channel is a Google
+   Chrome build), and so is an `executablePath` containing the pattern.
+   A visible window needs full Chromium, so `GLOVO_REMOTE_LOGIN_HEADLESS=0`
+   is accepted only together with a custom executable outside the pattern.
+2. After launch: the browser PID comes from `SystemInfo.getProcessInfo`, and
+   its real command line is read with `ps -ww -o command=`. If it contains
+   the pattern, or cannot be read, the browser is closed and the run fails.
+   A test walks the whole process tree of the default browser and asserts
+   that no command line contains the pattern.
+3. Whatever the cause (the pkill after all, a crash, the OOM killer), a
+   browser exit the helper did not ask for ends the run as
+   `error`/`browser_exited`: nothing is written, the existing session file
+   is untouched, and the viewer says "The browser on the server closed
+   before sign-in finished. Nothing was saved. Ask for a new link."
+
+Install on the host: `npx playwright-core install chromium-headless-shell`
+inside `remote-login/` (the revision must match the pinned playwright-core).
+The LaunchAgent itself is left as it is; changing it is outside this design.
+
+### 7. Browser lifecycle
 
 - **Fresh every time.** `chromium.launch()` creates a new temporary profile,
   and every run uses one `newContext()` with no storage state. Nothing is
@@ -281,6 +325,7 @@ Defense in depth on top of `route()`:
   runs. Playwright deletes the profile directory when the browser exits.
 - **One run at a time.** glovo-home starts at most one helper; the helper
   starts at most one browser.
+- **Unexpected exit is a failure.** See section 6.
 - **Hard timeout.** 10 minutes by default (bounded 10 s to 15 min), counted
   from helper start, so it also covers "nobody ever opened the link". The
   link's own TTL is the same 10 minutes.
@@ -296,7 +341,7 @@ Defense in depth on top of `route()`:
   hours and would look like success. After the token, the helper waits up to
   15 s for `/v3/me` (customer id) and then finishes.
 
-### 7. Writing the session and reloading glovo-skill
+### 8. Writing the session and reloading glovo-skill
 
 The helper writes only to `GLOVO_REMOTE_LOGIN_SESSION_OUT`:
 
@@ -308,9 +353,19 @@ The helper writes only to `GLOVO_REMOTE_LOGIN_SESSION_OUT`:
 - the session shape is what `glovo-skill`'s `loadSession` reads (same fields
   as `login.mjs`, plus `linkedVia: "remote-login"`).
 
-glovo-home watches the file's mtime (the hot-reload is being built in the
-glovo-home gateway change) and restarts the `glovo-skill` child, which then
-loads the new session. glovo-home learns the outcome from the helper's
+Then it writes `<session>.reload` (a timestamp only, written the same atomic
+0600 way). glovo-home (merged in #3) watches that marker, not the session
+file, and restarts the `glovo-skill` child, which then loads the new
+session. The session file itself is not watched because glovo-skill
+rewrites it on every token refresh, and the daily keepalive exists to cause
+exactly that. This is the same contract `scripts/glovo-relogin.sh` uses.
+
+There is a race to close in the integration: the old glovo-skill child can
+still refresh and rewrite session.json between the helper's write and the
+restart, putting the old session back. When the old session is dead (the
+usual reason to re-link) its refresh fails and nothing is written, but if it
+is still alive, it can win. glovo-home should therefore stop the child when
+a login run starts and start it again on the marker (or when the run fails). glovo-home learns the outcome from the helper's
 result line and exit code and records it; the MCP client learns it the next
 time it calls a tool (`glovo_auth_status`).
 
@@ -344,6 +399,8 @@ history and addresses), and the remote browser itself while it runs.
 |---|---|
 | Link unknown, expired or used | 404, same page for all three; nothing starts. |
 | A run is already active | Second redemption gets 409; minting a new link aborts the old run first. |
+| Browser killed or crashed mid-run (for example the host's `pkill -f "Google Chrome"`) | `error`/`browser_exited`, exit 3, nothing written, viewer told the browser closed. The default binary does not match that pattern; any Google Chrome build is refused before launch. |
+| Browser binary matches the kill pattern, or its command line cannot be read | Refused before or right after launch; exit 3 or 64. |
 | Chrome fails to launch | Helper ends with `error`, exit 3; no session written; the viewer shows "Something went wrong". |
 | Bad Origin, missing or bad helper token | 403 / 401 on upgrade; three bad tokens end the run. |
 | Malformed or unknown input message | Socket closed with 4400; the run continues and the viewer may reconnect. |
@@ -362,25 +419,42 @@ Not part of this PR (glovo-home is being built in a separate change):
 
 1. `glovo_link_start` MCP tool, link store, `/link/<code>` redemption,
    cookie, 303.
-2. Spawning the helper: `node remote-login/src/main.mjs` with the env above,
+2. Spawning the helper: `node remote-login/src/main.mjs` with
+   `GLOVO_SESSION_PATH` (the value glovo-home already has) and the env above,
    the helper token written to its stdin, its own process group; read the
    port line; proxy `/link/viewer*` to `/viewer*` and `/link/ws` to `/ws`
    adding `X-Remote-Login-Token` and passing `Origin` through unchanged.
 3. Security headers on the proxied responses (the helper already sets them;
    glovo-home must not strip them).
 4. URL elicitation when the client declared `elicitation.url`.
-5. Session hot-reload on mtime (already in progress in the gateway change).
-6. Audit: link minted / redeemed / expired, run result; principal id, never
+5. Session reload: already done through the `<session>.reload` marker
+   (#3). Add: stop the glovo-skill child while a run is active (section 8).
+6. `glovo_login` reaches the host's display and Google Chrome, so it should
+   be listed in `GLOVO_HOME_BLOCKED_TOOLS` once `glovo_link_start` exists.
+7. Cloudflare tunnel: WebSockets pass through cloudflared without extra
+   configuration; the `/link/*` paths need no tunnel change because they are
+   served on the same hostname and port as `/mcp`.
+8. Audit: link minted / redeemed / expired, run result; principal id, never
    the code or the cookie.
 
 ## Open risks
 
+- **The host's Chrome killer.** Handled by not running anything named
+  "Google Chrome". If the LaunchAgent's pattern ever changes (for example to
+  `chrome` or `Chromium`), the headless shell would match it too; the
+  pattern lives in one constant (`KILL_PATTERN` in `src/browser.mjs`) and
+  must follow the LaunchAgent.
+
 - **The allowlist is derived, not observed.** The first real sign-in may
   need a host that is blocked. The audit lines will name it.
-- **Bot detection.** reCAPTCHA scores headless Chrome low, so a challenge is
-  likely; it can be solved through the stream, but it may be worse than on
-  a desktop. If it is unusable, the next step is a headful window on the
-  home server (`GLOVO_REMOTE_LOGIN_HEADLESS=0`), not stealth patches.
+- **Bot detection.** chrome-headless-shell is the old headless mode and
+  identifies itself as `HeadlessChrome`; reCAPTCHA and Incognia will score
+  it low, so a challenge is likely. It can be solved through the stream,
+  but it may be worse than on a desktop, and Glovo could refuse outright.
+  If it is unusable, the next step is a headful window from a full Chromium
+  build installed under a path without "Google Chrome"
+  (`GLOVO_REMOTE_LOGIN_HEADLESS=0` plus `GLOVO_REMOTE_LOGIN_EXECUTABLE`),
+  not stealth patches.
 - **Google sign-in** likely refuses automated browsers. Email sign-in is the
   supported path.
 - **claude.ai chat has no URL elicitation.** The user must tap the link in
