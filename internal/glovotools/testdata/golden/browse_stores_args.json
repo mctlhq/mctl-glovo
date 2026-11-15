@@ -1,0 +1,138 @@
+{
+  "case": "browse_stores_args",
+  "tool": "glovo_browse_stores",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"pagination\": {\n    \"next\": {\n      \"offset\": 24\n    }\n  },\n  \"count\": 2,\n  \"stores\": [\n    {\n      \"id\": \"1001\",\n      \"store_id\": \"1001\",\n      \"store_address_id\": 2001,\n      \"name\": \"Example Market\",\n      \"slug\": \"example-market\",\n      \"category\": \"Supermarket\",\n      \"category_id\": 4,\n      \"store_class\": \"grocery\",\n      \"open\": true,\n      \"eta\": \"20-30 min\",\n      \"distance\": \"1.2 km\",\n      \"rating\": 94,\n      \"votes\": 120,\n      \"delivery_fee\": 1.99,\n      \"service_fee\": 0.5,\n      \"image\": \"https://glovo.dhmedia.io/image/img-store-1\",\n      \"logo\": \"https://img.example.test/logo.png\",\n      \"url\": \"https://glovoapp.com/en/es/barcelona/stores/example-market\"\n    },\n    {\n      \"id\": \"1002\",\n      \"store_id\": \"1002\",\n      \"store_address_id\": 2002,\n      \"name\": \"Sample Pharmacy\",\n      \"category_id\": 3,\n      \"store_class\": \"retail\",\n      \"open\": true,\n      \"eta\": null\n    }\n  ],\n  \"category\": {\n    \"id\": 4,\n    \"name\": \"Groceries\"\n  },\n  \"widgets\": [\n    {\n      \"id\": \"w1\",\n      \"title\": \"Featured\",\n      \"template_id\": \"T1\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/v1/web/store_wall/category/1?moduleId=StoreFeeds&offset=24&limit=2&handlingType=DELIVERY",
+      "headers": [
+        [
+          "Accept",
+          "application/json, text/plain, */*"
+        ],
+        [
+          "Content-Type",
+          "application/json"
+        ],
+        [
+          "Glovo-Api-Version",
+          "14"
+        ],
+        [
+          "Glovo-App-Context",
+          "web"
+        ],
+        [
+          "Glovo-App-Development-State",
+          "prod"
+        ],
+        [
+          "Glovo-App-Platform",
+          "web"
+        ],
+        [
+          "Glovo-App-Type",
+          "customer"
+        ],
+        [
+          "Glovo-App-Version",
+          "v1.2476.1"
+        ],
+        [
+          "Glovo-Client-Info",
+          "web-customer-web-react/v1.2476.1 project:customer-web"
+        ],
+        [
+          "Glovo-Device-Urn",
+          "glv:device:00000000-0000-4000-8000-000000000002"
+        ],
+        [
+          "Glovo-Language-Code",
+          "en"
+        ],
+        [
+          "Glovo-Location-Country-Code",
+          "XX"
+        ],
+        [
+          "Glovo-Location-City-Code",
+          "TST"
+        ],
+        [
+          "Glovo-Delivery-Location-Latitude",
+          "10.5"
+        ],
+        [
+          "Glovo-Delivery-Location-Longitude",
+          "-3.25"
+        ],
+        [
+          "Glovo-Delivery-Location-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Delivery-Location-Accuracy",
+          "0"
+        ],
+        [
+          "Glovo-Perseus-Client-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Perseus-Consent",
+          "essential_functional_marketing"
+        ],
+        [
+          "Glovo-Request-Id",
+          "00000000-0000-4000-8000-000000000003"
+        ],
+        [
+          "Glovo-Request-TTL",
+          "7500"
+        ]
+      ],
+      "body": {
+        "filters": [],
+        "previousStoreIds": [
+          "1001",
+          "x-2"
+        ]
+      }
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

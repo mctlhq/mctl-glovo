@@ -30,11 +30,37 @@ What it does:
   duration). Arguments and results are never logged;
 - keeps the Glovo session alive with one `glovo_get_basket` call a day and
   runs an alert hook when that fails;
-- restarts glovo-skill when `scripts/glovo-relogin.sh` installs a new
+- restarts glovo-skill (or, with the native backend, re-reads the
+  session) when `scripts/glovo-relogin.sh` installs a new
   session, without restarting itself.
 
 Basket writes go straight through, as they do with the local tool. There is
 no approval step, and glovo-skill has no checkout or payment tool.
+
+## Backends
+
+`GLOVO_HOME_BACKEND` picks where the tools run. Exactly one backend runs.
+
+- `skill` (the default): glovo-home starts glovo-skill as a stdio child and
+  mirrors its tools, as above.
+- `native`: glovo-home serves the same 27 tools itself, in Go
+  (`internal/glovotools`), with no Node process. The tool names, titles,
+  descriptions, input schemas and result shapes are glovo-skill 0.2.1's,
+  checked against goldens recorded from the upstream server. It reads the
+  same session file (`GLOVO_SESSION_PATH`) on every call, rotates the
+  refresh token when it refreshes, and writes the file atomically at mode
+  0600. Basket writes go through the same mutation allowlist as the
+  keepalive; there is still no checkout, payment or order tool.
+  `GOOGLE_MAPS_API_KEY`, if set, enables Google Places evidence in
+  `glovo_get_suggestions`, as it does upstream (the skill child never
+  receives that variable).
+
+`glovo_login` exists in both backends with the same schema, but in `native`
+it never opens a browser: it returns an error that points to
+`scripts/glovo-relogin.sh` (see below).
+
+Switching is a configuration change plus a restart of glovo-home; the
+session file is shared, so no re-login is needed in either direction.
 
 ## Build
 
@@ -56,13 +82,15 @@ are fixed in the binary and cannot be configured.
 | Variable | Required | Meaning |
 |---|---|---|
 | `GLOVO_HOME_ALLOWED_PRINCIPALS` | yes | Comma-separated mctl principal ids (`prn_...`). Empty or unset refuses everyone. |
-| `GLOVO_HOME_NODE` | yes | Node binary for the child. |
-| `GLOVO_HOME_SERVER` | yes | glovo-skill entry point (`dist/server.mjs`). |
-| `GLOVO_SESSION_PATH` | no | Passed to glovo-skill unchanged (its default is `~/.glovo/session.json`). |
+| `GLOVO_HOME_BACKEND` | no | `skill` (default) or `native`; anything else is refused at start. |
+| `GLOVO_HOME_NODE` | skill only | Node binary for the child. Ignored by `native`. |
+| `GLOVO_HOME_SERVER` | skill only | glovo-skill entry point (`dist/server.mjs`). Ignored by `native`. |
+| `GLOVO_SESSION_PATH` | no | Passed to glovo-skill unchanged; read and rotated directly by `native` (default `~/.glovo/session.json`). |
+| `GOOGLE_MAPS_API_KEY` | no | `native` only: Google Places evidence for `glovo_get_suggestions`. |
 | `GLOVO_HOME_LISTEN` | no | Listen address, default `127.0.0.1:8787`. A non-loopback address is refused unless `GLOVO_HOME_ALLOW_NON_LOOPBACK=true`. |
 | `GLOVO_HOME_CALL_TIMEOUT` | no | Per-tool-call limit, default `3m`. |
 | `GLOVO_HOME_BLOCKED_TOOLS` | no | Extra exact tool names to refuse, e.g. `glovo_login`. |
-| `GLOVO_HOME_EXTRA_TOOLS` | no | Exact tool names to mirror on top of the 27 known glovo-skill 0.2.1 tools. Any other tool glovo-skill offers is refused and logged ("not on the allowlist"); the checkout/payment/order name rules still apply to listed names. |
+| `GLOVO_HOME_EXTRA_TOOLS` | no | `skill` only (ignored with a warning by `native`, which serves exactly the 27 tools). Exact tool names to mirror on top of the 27 known glovo-skill 0.2.1 tools. Any other tool glovo-skill offers is refused and logged ("not on the allowlist"); the checkout/payment/order name rules still apply to listed names. |
 | `GLOVO_HOME_CHILD_STDERR` | no | `inherit` sends glovo-skill's stderr to glovo-home's stderr (the log file). Default: discarded, because glovo-skill's output is not under this repository's control and may carry request data; the "no arguments or results in the log" guarantee covers glovo-home's own lines only. |
 | `GLOVO_HOME_KEEPALIVE` | no | Session keepalive interval, default `24h`; `0` turns it off (minimum `1m`). |
 | `GLOVO_HOME_ALERT_CMD` | no | Absolute path of an executable run when the keepalive fails. Unset: the failure is only logged. |
@@ -72,8 +100,10 @@ The child gets an explicit environment: `HOME`, `PATH`, `USER`, `LOGNAME`,
 `GLOVO_HOME_*`, and every `PLAYWRIGHT_*` variable. Nothing else is
 passed.
 
-`glovo_login` opens a browser on the mini itself. If remote callers should
-not be able to trigger that, add it to `GLOVO_HOME_BLOCKED_TOOLS`.
+With the `skill` backend, `glovo_login` opens a browser on the mini itself.
+If remote callers should not be able to trigger that, add it to
+`GLOVO_HOME_BLOCKED_TOOLS`. With `native` it only returns the re-login
+pointer.
 
 ## Session keepalive
 
@@ -150,8 +180,9 @@ The script:
 The file is never printed. Optional variables: `GLOVO_SKILL_DIR` (default
 `~/.local/share/glovo-skill`), `GLOVO_NODE` (default `node`) and
 `GLOVO_HOME_REMOTE_SESSION` (default `.glovo/session.json`, relative to
-the remote home directory). glovo-home sees the marker and restarts glovo-skill
-within about 15s.
+the remote home directory). glovo-home sees the marker within about 15s and
+restarts glovo-skill (`skill`), or re-reads the session at once (`native`,
+which re-reads it on every call anyway, so nothing restarts).
 
 ## launchd
 

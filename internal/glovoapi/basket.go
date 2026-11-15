@@ -357,6 +357,10 @@ func handlingStrategy(basket Value) Value {
 // AddToBasket is addToBasket (api.mjs:476): create the store basket, bump an
 // existing line, or append a new line.
 func (c *Client) AddToBasket(ctx context.Context, p AddToBasketParams) (Value, error) {
+	if p.Quantity < 0 {
+		// An add must never act as a decrement of an existing line.
+		return nil, errors.New("quantity must be at least 1")
+	}
 	if p.Quantity == 0 {
 		p.Quantity = 1
 	}
@@ -375,6 +379,11 @@ func (c *Client) AddToBasket(ctx context.Context, p AddToBasketParams) (Value, e
 	}
 	if !truthy(basket) {
 		return c.createBasket(ctx, p.StoreID, p.StoreAddressID, p.StoreCategoryID, product)
+	}
+	// A basket read without a basketId is malformed: writing to it would
+	// target /baskets/undefined/... Refuse, as patchLineQuantity does.
+	if !truthy(get(basket, "basketId")) {
+		return nil, fmt.Errorf("glovo basket for store %s has no basketId", p.StoreID)
 	}
 	existing, err := findBasketProduct(basket, BasketLineRef{ProductID: p.ProductID, StoreProductID: p.StoreProductID})
 	if err != nil {

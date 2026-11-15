@@ -1,11 +1,17 @@
 package glovoapi
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func assertMode(t *testing.T, path string, want os.FileMode) {
@@ -153,5 +159,66 @@ func TestTokenStatus(t *testing.T) {
 	}
 	if !strings.HasPrefix(validToken, "Bearer ") || decodeJWTPayload(validToken) == nil {
 		t.Error("test JWT does not decode")
+	}
+}
+
+// Reload must not read the session file while a refresh is rotating it: a
+// read taken before the rotated file is written, installed after it, would
+// put back a refresh token Glovo has already rotated away, and the next
+// refresh would fail as a re-login. Reload waits for the refresh in flight.
+func TestReloadWaitsForRefreshInFlight(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth/refresh" {
+			close(entered)
+			<-release
+			_, _ = fmt.Fprintf(w, `{"accessToken":%q,"refreshToken":"refresh-test-new"}`, rotatedToken)
+			return
+		}
+		_, _ = io.WriteString(w, `{"orders":[]}`)
+	}))
+	defer srv.Close()
+	s := testSession()
+	s["accessToken"] = expiredToken
+	path := writeSessionFile(t, s)
+	c, err := New(path, WithBaseURL(srv.URL), WithHTTPClient(srv.Client()), WithDefaultLocation(testLocation()),
+		WithClock(func() time.Time { return testNow }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	callDone := make(chan error, 1)
+	go func() {
+		_, err := c.GetOrders(context.Background(), nil, 0)
+		callDone <- err
+	}()
+	<-entered
+	reloaded := make(chan struct{})
+	go func() {
+		_ = c.Reload()
+		close(reloaded)
+	}()
+	select {
+	case <-reloaded:
+		t.Error("Reload read the session while a refresh was in flight")
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(release)
+	if err := <-callDone; err != nil {
+		t.Fatal(err)
+	}
+	<-reloaded
+	if got := c.Session()["refreshToken"]; got != "refresh-test-new" {
+		t.Fatalf("refresh token after reload = %v, want the rotated one", got)
+	}
+	disk, err := LoadSession(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disk["refreshToken"] != "refresh-test-new" {
+		t.Fatalf("refresh token on disk = %v", disk["refreshToken"])
 	}
 }

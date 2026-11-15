@@ -1,0 +1,136 @@
+{
+  "case": "purchase_history",
+  "tool": "glovo_get_purchase_history",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"raw_shape\": \"array\",\n  \"cursor\": 0,\n  \"count\": 3,\n  \"next_offset\": \"cursor-b\",\n  \"pagination\": {\n    \"next\": {\n      \"offset\": \"cursor-b\"\n    }\n  },\n  \"orders\": [\n    {\n      \"order_id\": \"9001\",\n      \"store\": \"Example Market\",\n      \"status\": \"DELIVERED\",\n      \"date\": 1767225600000,\n      \"total\": \"5,40 EUR\",\n      \"items\": [\n        \"2x Test Milk\",\n        \"1x Test Bread\"\n      ],\n      \"url\": \"https://glovoapp.com/en/profile/past-orders/9001\"\n    },\n    {\n      \"order_id\": 9002,\n      \"store\": \"Sample Pizzeria\",\n      \"date\": \"2026-01-02T12:00:00Z\",\n      \"total\": \"12,00 EUR\",\n      \"items\": [\n        \"Test Pizza\",\n        \"Test Soda\",\n        \"Test Salad\"\n      ],\n      \"url\": \"https://glovoapp.com/en/profile/past-orders/9002\"\n    },\n    {\n      \"order_id\": \"code-only\",\n      \"store\": \"Code Store\",\n      \"items\": []\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/customer/orders-list?offset=0&limit=15",
+      "headers": [
+        [
+          "Accept",
+          "application/json, text/plain, */*"
+        ],
+        [
+          "Content-Type",
+          "application/json"
+        ],
+        [
+          "Glovo-Api-Version",
+          "14"
+        ],
+        [
+          "Glovo-App-Context",
+          "web"
+        ],
+        [
+          "Glovo-App-Development-State",
+          "prod"
+        ],
+        [
+          "Glovo-App-Platform",
+          "web"
+        ],
+        [
+          "Glovo-App-Type",
+          "customer"
+        ],
+        [
+          "Glovo-App-Version",
+          "v1.2476.1"
+        ],
+        [
+          "Glovo-Client-Info",
+          "web-customer-web-react/v1.2476.1 project:customer-web"
+        ],
+        [
+          "Glovo-Device-Urn",
+          "glv:device:00000000-0000-4000-8000-000000000002"
+        ],
+        [
+          "Glovo-Language-Code",
+          "en"
+        ],
+        [
+          "Glovo-Location-Country-Code",
+          "XX"
+        ],
+        [
+          "Glovo-Location-City-Code",
+          "TST"
+        ],
+        [
+          "Glovo-Delivery-Location-Latitude",
+          "10.5"
+        ],
+        [
+          "Glovo-Delivery-Location-Longitude",
+          "-3.25"
+        ],
+        [
+          "Glovo-Delivery-Location-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Delivery-Location-Accuracy",
+          "0"
+        ],
+        [
+          "Glovo-Perseus-Client-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Perseus-Consent",
+          "essential_functional_marketing"
+        ],
+        [
+          "Glovo-Request-Id",
+          "00000000-0000-4000-8000-000000000003"
+        ],
+        [
+          "Glovo-Request-TTL",
+          "7500"
+        ],
+        [
+          "Authorization",
+          "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig"
+        ]
+      ],
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

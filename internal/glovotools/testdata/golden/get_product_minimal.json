@@ -1,0 +1,138 @@
+{
+  "case": "get_product_minimal",
+  "tool": "glovo_get_product",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"store_id\": \"1001\",\n  \"store_address_id\": \"2001\",\n  \"id\": \"6001\",\n  \"product_id\": \"6001\",\n  \"external_id\": \"ext-6001\",\n  \"store_product_id\": \"sp-6001\",\n  \"name\": \"Test Pizza\",\n  \"price\": \"9,50 EUR\",\n  \"amount\": 9.5,\n  \"image\": \"https://img.example.test/pizza.png\",\n  \"sponsored\": false,\n  \"available\": true,\n  \"category_id\": 9,\n  \"add_enabled\": true,\n  \"is_variant\": false,\n  \"variant_selection\": \"customizations\",\n  \"option_groups\": [\n    {\n      \"id\": \"71\",\n      \"groupLegacyId\": 71,\n      \"groupId\": \"ag-71\",\n      \"groupExternalId\": \"gx-71\",\n      \"groupPosition\": 0,\n      \"name\": \"Size\",\n      \"required\": true,\n      \"min\": 1,\n      \"max\": 1,\n      \"options\": [\n        {\n          \"id\": \"701\",\n          \"legacyId\": 701,\n          \"optionId\": \"a-701\",\n          \"externalId\": \"ox-701\",\n          \"name\": \"Small\",\n          \"price\": \"+0 EUR\"\n        },\n        {\n          \"id\": \"702\",\n          \"legacyId\": 702,\n          \"optionId\": \"a-702\",\n          \"externalId\": \"ox-702\",\n          \"name\": \"Large\",\n          \"price\": \"+2 EUR\"\n        }\n      ]\n    },\n    {\n      \"id\": \"72\",\n      \"groupLegacyId\": 72,\n      \"groupId\": \"ag-72\",\n      \"groupExternalId\": \"gx-72\",\n      \"groupPosition\": 1,\n      \"name\": \"Extras\",\n      \"required\": false,\n      \"min\": 0,\n      \"max\": null,\n      \"options\": [\n        {\n          \"id\": \"711\",\n          \"legacyId\": 711,\n          \"externalId\": \"ox-711\",\n          \"name\": \"Cheese\",\n          \"price\": 1\n        }\n      ]\n    },\n    {\n      \"id\": \"73\",\n      \"groupLegacyId\": 73,\n      \"groupId\": \"ag-73\",\n      \"groupExternalId\": \"gx-73\",\n      \"groupPosition\": 2,\n      \"name\": \"Sauce\",\n      \"required\": true,\n      \"min\": 0,\n      \"max\": null,\n      \"options\": [\n        {\n          \"id\": \"721\",\n          \"legacyId\": 721,\n          \"optionId\": \"a-721\",\n          \"externalId\": \"ox-721\",\n          \"name\": \"Tomato\"\n        }\n      ]\n    }\n  ],\n  \"required_sections\": [\n    \"gx-73\"\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "POST",
+      "uri": "/v4/stores/1001/addresses/2001/products/6001/view",
+      "headers": [
+        [
+          "Accept",
+          "application/json, text/plain, */*"
+        ],
+        [
+          "Content-Type",
+          "application/json"
+        ],
+        [
+          "Glovo-Api-Version",
+          "14"
+        ],
+        [
+          "Glovo-App-Context",
+          "web"
+        ],
+        [
+          "Glovo-App-Development-State",
+          "prod"
+        ],
+        [
+          "Glovo-App-Platform",
+          "web"
+        ],
+        [
+          "Glovo-App-Type",
+          "customer"
+        ],
+        [
+          "Glovo-App-Version",
+          "v1.2476.1"
+        ],
+        [
+          "Glovo-Client-Info",
+          "web-customer-web-react/v1.2476.1 project:customer-web"
+        ],
+        [
+          "Glovo-Device-Urn",
+          "glv:device:00000000-0000-4000-8000-000000000002"
+        ],
+        [
+          "Glovo-Language-Code",
+          "en"
+        ],
+        [
+          "Glovo-Location-Country-Code",
+          "XX"
+        ],
+        [
+          "Glovo-Location-City-Code",
+          "TST"
+        ],
+        [
+          "Glovo-Delivery-Location-Latitude",
+          "10.5"
+        ],
+        [
+          "Glovo-Delivery-Location-Longitude",
+          "-3.25"
+        ],
+        [
+          "Glovo-Delivery-Location-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Delivery-Location-Accuracy",
+          "0"
+        ],
+        [
+          "Glovo-Perseus-Client-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Perseus-Consent",
+          "essential_functional_marketing"
+        ],
+        [
+          "Glovo-Request-Id",
+          "00000000-0000-4000-8000-000000000003"
+        ],
+        [
+          "Glovo-Request-TTL",
+          "7500"
+        ]
+      ],
+      "body": {
+        "editingMode": false,
+        "origin": "STORE",
+        "translation": null,
+        "trackingOrigin": null,
+        "quantity": 2
+      }
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

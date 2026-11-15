@@ -1,0 +1,32 @@
+{
+  "case": "shopping_guide",
+  "tool": "glovo_get_shopping_guide",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "# Glovo Shopping Guide\n\nUse Glovo read-only tools before changing a basket.\n\n- Browse stores with `glovo_browse_stores`; category `4` is groceries and category `1` is food.\n- Open a store with `glovo_get_store`, then use `glovo_get_store_menu`, `glovo_get_store_recommendations`, `glovo_get_store_order_options`, or `glovo_search_store_items`.\n- For \"again,\" \"new,\" or \"different item\" requests, call `glovo_get_suggestions` first. It ranks familiar venues from full card history, resolves current products, reports coverage, and never changes the basket.\n- Google quality is optional external evidence. Request review text only when the user explicitly asks, and preserve Google/author attribution.\n- For repeat orders, call `glovo_plan_reorder`, inspect every chosen candidate with `glovo_get_product`, and reselect required options. The plan itself never changes the basket.\n- To add an item, use IDs returned by search/product tools. Never invent `store_id`, `store_address_id`, `product_id`, `external_id`, or `store_product_id`.\n- Basket tools mutate the real Glovo basket but do not checkout. The user reviews and pays in Glovo.\n- If a tool says the session is missing or expired, run `glovo_login`.\n"
+      }
+    ]
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

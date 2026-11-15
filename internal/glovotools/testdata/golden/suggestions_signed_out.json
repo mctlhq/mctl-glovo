@@ -1,0 +1,27 @@
+{
+  "case": "suggestions_signed_out",
+  "tool": "glovo_get_suggestions",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: Suggestions require an authenticated Glovo session for order history."
+      }
+    ],
+    "isError": true
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "location": {
+        "cityCode": "TST",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

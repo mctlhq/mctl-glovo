@@ -191,13 +191,15 @@ func TestRequestHeaders(t *testing.T) {
 	want := map[string]string{
 		"Accept":                            "application/json, text/plain, */*",
 		"Content-Type":                      "application/json",
-		"User-Agent":                        "Glovo/10.0.0 (iPhone; iOS 17.5.1; Scale/3.00)",
+		"User-Agent":                        "node",
+		"Accept-Encoding":                   "gzip, deflate",
 		"Glovo-Api-Version":                 "14",
-		"Glovo-App-Context":                 "customer",
+		"Glovo-App-Context":                 "web",
 		"Glovo-App-Development-State":       "prod",
-		"Glovo-App-Platform":                "iOS",
+		"Glovo-App-Platform":                "web",
 		"Glovo-App-Type":                    "customer",
-		"Glovo-App-Version":                 "10.0.0",
+		"Glovo-App-Version":                 "v1.2476.1",
+		"Glovo-Client-Info":                 "web-customer-web-react/v1.2476.1 project:customer-web",
 		"Glovo-Device-Urn":                  "glv:device:00000000-0000-4000-8000-000000000002",
 		"Glovo-Language-Code":               "en",
 		"Glovo-Location-Country-Code":       "XX",
@@ -547,24 +549,39 @@ func TestSecond401IsAuthErrorAfterOneRefresh(t *testing.T) {
 	}
 }
 
+// A refresh that fails is an error that leaves the session file alone. Only a
+// rejection of the refresh token (400/401/403, or a 2xx without a usable
+// token) is an AuthError, the "sign in again" signal; 429, 5xx and a
+// malformed 2xx body are transient and must not tell the owner to re-login.
 func TestRefreshFailureIsError(t *testing.T) {
-	cases := map[string]reply{
-		"status":         {500, `{}`},
-		"malformed":      {200, `{"accessToken":`},
-		"no token":       {200, `{"refreshToken":"x"}`},
-		"non-string tok": {200, `{"accessToken":{"nope":true}}`},
+	cases := map[string]struct {
+		rep  reply
+		auth bool
+	}{
+		"invalid grant":  {reply{400, `{"error":"invalid_grant"}`}, true},
+		"unauthorized":   {reply{401, `{}`}, true},
+		"forbidden":      {reply{403, `{}`}, true},
+		"no token":       {reply{200, `{"refreshToken":"x"}`}, true},
+		"non-string tok": {reply{200, `{"accessToken":{"nope":true}}`}, true},
+		"server error":   {reply{500, `{}`}, false},
+		"unavailable":    {reply{503, `{}`}, false},
+		"rate limited":   {reply{429, `{}`}, false},
+		"malformed":      {reply{200, `{"accessToken":`}, false},
 	}
-	for name, rep := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := newFake(t)
 			c, path := newTestClient(t, f, testSession())
 			before, _ := os.ReadFile(path) // #nosec G304 -- test-owned temp or testdata path
 			f.on("GET", "/v3/customer/orders/9001", reply{401, `{}`})
-			f.on("POST", "/oauth/refresh", rep)
+			f.on("POST", "/oauth/refresh", tc.rep)
 			v, err := c.GetOrder(context.Background(), "9001")
 			var authErr *AuthError
-			if v != nil || !errors.As(err, &authErr) {
-				t.Fatalf("got %v, %v; want AuthError", v, err)
+			if v != nil || err == nil || errors.As(err, &authErr) != tc.auth {
+				t.Fatalf("got %v, %v; want error with AuthError=%v", v, err, tc.auth)
+			}
+			if !tc.auth && strings.Contains(err.Error(), "glovo_login") {
+				t.Errorf("transient refresh failure tells the owner to re-login: %v", err)
 			}
 			after, _ := os.ReadFile(path) // #nosec G304 -- test-owned temp or testdata path
 			if !bytes.Equal(before, after) {

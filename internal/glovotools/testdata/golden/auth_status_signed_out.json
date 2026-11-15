@@ -1,0 +1,19 @@
+{
+  "case": "auth_status_signed_out",
+  "tool": "glovo_auth_status",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"signed_in\": false,\n  \"access_token_valid\": false,\n  \"seconds_left\": 0,\n  \"has_customer\": false,\n  \"has_location\": false\n}"
+      }
+    ]
+  },
+  "requests": [],
+  "session_after": {
+    "exists": false
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

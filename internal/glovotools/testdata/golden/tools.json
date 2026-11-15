@@ -1,0 +1,1110 @@
+[
+  {
+    "name": "glovo_get_shopping_guide",
+    "title": "Shopping guide",
+    "description": "Return the Glovo shopping playbook and safety rules. Call this before changing a basket.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_auth_status",
+    "title": "Auth status",
+    "description": "Check whether a Glovo session is available and whether the access token is currently valid.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_location",
+    "title": "Get location",
+    "description": "Read the current Glovo browsing location headers. Does not mutate baskets.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_set_location",
+    "title": "Set location",
+    "description": "Set the local browsing location headers. This does not clear baskets, but changing stores may make an existing basket incompatible.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "country_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2
+        },
+        "city_code": {
+          "type": "string",
+          "minLength": 2
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "language_code": {
+          "type": "string",
+          "minLength": 2
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_saved_locations",
+    "title": "Get saved delivery locations",
+    "description": "Read authenticated saved Glovo delivery locations and identify the current saved-location match. Read-only; does not change location headers or baskets.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "match_text": {
+          "description": "Optional private address text to match against saved locations. Not persisted.",
+          "type": "string",
+          "minLength": 3
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_search_locations",
+    "title": "Search locations",
+    "description": "Search public Glovo delivery locations by text. Returns only place id, provider, title, and subtitle.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 3,
+          "description": "Address or place text. Minimum 3 characters."
+        },
+        "limit": {
+          "description": "Maximum suggestions returned. Default 5.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_select_location",
+    "title": "Select location",
+    "description": "Resolve a public location suggestion, check guest delivery serviceability, and persist only valid browsing location headers.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "place_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Place id from glovo_search_locations."
+        },
+        "provider": {
+          "description": "Provider from glovo_search_locations, if present.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "place_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_login",
+    "title": "Log in to Glovo",
+    "description": "Open Chrome for Glovo sign-in and save the local session for order history and basket tools.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "timeout_ms": {
+          "description": "Maximum login wait. Defaults to five minutes; test harnesses may use a short timeout.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300000
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_browse_stores",
+    "title": "Browse stores",
+    "description": "Browse live Glovo stores for the configured location. category_id 1 = restaurants, 4 = groceries, and 3 = pharmacy/beauty retail.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "category_id": {
+          "description": "Glovo category id. Default 4 (groceries); use 1 for food.",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "offset": {
+          "description": "Pagination offset. Default 0.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "description": "Page size. Default 24, max 50.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "previous_store_ids": {
+          "description": "Store ids already returned, for pagination.",
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_suggestions",
+    "title": "Personalized live suggestions",
+    "description": "Turn structured repeat, explore, or balanced food intent into 3-5 read-only live Glovo choices. Uses full card-level venue history, re-fetches current products/options, and can attach optional Google Maps quality evidence. Never changes the basket.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "Repeat familiar venues, explore new venues, or mix both. Default balanced.",
+          "type": "string",
+          "enum": [
+            "repeat",
+            "explore",
+            "balanced"
+          ]
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Food or product keywords, for example pizza, sushi, or burger."
+        },
+        "venue_query": {
+          "description": "Optional venue name constraint, for example a favorite restaurant.",
+          "type": "string",
+          "minLength": 1
+        },
+        "item_mode": {
+          "description": "Prefer Easy Reorder items, different items at a familiar venue, or any matching live item.",
+          "type": "string",
+          "enum": [
+            "repeat",
+            "different",
+            "any"
+          ]
+        },
+        "known_liked_only": {
+          "description": "Apply only when the user explicitly says a venue is liked; historical purchase alone does not prove satisfaction.",
+          "type": "boolean"
+        },
+        "quality_preference": {
+          "description": "Evidence preference. Google remains display-only because it is not part of the backtested personalized model.",
+          "type": "string",
+          "enum": [
+            "personal",
+            "glovo",
+            "google",
+            "balanced"
+          ]
+        },
+        "novelty_tolerance": {
+          "description": "Exploration share for balanced intent. Default 0.4.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_choices": {
+          "description": "Return 3-5 choices. Default 5; fewer may be returned when current products are unavailable.",
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 5
+        },
+        "include_google_quality": {
+          "description": "Request optional Google Places quality evidence for the final shortlist. Requires configured GOOGLE_MAPS_API_KEY.",
+          "type": "boolean"
+        },
+        "include_google_reviews": {
+          "description": "Explicitly request Google review text for at most the first three matched finalists. May increase Places billing; preserves author/source attribution.",
+          "type": "boolean"
+        },
+        "history_refresh": {
+          "description": "Incrementally refresh the newest order page by default, or force a complete cursor walk.",
+          "type": "string",
+          "enum": [
+            "incremental",
+            "full"
+          ]
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_store",
+    "title": "Get store",
+    "description": "Get details for a Glovo store by slug or id, including store_id and store_address_id when available.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Store slug or id, e.g. 'condis-bcn' or 324846."
+        }
+      },
+      "required": [
+        "store"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_store_menu",
+    "title": "Get store menu",
+    "description": "Return a compact recursive menu/category list for a store.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_address_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "limit": {
+          "description": "Maximum menu nodes returned. Default 80.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "store_id",
+        "store_address_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_browse_store_catalog",
+    "title": "Browse store catalog",
+    "description": "Open an exact same-store content_uri returned by glovo_get_store_menu. Supports restaurant, grocery, and retail catalogs; returns a truthful search fallback when a node has no product tiles.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_address_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "content_uri": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact content_uri returned by glovo_get_store_menu for this store and address."
+        },
+        "limit": {
+          "description": "Maximum products returned. Default 40.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "store_id",
+        "store_address_id",
+        "content_uri"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_store_recommendations",
+    "title": "Store recommendations",
+    "description": "Read authenticated current-product carousels such as Easy Reorder and Top Sellers. Returns live product identifiers, prices, and availability without changing the basket.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_address_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "kind": {
+          "description": "Default easy_reorder.",
+          "type": "string",
+          "enum": [
+            "easy_reorder",
+            "top_sellers",
+            "all"
+          ]
+        },
+        "limit": {
+          "description": "Default 40.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "store_id",
+        "store_address_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_store_order_options",
+    "title": "Store order options",
+    "description": "Read delivery minimums, surcharges, restrictions, public store information, and similar stores before preparing a basket. No checkout or order placement.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_address_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "translation": {
+          "description": "Store information language. Default en.",
+          "type": "string",
+          "minLength": 2
+        },
+        "similar_limit": {
+          "description": "Default 5.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "required": [
+        "store_id",
+        "store_address_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_search_store_items",
+    "title": "Search store items",
+    "description": "Search products/items inside a specific Glovo store. Use ids from glovo_browse_stores or glovo_get_store.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_address_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "query": {
+          "type": "string",
+          "description": "Search text, e.g. 'leche', 'pizza', 'water'."
+        },
+        "limit": {
+          "description": "Default 24.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "store_id",
+        "store_address_id",
+        "query"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_product",
+    "title": "Get product",
+    "description": "Get product details from a store. Use product ids returned by glovo_search_store_items.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_address_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "external_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "category_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "store_id",
+        "store_address_id",
+        "product_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_basket",
+    "title": "Get basket",
+    "description": "Read the current authenticated Glovo basket. If store_id is provided, read that store basket.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_purchase_history",
+    "title": "Purchase history",
+    "description": "Read authenticated Glovo order history. Pagination is cursor-based: start with offset 0, then pass the returned next_offset value.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "offset": {
+          "description": "Order-id cursor. Default 0; use the returned next_offset for the next page.",
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "string",
+              "pattern": "^\\d+$"
+            }
+          ]
+        },
+        "limit": {
+          "description": "Default 15; Glovo currently caps order-history pages at 15.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_order_items",
+    "title": "Order items",
+    "description": "Read details/items for one past Glovo order.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Order id from glovo_get_purchase_history."
+        }
+      },
+      "required": [
+        "order_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_preview_reorder",
+    "title": "Preview reorder",
+    "description": "Read one past order and report whether it can be safely rebuilt into a basket. This never mutates the basket or places an order.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Order id from glovo_get_purchase_history."
+        }
+      },
+      "required": [
+        "order_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_plan_reorder",
+    "title": "Plan a repeat order",
+    "description": "Resolve past order lines against authenticated Easy Reorder and current store search results. Read-only; inspect product options and obtain approval before using basket tools.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "description": "Order id from glovo_get_purchase_history."
+        },
+        "max_searches": {
+          "description": "Maximum fallback store searches. Default 5.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "candidates_per_line": {
+          "description": "Default 3.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "order_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_get_order_stats",
+    "title": "Order statistics",
+    "description": "Walk full order-history cursor pagination and return compact card-only statistics. Detail enrichment is intentionally separate.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "page_delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_analyze_order_history",
+    "title": "Analyze order history",
+    "description": "Walk cursor-correct history, enrich a bounded recent subset with order details, and calculate truthful product frequency, cadence, customization, and visible-spend statistics with explicit coverage.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "max_pages": {
+          "description": "Omit for full cursor discovery.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "detail_limit": {
+          "description": "Recent order details to enrich. Default 10; stops on detail rate limit.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "page_delay_ms": {
+          "description": "Default 750.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "detail_delay_ms": {
+          "description": "Default 1000.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_add_to_basket",
+    "title": "Add to basket",
+    "description": "Add a product to the real Glovo basket. Do not call unless the user explicitly asks for a real basket change.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_address_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_category_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "external_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "selected_options": {
+          "description": "Selected modifier options. Use option_group ids from glovo_get_product.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "group_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "option_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "group_id",
+              "option_id"
+            ]
+          }
+        },
+        "validate_options": {
+          "description": "Fetch product details and validate required/optional modifiers before adding. Default true when selected_options are supplied.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "store_id",
+        "store_address_id",
+        "product_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_set_quantity",
+    "title": "Set quantity",
+    "description": "Set exact product quantity in the real Glovo basket. Quantity 0 removes it. Do not call unless explicitly requested.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "basket_product_id": {
+          "type": "string"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "store_id",
+        "quantity"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "glovo_remove_from_basket",
+    "title": "Remove from basket",
+    "description": "Remove one product from the real Glovo basket. Do not call unless explicitly requested.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "store_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "store_product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "basket_product_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "store_id"
+      ],
+      "$schema": "http://json-schema.org/draft-07/schema#"
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  }
+]

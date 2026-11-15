@@ -1,0 +1,136 @@
+{
+  "case": "order_items",
+  "tool": "glovo_get_order_items",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"order_id\": 9001,\n  \"store\": \"Example Market\",\n  \"store_id\": 1001,\n  \"store_address_id\": 2001,\n  \"store_slug\": \"example-market\",\n  \"status\": \"DELIVERED\",\n  \"date\": \"2026-01-01T00:00:00.000Z\",\n  \"total\": \"5,40 EUR\",\n  \"handling_strategy\": \"DELIVERY\",\n  \"native_reorder_allowed\": true,\n  \"can_go_to_store\": true,\n  \"refunded\": false,\n  \"items\": [\n    {\n      \"name\": \"Test Milk\",\n      \"quantity\": 2,\n      \"price\": \"2,40 EUR\",\n      \"customizations\": \"Cold\",\n      \"free_product\": false,\n      \"promotion\": null\n    },\n    {\n      \"name\": \"Test Bread\",\n      \"quantity\": 1.5,\n      \"price\": \"3,00 EUR\",\n      \"customizations\": null,\n      \"free_product\": true,\n      \"promotion\": \"2x1\"\n    },\n    {\n      \"name\": \"Mystery item\",\n      \"quantity\": 1,\n      \"price\": null,\n      \"customizations\": null,\n      \"free_product\": false,\n      \"promotion\": null\n    }\n  ],\n  \"pricing_breakdown\": [\n    {\n      \"type\": \"TOTAL\",\n      \"description\": \"Total\",\n      \"amount\": \"5,40 EUR\"\n    },\n    {\n      \"type\": \"FEE\",\n      \"final_amount\": \"1,00 EUR\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/customer/orders/9001",
+      "headers": [
+        [
+          "Accept",
+          "application/json, text/plain, */*"
+        ],
+        [
+          "Content-Type",
+          "application/json"
+        ],
+        [
+          "Glovo-Api-Version",
+          "14"
+        ],
+        [
+          "Glovo-App-Context",
+          "web"
+        ],
+        [
+          "Glovo-App-Development-State",
+          "prod"
+        ],
+        [
+          "Glovo-App-Platform",
+          "web"
+        ],
+        [
+          "Glovo-App-Type",
+          "customer"
+        ],
+        [
+          "Glovo-App-Version",
+          "v1.2476.1"
+        ],
+        [
+          "Glovo-Client-Info",
+          "web-customer-web-react/v1.2476.1 project:customer-web"
+        ],
+        [
+          "Glovo-Device-Urn",
+          "glv:device:00000000-0000-4000-8000-000000000002"
+        ],
+        [
+          "Glovo-Language-Code",
+          "en"
+        ],
+        [
+          "Glovo-Location-Country-Code",
+          "XX"
+        ],
+        [
+          "Glovo-Location-City-Code",
+          "TST"
+        ],
+        [
+          "Glovo-Delivery-Location-Latitude",
+          "10.5"
+        ],
+        [
+          "Glovo-Delivery-Location-Longitude",
+          "-3.25"
+        ],
+        [
+          "Glovo-Delivery-Location-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Delivery-Location-Accuracy",
+          "0"
+        ],
+        [
+          "Glovo-Perseus-Client-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Perseus-Consent",
+          "essential_functional_marketing"
+        ],
+        [
+          "Glovo-Request-Id",
+          "00000000-0000-4000-8000-000000000003"
+        ],
+        [
+          "Glovo-Request-TTL",
+          "7500"
+        ],
+        [
+          "Authorization",
+          "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig"
+        ]
+      ],
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

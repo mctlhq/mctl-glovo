@@ -1,0 +1,136 @@
+{
+  "case": "browse_store_catalog",
+  "tool": "glovo_browse_store_catalog",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"kind\": \"all\",\n  \"count\": 3,\n  \"sections\": [\n    {\n      \"type\": \"CAROUSEL\",\n      \"title\": \"Order again\",\n      \"slug\": \"easy-reorder\",\n      \"collection_type\": \"EasyReorder\",\n      \"products\": [\n        {\n          \"id\": \"1\",\n          \"product_id\": \"1\",\n          \"external_id\": \"external-1\",\n          \"store_product_id\": \"store-product-1\",\n          \"name\": \"Whole Milk\",\n          \"price\": \"1.50 EUR\",\n          \"available\": true,\n          \"store_id\": \"1001\",\n          \"store_address_id\": 2001,\n          \"description\": \"1L\",\n          \"collection_type\": \"EasyReorder\",\n          \"ordered_before\": true,\n          \"source\": \"easy_reorder\"\n        },\n        {\n          \"id\": \"4\",\n          \"product_id\": \"4\",\n          \"external_id\": \"external-4\",\n          \"store_product_id\": \"store-product-4\",\n          \"name\": \"Butter\",\n          \"price\": \"€3.00\",\n          \"amount\": 3,\n          \"available\": null,\n          \"store_id\": \"1001\",\n          \"store_address_id\": 2001,\n          \"collection_type\": \"EasyReorder\",\n          \"ordered_before\": false,\n          \"source\": \"easy_reorder\"\n        }\n      ]\n    },\n    {\n      \"type\": \"CAROUSEL\",\n      \"title\": \"Popular\",\n      \"collection_type\": \"TopSellers\",\n      \"products\": [\n        {\n          \"id\": \"2\",\n          \"product_id\": \"2\",\n          \"external_id\": \"external-2\",\n          \"store_product_id\": \"store-product-2\",\n          \"name\": \"Bread\",\n          \"available\": false,\n          \"store_id\": \"1001\",\n          \"store_address_id\": 2001,\n          \"collection_type\": \"TopSellers\",\n          \"ordered_before\": false,\n          \"source\": \"top_sellers\"\n        }\n      ]\n    }\n  ],\n  \"products\": [\n    {\n      \"id\": \"1\",\n      \"product_id\": \"1\",\n      \"external_id\": \"external-1\",\n      \"store_product_id\": \"store-product-1\",\n      \"name\": \"Whole Milk\",\n      \"price\": \"1.50 EUR\",\n      \"available\": true,\n      \"store_id\": \"1001\",\n      \"store_address_id\": 2001,\n      \"description\": \"1L\",\n      \"collection_type\": \"EasyReorder\",\n      \"ordered_before\": true,\n      \"source\": \"easy_reorder\"\n    },\n    {\n      \"id\": \"4\",\n      \"product_id\": \"4\",\n      \"external_id\": \"external-4\",\n      \"store_product_id\": \"store-product-4\",\n      \"name\": \"Butter\",\n      \"price\": \"€3.00\",\n      \"amount\": 3,\n      \"available\": null,\n      \"store_id\": \"1001\",\n      \"store_address_id\": 2001,\n      \"collection_type\": \"EasyReorder\",\n      \"ordered_before\": false,\n      \"source\": \"easy_reorder\"\n    },\n    {\n      \"id\": \"2\",\n      \"product_id\": \"2\",\n      \"external_id\": \"external-2\",\n      \"store_product_id\": \"store-product-2\",\n      \"name\": \"Bread\",\n      \"available\": false,\n      \"store_id\": \"1001\",\n      \"store_address_id\": 2001,\n      \"collection_type\": \"TopSellers\",\n      \"ordered_before\": false,\n      \"source\": \"top_sellers\"\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/v3/stores/1001/addresses/2001/content?nodeType=DEEP_LINK&link=dairy",
+      "headers": [
+        [
+          "Accept",
+          "application/json, text/plain, */*"
+        ],
+        [
+          "Content-Type",
+          "application/json"
+        ],
+        [
+          "Glovo-Api-Version",
+          "14"
+        ],
+        [
+          "Glovo-App-Context",
+          "web"
+        ],
+        [
+          "Glovo-App-Development-State",
+          "prod"
+        ],
+        [
+          "Glovo-App-Platform",
+          "web"
+        ],
+        [
+          "Glovo-App-Type",
+          "customer"
+        ],
+        [
+          "Glovo-App-Version",
+          "v1.2476.1"
+        ],
+        [
+          "Glovo-Client-Info",
+          "web-customer-web-react/v1.2476.1 project:customer-web"
+        ],
+        [
+          "Glovo-Device-Urn",
+          "glv:device:00000000-0000-4000-8000-000000000002"
+        ],
+        [
+          "Glovo-Language-Code",
+          "en"
+        ],
+        [
+          "Glovo-Location-Country-Code",
+          "XX"
+        ],
+        [
+          "Glovo-Location-City-Code",
+          "TST"
+        ],
+        [
+          "Glovo-Delivery-Location-Latitude",
+          "10.5"
+        ],
+        [
+          "Glovo-Delivery-Location-Longitude",
+          "-3.25"
+        ],
+        [
+          "Glovo-Delivery-Location-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Delivery-Location-Accuracy",
+          "0"
+        ],
+        [
+          "Glovo-Perseus-Client-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Perseus-Consent",
+          "essential_functional_marketing"
+        ],
+        [
+          "Glovo-Request-Id",
+          "00000000-0000-4000-8000-000000000003"
+        ],
+        [
+          "Glovo-Request-TTL",
+          "7500"
+        ],
+        [
+          "Authorization",
+          "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig"
+        ]
+      ],
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

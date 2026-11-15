@@ -1,0 +1,19 @@
+{
+  "case": "get_location_signed_out",
+  "tool": "glovo_get_location",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"countryCode\": \"ES\",\n  \"cityCode\": \"BCN\",\n  \"latitude\": \"41.3874\",\n  \"longitude\": \"2.1686\",\n  \"accuracy\": \"0\",\n  \"languageCode\": \"en\"\n}"
+      }
+    ]
+  },
+  "requests": [],
+  "session_after": {
+    "exists": false
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

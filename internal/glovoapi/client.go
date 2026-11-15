@@ -1,7 +1,11 @@
 package glovoapi
 
 import (
+	"bufio"
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
+	"compress/zlib"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -195,6 +199,42 @@ func WithDefaultLocation(l Location) Option { return func(c *Client) { c.default
 // WithSession installs an in-memory session instead of loading the file.
 func WithSession(s Session) Option { return func(c *Client) { c.session = s } }
 
+// WithClock replaces time.Now for token expiry and session timestamps.
+// Tests use it; nil is refused.
+func WithClock(now func() time.Time) Option {
+	return func(c *Client) {
+		if now == nil {
+			c.setOptErr(errors.New("glovoapi: WithClock: nil clock"))
+			return
+		}
+		c.now = now
+	}
+}
+
+// WithIDGenerator replaces the random UUID source used for search ids and
+// the per-process device identity. Tests use it; nil is refused.
+func WithIDGenerator(newID func() string) Option {
+	return func(c *Client) {
+		if newID == nil {
+			c.setOptErr(errors.New("glovoapi: WithIDGenerator: nil generator"))
+			return
+		}
+		c.newID = newID
+	}
+}
+
+// WithSleep replaces the pause between order-history pages and retries.
+// Tests use it; nil is refused.
+func WithSleep(sleep func(context.Context, time.Duration) error) Option {
+	return func(c *Client) {
+		if sleep == nil {
+			c.setOptErr(errors.New("glovoapi: WithSleep: nil sleep"))
+			return
+		}
+		c.sleep = sleep
+	}
+}
+
 // New returns a client for the session file at sessionPath. It does not read
 // the file; call Reload for that. It fails on an invalid option, on
 // WithProxy or WithRequireProxy combined with WithHTTPClient, and on
@@ -248,14 +288,19 @@ func (c *Client) configureEgress() error {
 		}
 	}
 	if c.proxyURL != nil {
-		dt, ok := http.DefaultTransport.(*http.Transport)
-		if !ok {
-			return errors.New("glovoapi: http.DefaultTransport is not an *http.Transport")
+		tr, err := newTransport()
+		if err != nil {
+			return err
 		}
-		tr := dt.Clone()
 		tr.Proxy = http.ProxyURL(c.proxyURL)
 		if c.proxyTLS != nil {
-			tr.TLSClientConfig = c.proxyTLS
+			tr.TLSClientConfig = http1Only(c.proxyTLS)
+		}
+		c.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tr}
+	} else if !c.customHTTP {
+		tr, err := newTransport()
+		if err != nil {
+			return err
 		}
 		c.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tr}
 	}
@@ -288,10 +333,15 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 	p := u.EscapedPath()
 	prefix := strings.TrimRight(base.EscapedPath(), "/")
 	if prefix != "" {
-		if !strings.HasPrefix(p, prefix+"/") {
+		switch {
+		case p == prefix:
+			// Exactly the base path is the API root, not outside it.
+			p = "/"
+		case strings.HasPrefix(p, prefix+"/"):
+			p = strings.TrimPrefix(p, prefix)
+		default:
 			return fmt.Errorf("%w: outside the API base path", ErrRedirectRefused)
 		}
-		p = strings.TrimPrefix(p, prefix)
 	}
 	if u.RawQuery != "" {
 		p += "?" + u.RawQuery
@@ -326,13 +376,19 @@ func (c *Client) initBits() {
 // kept: AuthStatus reports it as session_error instead of failing. The
 // client stays usable either way, so SetLocation can write a fresh session
 // over a broken file.
+//
+// Reload waits for a token refresh in flight and holds the session lock
+// while it reads, so a file read cannot race a refresh or a location write
+// and put back a session that was already rotated away.
 func (c *Client) Reload() error {
 	if c.hosted() {
 		return ErrHostedNoFile
 	}
-	s, err := LoadSession(c.sessionPath)
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	s, err := LoadSession(c.sessionPath)
 	c.session, c.loadErr = nil, nil
 	switch {
 	case err == nil:
@@ -448,6 +504,23 @@ func (c *Client) locationLocked() Location {
 // headerList keeps header names exactly as glovo-skill spells them.
 type headerList [][2]string
 
+// webVersion is glovo-skill 0.2.1's WEB_VERSION: the client identity the
+// session was issued to. Glovo rejects a refresh that presents another one.
+const webVersion = "v1.2476.1"
+
+// undiciHeaders are the headers Node's fetch (undici, Node 22 and later)
+// adds to every glovo-skill request, in the order and spelling it sends
+// them (testdata/golden/undici_wire.json in internal/glovotools). User-Agent
+// and Accept-Encoding use Go's canonical spelling: net/http looks both up
+// by that key, and would otherwise add its own "Go-http-client/1.1" and
+// "gzip". Header names are case-insensitive on the wire.
+var undiciHeaders = headerList{
+	{"accept-language", "*"},
+	{"sec-fetch-mode", "cors"},
+	{"User-Agent", "node"},
+	{"Accept-Encoding", "gzip, deflate"},
+}
+
 func (c *Client) baseHeaders(auth bool) headerList {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -459,13 +532,13 @@ func (c *Client) baseHeaders(auth bool) headerList {
 	h := headerList{
 		{"Accept", "application/json, text/plain, */*"},
 		{"Content-Type", "application/json"},
-		{"User-Agent", "Glovo/10.0.0 (iPhone; iOS 17.5.1; Scale/3.00)"},
 		{"Glovo-Api-Version", "14"},
-		{"Glovo-App-Context", "customer"},
+		{"Glovo-App-Context", "web"},
 		{"Glovo-App-Development-State", "prod"},
-		{"Glovo-App-Platform", "iOS"},
+		{"Glovo-App-Platform", "web"},
 		{"Glovo-App-Type", "customer"},
-		{"Glovo-App-Version", "10.0.0"},
+		{"Glovo-App-Version", jsString(or(get(loc, "appVersion"), webVersion))},
+		{"Glovo-Client-Info", jsString(or(get(loc, "clientInfo"), "web-customer-web-react/"+webVersion+" project:customer-web"))},
 		{"Glovo-Device-Urn", pick("deviceUrn")},
 		{"Glovo-Language-Code", jsString(or(get(loc, "languageCode"), "en"))},
 		{"Glovo-Location-Country-Code", jsString(get(loc, "countryCode"))},
@@ -480,14 +553,62 @@ func (c *Client) baseHeaders(auth bool) headerList {
 		{"Glovo-Perseus-Consent", jsString(or(get(loc, "perseusConsent"), "essential_functional_marketing"))},
 		{"Glovo-Request-Id", c.newID()},
 		{"Glovo-Request-TTL", "7500"},
-		// Node's fetch (undici) adds these two to every request.
-		{"accept-language", "*"},
-		{"sec-fetch-mode", "cors"},
 	}
 	if tok := get(sess, "accessToken"); auth && truthy(tok) {
 		h = append(h, [2]string{"Authorization", jsString(tok)})
 	}
-	return h
+	return append(h, undiciHeaders...)
+}
+
+// newTransport is the default transport: http.DefaultTransport's settings
+// (including HTTPS_PROXY from the environment) but HTTP/1.1 only, as Node's
+// fetch speaks, and without net/http's transparent gzip, because the
+// request asks for "gzip, deflate" like undici and decodeBody decodes it.
+func newTransport() (*http.Transport, error) {
+	dt, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("glovoapi: http.DefaultTransport is not an *http.Transport")
+	}
+	tr := dt.Clone()
+	tr.ForceAttemptHTTP2 = false
+	tr.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+	tr.DisableCompression = true
+	tr.TLSClientConfig = http1Only(tr.TLSClientConfig)
+	return tr, nil
+}
+
+// http1Only returns a copy of cfg that offers only HTTP/1.1 in ALPN. A
+// config copied from a transport that has already spoken HTTP/2 lists
+// "h2", and a server that picks it would then get HTTP/1.1 bytes.
+func http1Only(cfg *tls.Config) *tls.Config {
+	if cfg == nil {
+		cfg = &tls.Config{MinVersion: tls.VersionTLS12}
+	} else {
+		cfg = cfg.Clone()
+	}
+	cfg.NextProtos = []string{"http/1.1"}
+	return cfg
+}
+
+// decodeBody undoes the Content-Encoding the server chose from "gzip,
+// deflate". An encoding it does not know is an error, never raw bytes read
+// as JSON.
+func decodeBody(resp *http.Response) (io.ReadCloser, error) {
+	switch enc := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding"))); enc {
+	case "", "identity":
+		return resp.Body, nil
+	case "gzip", "x-gzip":
+		return gzip.NewReader(resp.Body)
+	case "deflate":
+		// HTTP deflate is zlib-wrapped; some servers send raw DEFLATE.
+		br := bufio.NewReader(resp.Body)
+		if hdr, err := br.Peek(2); err == nil && (uint16(hdr[0])<<8|uint16(hdr[1]))%31 == 0 && hdr[0]&0x0f == 8 {
+			return zlib.NewReader(br)
+		}
+		return flate.NewReader(br), nil
+	default:
+		return nil, fmt.Errorf("unsupported Content-Encoding %q", enc)
+	}
 }
 
 // mutationAllowlist is every non-GET request this client may send. Anything
@@ -506,17 +627,40 @@ var mutationAllowlist = []struct {
 }
 
 // ErrUnsafePath is returned for a request path with an empty, "." or ".."
-// segment. seg escapes "/" but not dots, so an id of ".." would otherwise
-// climb out of its path.
-var ErrUnsafePath = errors.New("glovoapi: refusing a request path with an empty, '.' or '..' segment")
+// segment, also percent-encoded. seg escapes "/" but not dots, so an id of
+// ".." would otherwise climb out of its path. Mutations are stricter still;
+// see checkMutation.
+var ErrUnsafePath = errors.New("glovoapi: refusing a request path with an empty, '.', '..' or slash-carrying segment")
 
 func checkPathSegments(p string) error {
 	raw := strings.SplitN(p, "?", 2)[0]
 	if !strings.HasPrefix(raw, "/") {
 		return ErrUnsafePath
 	}
+	if raw == "/" {
+		// The API root: reachable only as a redirect to the base path.
+		return nil
+	}
 	for _, s := range strings.Split(raw[1:], "/") {
-		if s == "" || s == "." || s == ".." {
+		dec, err := url.PathUnescape(s)
+		if err != nil || s == "" || dec == "" || dec == "." || dec == ".." {
+			return ErrUnsafePath
+		}
+	}
+	return nil
+}
+
+// checkMutationSegments refuses a mutation path with a segment that carries
+// an encoded "/" or "\". seg escapes "/" to %2F but does not refuse it, so a
+// basket or product id such as "x/../../orders" would reach the server as
+// one segment that a proxy or router decoding %2F before routing could
+// split and climb out of. Glovo ids never contain a slash. Reads keep
+// accepting such ids (a place id is opaque provider text).
+func checkMutationSegments(p string) error {
+	raw := strings.SplitN(p, "?", 2)[0]
+	for _, s := range strings.Split(raw, "/") {
+		dec, err := url.PathUnescape(s)
+		if err != nil || strings.ContainsAny(dec, "/\\") {
 			return ErrUnsafePath
 		}
 	}
@@ -526,6 +670,9 @@ func checkPathSegments(p string) error {
 func checkMutation(method, p string) error {
 	if method == http.MethodGet {
 		return nil
+	}
+	if err := checkMutationSegments(p); err != nil {
+		return err
 	}
 	// Match the cleaned path, so that a ".." segment cannot make a path look
 	// like an allowed one while resolving to another.
@@ -592,7 +739,11 @@ func (c *Client) send(ctx context.Context, method, path string, body any, auth b
 		return 0, nil, "", fmt.Errorf("%s %s: %w", method, safePath(strings.SplitN(path, "?", 2)[0]), err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
+	decoded, err := decodeBody(resp)
+	if err != nil {
+		return 0, nil, "", fmt.Errorf("%s %s: %w", method, safePath(strings.SplitN(path, "?", 2)[0]), err)
+	}
+	data, err := io.ReadAll(io.LimitReader(decoded, maxBodyBytes))
 	if err != nil {
 		return 0, nil, "", fmt.Errorf("%s %s: read body: %w", method, safePath(strings.SplitN(path, "?", 2)[0]), err)
 	}
@@ -737,11 +888,22 @@ func (c *Client) refreshSession(ctx context.Context, cur Session) (Session, erro
 		return nil, fmt.Errorf("glovo refresh failed: %w", err)
 	}
 	if status < 200 || status > 299 {
-		return nil, &AuthError{Msg: fmt.Sprintf("Glovo refresh failed (%d). Run glovo_login again.", status), Status: status}
+		if refreshRejected(status) {
+			return nil, &AuthError{Msg: fmt.Sprintf("Glovo refresh failed (%d). Run glovo_login again.", status), Status: status}
+		}
+		// 429, 5xx and anything else that is not a rejection of the refresh
+		// token is transient: the session may still be good, so this is not
+		// a re-login signal, and withRetry may retry it.
+		text := data
+		if len(text) > 300 {
+			text = text[:300]
+		}
+		return nil, &APIError{Method: http.MethodPost, Path: "/oauth/refresh", Status: status, Detail: safeErrorBody(string(text))}
 	}
 	v, err := decodeJSON(data)
 	if err != nil {
-		return nil, &AuthError{Msg: "Glovo refresh failed (malformed response). Run glovo_login again."}
+		// A 2xx that is not JSON says nothing about the refresh token.
+		return nil, fmt.Errorf("glovo refresh failed: malformed JSON body: %w", err)
 	}
 	creds := v
 	if truthy(get(v, "access", "accessToken")) {
@@ -765,6 +927,12 @@ func (c *Client) refreshSession(ctx context.Context, cur Session) (Session, erro
 	next["scope"] = orNull(coalesce(get(creds, "scope"), get(old, "scope")))
 	next["createdAt"] = msNumber(c.now())
 	return next, nil
+}
+
+// refreshRejected reports a refresh response that rejects the refresh token
+// itself (invalid_grant and the like): only then is a new sign-in needed.
+func refreshRejected(status int) bool {
+	return status == http.StatusBadRequest || status == http.StatusUnauthorized || status == http.StatusForbidden
 }
 
 // setOrDelete assigns v, or removes the key when v is undefined (which is how

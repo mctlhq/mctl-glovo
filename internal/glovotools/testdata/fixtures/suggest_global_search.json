@@ -1,0 +1,533 @@
+{
+ "data": {
+  "body": {
+   "data": {
+    "elements": [
+     {
+      "type": "STORE_CARD_V2",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-1",
+            "shopRating": "4.6",
+            "numberOfRatedOrders": "300",
+            "shopRankPosition": "1"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "type": "NAVIGATION",
+        "data": {
+         "path": "/store?store_id=store-1&shop_id=address-1&shop_availability_status=OPEN"
+        }
+       }
+      ],
+      "data": {
+       "title": {
+        "text": {
+         "text": "Favorite Pizza"
+        }
+       },
+       "slug": "favorite-pizza"
+      }
+     },
+     {
+      "type": "CAROUSEL",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-1"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "data": {
+       "elements": [
+        {
+         "type": "PRODUCT_TILE",
+         "actions": [
+          {
+           "type": "NAVIGATION",
+           "data": {
+            "path": "/product?store_id=store-1&store_address_id=address-1&product_id=product-1&product_external_id=external-1&store_product_id=store-product-1&category_id=cat-1&search_id=search-1"
+           }
+          }
+         ],
+         "data": {
+          "name": {
+           "text": "Pizza Margherita"
+          },
+          "pricing": {
+           "finalPrice": "EUR 12.00"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "type": "STORE_CARD_V2",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-2",
+            "shopRating": "4.8",
+            "numberOfRatedOrders": "800",
+            "shopRankPosition": "2"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "type": "NAVIGATION",
+        "data": {
+         "path": "/store?store_id=store-2&shop_id=address-2&shop_availability_status=OPEN"
+        }
+       }
+      ],
+      "data": {
+       "title": {
+        "text": {
+         "text": "New Pizza"
+        }
+       },
+       "slug": "new-pizza"
+      }
+     },
+     {
+      "type": "CAROUSEL",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-2"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "data": {
+       "elements": [
+        {
+         "type": "PRODUCT_TILE",
+         "actions": [
+          {
+           "type": "NAVIGATION",
+           "data": {
+            "path": "/product?store_id=store-2&store_address_id=address-2&product_id=product-3&product_external_id=external-3&store_product_id=store-product-3&category_id=cat-1&search_id=search-1"
+           }
+          }
+         ],
+         "data": {
+          "name": {
+           "text": "Pizza Truffle"
+          },
+          "pricing": {
+           "finalPrice": "EUR 12.00"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "type": "STORE_CARD_V2",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-3",
+            "shopRating": "4.6",
+            "numberOfRatedOrders": "300",
+            "shopRankPosition": "3"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "type": "NAVIGATION",
+        "data": {
+         "path": "/store?store_id=store-3&shop_id=address-3&shop_availability_status=OPEN"
+        }
+       }
+      ],
+      "data": {
+       "title": {
+        "text": {
+         "text": "Third Pizza"
+        }
+       },
+       "slug": "third-pizza"
+      }
+     },
+     {
+      "type": "CAROUSEL",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-3"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "data": {
+       "elements": [
+        {
+         "type": "PRODUCT_TILE",
+         "actions": [
+          {
+           "type": "NAVIGATION",
+           "data": {
+            "path": "/product?store_id=store-3&store_address_id=address-3&product_id=product-4&product_external_id=external-4&store_product_id=store-product-4&category_id=cat-1&search_id=search-1"
+           }
+          }
+         ],
+         "data": {
+          "name": {
+           "text": "Pizza Four Cheese"
+          },
+          "pricing": {
+           "finalPrice": "EUR 12.00"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "type": "STORE_CARD_V2",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-4",
+            "shopRating": "92",
+            "numberOfRatedOrders": "40",
+            "shopRankPosition": "4"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "type": "NAVIGATION",
+        "data": {
+         "path": "/store?store_id=store-4&shop_id=address-4&shop_availability_status=OPEN"
+        }
+       }
+      ],
+      "data": {
+       "title": {
+        "text": {
+         "text": "Fourth Pizza"
+        }
+       },
+       "slug": "fourth-pizza"
+      }
+     },
+     {
+      "type": "CAROUSEL",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-4"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "data": {
+       "elements": [
+        {
+         "type": "PRODUCT_TILE",
+         "actions": [
+          {
+           "type": "NAVIGATION",
+           "data": {
+            "path": "/product?store_id=store-4&store_address_id=address-4&product_id=product-5&product_external_id=external-5&store_product_id=store-product-5&category_id=cat-1&search_id=search-1"
+           }
+          }
+         ],
+         "data": {
+          "name": {
+           "text": "Pizza Marinara"
+          },
+          "pricing": {
+           "finalPrice": "EUR 9.50"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "type": "STORE_CARD_V2",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-5",
+            "shopRating": "4.6",
+            "numberOfRatedOrders": "300",
+            "shopRankPosition": "5"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "type": "NAVIGATION",
+        "data": {
+         "path": "/store?store_id=store-5&shop_id=address-5&shop_availability_status=CLOSED"
+        }
+       }
+      ],
+      "data": {
+       "title": {
+        "text": {
+         "text": "Closed Pizza"
+        }
+       },
+       "slug": "closed-pizza"
+      }
+     },
+     {
+      "type": "CAROUSEL",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-5"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "data": {
+       "elements": [
+        {
+         "type": "PRODUCT_TILE",
+         "actions": [
+          {
+           "type": "NAVIGATION",
+           "data": {
+            "path": "/product?store_id=store-5&store_address_id=address-5&product_id=product-6&product_external_id=external-6&store_product_id=store-product-6&category_id=cat-1&search_id=search-1"
+           }
+          }
+         ],
+         "data": {
+          "name": {
+           "text": "Calzone"
+          },
+          "pricing": {
+           "finalPrice": "EUR 12.00"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "type": "STORE_CARD_V2",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-6",
+            "shopRating": "",
+            "numberOfRatedOrders": "",
+            "shopRankPosition": "6"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "type": "NAVIGATION",
+        "data": {
+         "path": "/store?store_id=store-6&shop_id=address-6&shop_availability_status=OPEN"
+        }
+       }
+      ],
+      "data": {
+       "title": {
+        "text": {
+         "text": "Search Pizza Bar"
+        }
+       },
+       "slug": "search-pizza-bar"
+      }
+     },
+     {
+      "type": "CAROUSEL",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-6"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "data": {
+       "elements": [
+        {
+         "type": "PRODUCT_TILE",
+         "actions": [
+          {
+           "type": "NAVIGATION",
+           "data": {
+            "path": "/product?store_id=store-6&store_address_id=address-6&product_id=product-6&product_external_id=external-6&store_product_id=store-product-6&category_id=cat-1&search_id=search-1"
+           }
+          }
+         ],
+         "data": {
+          "name": {
+           "text": "Calzone"
+          },
+          "pricing": {
+           "finalPrice": "EUR 12.00"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "type": "STORE_CARD_V2",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-7",
+            "shopRating": "4.6",
+            "numberOfRatedOrders": "300",
+            "shopRankPosition": "7"
+           }
+          }
+         ]
+        }
+       },
+       {
+        "type": "NAVIGATION",
+        "data": {
+         "path": "/store?store_id=store-7&shop_id=address-7&shop_availability_status=OPEN"
+        }
+       }
+      ],
+      "data": {
+       "title": {
+        "text": {
+         "text": "Bianca Pizza"
+        }
+       },
+       "slug": "bianca-pizza"
+      }
+     },
+     {
+      "type": "CAROUSEL",
+      "actions": [
+       {
+        "type": "PERSEUS_EVENT",
+        "data": {
+         "events": [
+          {
+           "data": {
+            "shopId": "address-7"
+           }
+          }
+         ]
+        }
+       }
+      ],
+      "data": {
+       "elements": [
+        {
+         "type": "PRODUCT_TILE",
+         "actions": [
+          {
+           "type": "NAVIGATION",
+           "data": {
+            "path": "/product?store_id=store-7&store_address_id=address-7&product_id=product-8&product_external_id=external-8&store_product_id=store-product-8&category_id=cat-1&search_id=search-1"
+           }
+          }
+         ],
+         "data": {
+          "name": {
+           "text": "Pizza Bianca"
+          },
+          "pricing": {
+           "finalPrice": "EUR 12.00"
+          }
+         }
+        }
+       ]
+      }
+     },
+     null,
+     {
+      "type": "BANNER",
+      "data": {}
+     }
+    ]
+   }
+  }
+ }
+}

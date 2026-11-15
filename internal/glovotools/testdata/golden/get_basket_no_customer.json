@@ -1,0 +1,31 @@
+{
+  "case": "get_basket_no_customer",
+  "tool": "glovo_get_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "No customer id in Glovo session. Run glovo_login again."
+      }
+    ],
+    "isError": true
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

@@ -2,9 +2,12 @@
 // on the owner's own machine.
 //
 // It verifies mctl-api access tokens (EdDSA, exact issuer and audience, a pid
-// allowlist) and proxies MCP to one long-lived glovo-skill child over stdio.
-// It mirrors the child's tools and adds none; checkout, payment and order
-// tools are refused even if the child ever offers them.
+// allowlist) and serves glovo-skill's tools from one backend, chosen by
+// GLOVO_HOME_BACKEND: "skill" (the default) proxies MCP to one long-lived
+// glovo-skill child over stdio and mirrors its tools; "native" serves the
+// same tools from Go (internal/glovotools) with no child. Only one backend
+// runs. Neither adds a tool; checkout, payment and order tools are refused
+// either way.
 //
 // Configuration is environment only; see deploy/mac-mini/README.md.
 package main
@@ -21,10 +24,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+
 	"github.com/mctlhq/mctl-glovo/internal/authn"
 	"github.com/mctlhq/mctl-glovo/internal/childmcp"
 	"github.com/mctlhq/mctl-glovo/internal/config"
 	"github.com/mctlhq/mctl-glovo/internal/gateway"
+	"github.com/mctlhq/mctl-glovo/internal/glovotools"
 	"github.com/mctlhq/mctl-glovo/internal/health"
 )
 
@@ -65,15 +72,10 @@ func run(log *slog.Logger) error {
 
 	audit := log.With("log", "audit")
 	mcpSrv := gateway.NewMCPServer(version, audit, cfg.CallTimeout)
-	stderr := io.Writer(io.Discard)
-	if cfg.ChildStderr {
-		stderr = os.Stderr
+	sup, err := newBackend(cfg, mcpSrv, log)
+	if err != nil {
+		return err
 	}
-	sup := childmcp.New(childmcp.Config{
-		Command: cfg.Node, Args: []string{cfg.Server}, Env: cfg.ChildEnv, Stderr: stderr,
-		Allowed:      append(append([]string{}, childmcp.KnownTools...), cfg.ExtraTools...),
-		ExtraBlocked: cfg.ExtraBlocked, Log: log.With("component", "child"),
-	}, mcpSrv)
 
 	streamable := gateway.NewStreamable(mcpSrv, log.With("component", "mcp"))
 	gw, err := gateway.New(gateway.Config{
@@ -99,11 +101,12 @@ func run(log *slog.Logger) error {
 	go sup.Run(childCtx)
 
 	// Session hot-reload: scripts/glovo-relogin.sh touches the reload
-	// marker after installing a new session, and that restarts the child.
-	// The session file itself is not watched (glovo-skill rewrites it on
-	// every token refresh) and is never read here.
+	// marker after installing a new session. The skill backend restarts the
+	// child; the native backend re-reads the session (it also re-reads it on
+	// every call). The session file itself is not watched: it is rewritten
+	// on every token refresh.
 	if cfg.ReloadMarker != "" {
-		go childmcp.WatchSession(childCtx, cfg.ReloadMarker, 5*time.Second, log.With("component", "session"), sup.Restart)
+		go childmcp.WatchSession(childCtx, cfg.ReloadMarker, 5*time.Second, log.With("component", "session"), sup.Reload)
 	}
 	if cfg.Keepalive > 0 {
 		klog := log.With("component", "keepalive")
@@ -168,6 +171,70 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("stopped")
 	return nil
+}
+
+// backend is the tool source behind the gateway: the glovo-skill child or
+// the native Go tools.
+type backend interface {
+	Run(ctx context.Context)
+	Wait()
+	Ready(ctx context.Context) error
+	Call(ctx context.Context, name string, args map[string]any) (*mcp.CallToolResult, error)
+	Reload()
+	Drain(ctx context.Context) error
+}
+
+type skillBackend struct{ *childmcp.Supervisor }
+
+// Reload restarts the child so it reads the new session.
+func (s skillBackend) Reload() { s.Restart() }
+
+type nativeBackend struct {
+	*glovotools.Backend
+	done chan struct{}
+}
+
+func (n nativeBackend) Run(ctx context.Context) {
+	<-ctx.Done()
+	close(n.done)
+}
+
+func (n nativeBackend) Wait() { <-n.done }
+
+// newBackend builds the one backend cfg selects and registers its tools on
+// srv: the native tools at once, the child's once it is running. The other
+// backend is never constructed.
+func newBackend(cfg *config.Config, srv *server.MCPServer, log *slog.Logger) (backend, error) {
+	switch cfg.Backend {
+	case config.BackendNative:
+		if len(cfg.ExtraTools) > 0 {
+			log.Warn("GLOVO_HOME_EXTRA_TOOLS is ignored by the native backend: it serves only the tools it implements")
+		}
+		b, err := glovotools.New(glovotools.Config{
+			SessionPath:  cfg.SessionPath,
+			GoogleAPIKey: cfg.GoogleMapsAPIKey,
+			ExtraBlocked: cfg.ExtraBlocked,
+		})
+		if err != nil {
+			return nil, err
+		}
+		b.Install(srv)
+		log.Info("backend", "backend", config.BackendNative, "tools", len(b.Names()))
+		return nativeBackend{Backend: b, done: make(chan struct{})}, nil
+	case config.BackendSkill:
+		stderr := io.Writer(io.Discard)
+		if cfg.ChildStderr {
+			stderr = os.Stderr
+		}
+		log.Info("backend", "backend", config.BackendSkill)
+		return skillBackend{childmcp.New(childmcp.Config{
+			Command: cfg.Node, Args: []string{cfg.Server}, Env: cfg.ChildEnv, Stderr: stderr,
+			Allowed:      append(append([]string{}, childmcp.KnownTools...), cfg.ExtraTools...),
+			ExtraBlocked: cfg.ExtraBlocked, Log: log.With("component", "child"),
+		}, srv)}, nil
+	default:
+		return nil, errors.New("unknown backend " + cfg.Backend)
+	}
 }
 
 // newHTTPServer returns the listener-facing server.

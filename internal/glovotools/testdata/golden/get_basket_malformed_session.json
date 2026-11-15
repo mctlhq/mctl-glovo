@@ -1,0 +1,22 @@
+{
+  "case": "get_basket_malformed_session",
+  "tool": "glovo_get_basket",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "No customer id in Glovo session. Run glovo_login again."
+      }
+    ],
+    "isError": true
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "text": "{not json"
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

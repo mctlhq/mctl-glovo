@@ -1,0 +1,136 @@
+{
+  "case": "saved_locations_match",
+  "tool": "glovo_get_saved_locations",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"count\": 3,\n  \"current_location\": {\n    \"country_code\": \"XX\",\n    \"city_code\": \"TST\",\n    \"latitude\": \"10.5\",\n    \"longitude\": \"-3.25\"\n  },\n  \"selected\": null,\n  \"default\": {\n    \"id\": \"addr-2\",\n    \"label\": \"Office\",\n    \"address_line\": \"Work Avenue 2\",\n    \"country_code\": \"ES\",\n    \"city_code\": \"BCN\",\n    \"latitude\": \"41.5\",\n    \"longitude\": \"2.18\",\n    \"selected\": false,\n    \"default\": true,\n    \"matches_query\": false,\n    \"set_location_args\": {\n      \"country_code\": \"ES\",\n      \"city_code\": \"BCN\",\n      \"latitude\": \"41.5\",\n      \"longitude\": \"2.18\"\n    }\n  },\n  \"matched\": {\n    \"id\": \"addr-1\",\n    \"label\": \"Home\",\n    \"subtitle\": \"Testville\",\n    \"address_line\": \"Example Street 1\",\n    \"details\": \"2A\",\n    \"kind\": \"APARTMENT\",\n    \"tag\": \"HOME\",\n    \"city\": \"Testville\",\n    \"country_code\": \"ES\",\n    \"city_code\": \"BCN\",\n    \"selected\": false,\n    \"default\": false,\n    \"matches_query\": true\n  },\n  \"saved_locations\": [\n    {\n      \"id\": \"addr-1\",\n      \"label\": \"Home\",\n      \"subtitle\": \"Testville\",\n      \"address_line\": \"Example Street 1\",\n      \"details\": \"2A\",\n      \"kind\": \"APARTMENT\",\n      \"tag\": \"HOME\",\n      \"city\": \"Testville\",\n      \"country_code\": \"ES\",\n      \"city_code\": \"BCN\",\n      \"selected\": false,\n      \"default\": false,\n      \"matches_query\": true\n    },\n    {\n      \"id\": \"addr-2\",\n      \"label\": \"Office\",\n      \"address_line\": \"Work Avenue 2\",\n      \"country_code\": \"ES\",\n      \"city_code\": \"BCN\",\n      \"latitude\": \"41.5\",\n      \"longitude\": \"2.18\",\n      \"selected\": false,\n      \"default\": true,\n      \"matches_query\": false,\n      \"set_location_args\": {\n        \"country_code\": \"ES\",\n        \"city_code\": \"BCN\",\n        \"latitude\": \"41.5\",\n        \"longitude\": \"2.18\"\n      }\n    },\n    {\n      \"id\": \"3\",\n      \"address_line\": \"No codes\",\n      \"selected\": false,\n      \"default\": false,\n      \"matches_query\": false\n    }\n  ]\n}"
+      }
+    ]
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "uri": "/customer_profile/api/v1/address_book/me/addresses",
+      "headers": [
+        [
+          "Accept",
+          "application/json, text/plain, */*"
+        ],
+        [
+          "Content-Type",
+          "application/json"
+        ],
+        [
+          "Glovo-Api-Version",
+          "14"
+        ],
+        [
+          "Glovo-App-Context",
+          "web"
+        ],
+        [
+          "Glovo-App-Development-State",
+          "prod"
+        ],
+        [
+          "Glovo-App-Platform",
+          "web"
+        ],
+        [
+          "Glovo-App-Type",
+          "customer"
+        ],
+        [
+          "Glovo-App-Version",
+          "v1.2476.1"
+        ],
+        [
+          "Glovo-Client-Info",
+          "web-customer-web-react/v1.2476.1 project:customer-web"
+        ],
+        [
+          "Glovo-Device-Urn",
+          "glv:device:00000000-0000-4000-8000-000000000002"
+        ],
+        [
+          "Glovo-Language-Code",
+          "en"
+        ],
+        [
+          "Glovo-Location-Country-Code",
+          "XX"
+        ],
+        [
+          "Glovo-Location-City-Code",
+          "TST"
+        ],
+        [
+          "Glovo-Delivery-Location-Latitude",
+          "10.5"
+        ],
+        [
+          "Glovo-Delivery-Location-Longitude",
+          "-3.25"
+        ],
+        [
+          "Glovo-Delivery-Location-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Delivery-Location-Accuracy",
+          "0"
+        ],
+        [
+          "Glovo-Perseus-Client-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Id",
+          "00000000-0000-4000-8000-000000000001"
+        ],
+        [
+          "Glovo-Perseus-Session-Timestamp",
+          "1772366400000"
+        ],
+        [
+          "Glovo-Perseus-Consent",
+          "essential_functional_marketing"
+        ],
+        [
+          "Glovo-Request-Id",
+          "00000000-0000-4000-8000-000000000003"
+        ],
+        [
+          "Glovo-Request-TTL",
+          "7500"
+        ],
+        [
+          "Authorization",
+          "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig"
+        ]
+      ],
+      "body": null
+    }
+  ],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242,
+      "keepMe": "unknown-field",
+      "location": {
+        "cityCode": "TST",
+        "latitude": "10.5",
+        "longitude": "-3.25",
+        "countryCode": "XX"
+      }
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}

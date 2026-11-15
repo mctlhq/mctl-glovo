@@ -1,0 +1,27 @@
+{
+ "data": {
+  "metadata": {
+   "product": {
+    "id": "product-3",
+    "externalId": "external-3",
+    "storeProductId": "store-product-3",
+    "name": "Pizza Truffle",
+    "priceInfo": {
+     "displayText": "EUR 12.00"
+    },
+    "attributeGroups": []
+   }
+  },
+  "footer": {
+   "data": {
+    "elements": [
+     {
+      "data": {
+       "isEnabled": true
+      }
+     }
+    ]
+   }
+  }
+ }
+}

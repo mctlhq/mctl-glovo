@@ -1,0 +1,26 @@
+{
+  "case": "suggestions_no_location",
+  "tool": "glovo_get_suggestions",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Error: Select or confirm a Glovo delivery location before requesting suggestions."
+      }
+    ],
+    "isError": true
+  },
+  "requests": [],
+  "session_after": {
+    "exists": true,
+    "mode": "600",
+    "json": {
+      "accessToken": "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJleHAiOjE3NzIzNzAwMDB9.sig",
+      "refreshToken": "refresh-test-old",
+      "customerId": 4242
+    }
+  },
+  "history_cache_after": {
+    "exists": false
+  }
+}
