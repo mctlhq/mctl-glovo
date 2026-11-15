@@ -1,0 +1,12 @@
+{
+  "totalProducts": 3,
+  "results": [
+    {
+      "products": [
+        { "id": 5001, "externalId": "ext-5001", "storeProductId": "sp-5001", "name": "Test Milk 1L", "priceInfo": { "displayText": "1,20 EUR", "amount": 1.2, "discountedPrice": { "amount": 1 } }, "imageId": "img-5001", "available": true, "categoryId": 77 },
+        { "productId": "5002", "name": "Test Bread", "price": 2.5, "imageUrl": "https://img.example.test/b.png", "soldOut": true, "quantityLimit": 3, "sponsored": false }
+      ]
+    },
+    { "products": [ { "id": 5003, "name": "Test Water", "status": "unavailable", "restricted": null } ] }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "type": "STORE_MENU",
+  "data": {
+    "elements": [
+      {
+        "name": "Dairy", "slug": "dairy",
+        "action": { "data": { "path": "/v3/stores/1001/addresses/2001/content?nodeType=DEEP_LINK&link=dairy" } },
+        "tracking": { "id": "t1" },
+        "elements": [ { "name": "Milk", "slug": "milk" }, { "name": null, "slug": "unnamed" } ]
+      },
+      { "name": "Bakery", "slug": "bakery" }
+    ]
+  }
+}

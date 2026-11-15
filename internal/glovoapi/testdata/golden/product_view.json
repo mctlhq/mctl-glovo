@@ -1,0 +1,90 @@
+{
+  "id": "6001",
+  "product_id": "6001",
+  "external_id": "ext-6001",
+  "store_product_id": "sp-6001",
+  "name": "Test Pizza",
+  "price": "9,50 EUR",
+  "amount": 9.5,
+  "image": "https://img.example.test/pizza.png",
+  "sponsored": false,
+  "available": true,
+  "category_id": 9,
+  "add_enabled": true,
+  "is_variant": false,
+  "variant_selection": "customizations",
+  "option_groups": [
+    {
+      "id": "71",
+      "groupLegacyId": 71,
+      "groupId": "ag-71",
+      "groupExternalId": "gx-71",
+      "groupPosition": 0,
+      "name": "Size",
+      "required": true,
+      "min": 1,
+      "max": 1,
+      "options": [
+        {
+          "id": "701",
+          "legacyId": 701,
+          "optionId": "a-701",
+          "externalId": "ox-701",
+          "name": "Small",
+          "price": "+0 EUR"
+        },
+        {
+          "id": "702",
+          "legacyId": 702,
+          "optionId": "a-702",
+          "externalId": "ox-702",
+          "name": "Large",
+          "price": "+2 EUR"
+        }
+      ]
+    },
+    {
+      "id": "72",
+      "groupLegacyId": 72,
+      "groupId": "ag-72",
+      "groupExternalId": "gx-72",
+      "groupPosition": 1,
+      "name": "Extras",
+      "required": false,
+      "min": 0,
+      "max": null,
+      "options": [
+        {
+          "id": "711",
+          "legacyId": 711,
+          "externalId": "ox-711",
+          "name": "Cheese",
+          "price": 1
+        }
+      ]
+    },
+    {
+      "id": "73",
+      "groupLegacyId": 73,
+      "groupId": "ag-73",
+      "groupExternalId": "gx-73",
+      "groupPosition": 2,
+      "name": "Sauce",
+      "required": true,
+      "min": 0,
+      "max": null,
+      "options": [
+        {
+          "id": "721",
+          "legacyId": 721,
+          "optionId": "a-721",
+          "externalId": "ox-721",
+          "name": "Tomato"
+        }
+      ]
+    }
+  ],
+  "required_sections": [
+    "gx-73"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "total": 3,
+  "count": 3,
+  "results": [
+    {
+      "id": "5001",
+      "product_id": "5001",
+      "external_id": "ext-5001",
+      "store_product_id": "sp-5001",
+      "name": "Test Milk 1L",
+      "price": "1,20 EUR",
+      "amount": 1.2,
+      "image": "https://glovo.dhmedia.io/image/img-5001",
+      "available": true,
+      "category_id": 77,
+      "store_id": "1001",
+      "store_address_id": 2001
+    },
+    {
+      "id": "5002",
+      "product_id": "5002",
+      "name": "Test Bread",
+      "price": "€2.50",
+      "amount": 2.5,
+      "image": "https://img.example.test/b.png",
+      "sponsored": false,
+      "available": false,
+      "quantity_limit": 3,
+      "store_id": "1001",
+      "store_address_id": 2001
+    },
+    {
+      "id": "5003",
+      "product_id": "5003",
+      "name": "Test Water",
+      "restricted": null,
+      "available": false,
+      "store_id": "1001",
+      "store_address_id": 2001
+    }
+  ]
+}

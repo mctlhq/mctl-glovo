@@ -1,0 +1,1 @@
+{ "data": { "feesInformation": { "plainText": "Fees vary" }, "ranges": [ { "lowerBound": 0, "upperBound": 10, "upperBoundInfo": { "displayText": "10 EUR" }, "surchargeInfo": { "displayText": "2 EUR" }, "surchargeStrategy": "MBS", "plainText": "" }, { "lowerBound": 10, "upperBound": null, "successText": "No surcharge" } ] } }

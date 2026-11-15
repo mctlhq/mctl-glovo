@@ -1,0 +1,33 @@
+{
+  "basket_id": "basket-test-1",
+  "basket_version": 3,
+  "store_id": 1001,
+  "store_address_id": 2001,
+  "products_count": 3,
+  "total": "5,40 EUR",
+  "lines": [
+    {
+      "basket_product_id": "bp-test-1",
+      "product_id": "5001",
+      "external_id": "ext-5001",
+      "store_product_id": "sp-5001",
+      "name": "Test Milk 1L",
+      "quantity": 2,
+      "price": "2,40 EUR",
+      "image": "https://img.example.test/m.png",
+      "selected_options_count": 0,
+      "has_selected_options": false
+    },
+    {
+      "basket_product_id": "bp-test-2",
+      "product_id": "5004",
+      "external_id": "ext-5004",
+      "store_product_id": "sp-5004",
+      "name": "Test Pizza",
+      "quantity": 1,
+      "price": 3,
+      "selected_options_count": 2,
+      "has_selected_options": true
+    }
+  ]
+}

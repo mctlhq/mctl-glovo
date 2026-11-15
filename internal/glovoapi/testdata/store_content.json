@@ -1,0 +1,38 @@
+{
+  "data": {
+    "body": [
+      { "type": "BANNER", "data": { "title": "Promo", "elements": [ { "type": "IMAGE", "data": { "id": 1 } } ] } },
+      {
+        "type": "CAROUSEL",
+        "data": {
+          "title": "Order again", "slug": "easy-reorder",
+          "elements": [
+            {
+              "type": "PRODUCT_TILE",
+              "data": { "id": 1, "externalId": "external-1", "storeProductId": "store-product-1", "name": "Whole Milk", "outOfStock": false, "priceInfo": { "displayText": "1.50 EUR" }, "description": "1L" },
+              "actions": [ { "data": { "events": [ { "data": { "collectionType": "EasyReorder", "isOrderedBefore": "true" } } ] } } ]
+            },
+            {
+              "type": "PRODUCT_TILE",
+              "data": { "id": 4, "externalId": "external-4", "storeProductId": "store-product-4", "name": "Butter", "price": 3 },
+              "actions": []
+            }
+          ]
+        }
+      },
+      {
+        "type": "CAROUSEL",
+        "data": {
+          "title": "Popular", "tracking": { "collectionType": "TopSellers" },
+          "elements": [
+            {
+              "type": "PRODUCT_TILE",
+              "data": { "id": 2, "externalId": "external-2", "storeProductId": "store-product-2", "name": "Bread", "outOfStock": true },
+              "actions": [ { "data": { "events": [ { "data": { "collectionType": "TopSellers", "isOrderedBefore": "false" } } ] } } ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

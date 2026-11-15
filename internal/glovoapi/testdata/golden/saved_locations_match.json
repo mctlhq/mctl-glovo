@@ -1,0 +1,100 @@
+{
+  "count": 3,
+  "current_location": {
+    "country_code": "ES",
+    "city_code": "BCN",
+    "latitude": "41.4",
+    "longitude": "2.17",
+    "selected_saved_location_id": "addr-1"
+  },
+  "selected": {
+    "id": "addr-1",
+    "label": "Home",
+    "subtitle": "Testville",
+    "address_line": "Example Street 1",
+    "details": "2A",
+    "kind": "APARTMENT",
+    "tag": "HOME",
+    "city": "Testville",
+    "country_code": "ES",
+    "city_code": "BCN",
+    "selected": true,
+    "default": false,
+    "matches_query": true
+  },
+  "default": {
+    "id": "addr-2",
+    "label": "Office",
+    "address_line": "Work Avenue 2",
+    "country_code": "ES",
+    "city_code": "BCN",
+    "latitude": "41.5",
+    "longitude": "2.18",
+    "selected": false,
+    "default": true,
+    "matches_query": false,
+    "set_location_args": {
+      "country_code": "ES",
+      "city_code": "BCN",
+      "latitude": "41.5",
+      "longitude": "2.18"
+    }
+  },
+  "matched": {
+    "id": "addr-1",
+    "label": "Home",
+    "subtitle": "Testville",
+    "address_line": "Example Street 1",
+    "details": "2A",
+    "kind": "APARTMENT",
+    "tag": "HOME",
+    "city": "Testville",
+    "country_code": "ES",
+    "city_code": "BCN",
+    "selected": true,
+    "default": false,
+    "matches_query": true
+  },
+  "saved_locations": [
+    {
+      "id": "addr-1",
+      "label": "Home",
+      "subtitle": "Testville",
+      "address_line": "Example Street 1",
+      "details": "2A",
+      "kind": "APARTMENT",
+      "tag": "HOME",
+      "city": "Testville",
+      "country_code": "ES",
+      "city_code": "BCN",
+      "selected": true,
+      "default": false,
+      "matches_query": true
+    },
+    {
+      "id": "addr-2",
+      "label": "Office",
+      "address_line": "Work Avenue 2",
+      "country_code": "ES",
+      "city_code": "BCN",
+      "latitude": "41.5",
+      "longitude": "2.18",
+      "selected": false,
+      "default": true,
+      "matches_query": false,
+      "set_location_args": {
+        "country_code": "ES",
+        "city_code": "BCN",
+        "latitude": "41.5",
+        "longitude": "2.18"
+      }
+    },
+    {
+      "id": "3",
+      "address_line": "No codes",
+      "selected": false,
+      "default": false,
+      "matches_query": false
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "can_prepare_basket": false,
+  "items": [],
+  "unsupported_reasons": [
+    "Order detail was empty."
+  ]
+}

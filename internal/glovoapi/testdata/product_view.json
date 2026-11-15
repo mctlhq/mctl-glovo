@@ -1,0 +1,31 @@
+{
+  "data": {
+    "metadata": {
+      "product": {
+        "id": 6001, "externalId": "ext-6001", "storeProductId": "sp-6001", "categoryId": 9,
+        "name": "Test Pizza", "priceInfo": { "displayText": "9,50 EUR", "amount": 9.5 },
+        "imageUrl": "https://img.example.test/pizza.png", "sponsored": false, "isVariant": false,
+        "attributeGroups": [
+          {
+            "id": 71, "attributeGroupId": "ag-71", "externalId": "gx-71", "position": 0, "name": "Size",
+            "minSelection": 1, "maxSelection": 1,
+            "attributes": [
+              { "id": 701, "attributeId": "a-701", "externalId": "ox-701", "name": "Small", "priceInfo": { "displayText": "+0 EUR" } },
+              { "id": 702, "attributeId": "a-702", "externalId": "ox-702", "name": "Large", "price": { "formatted": "+2 EUR" } }
+            ]
+          },
+          {
+            "id": 72, "attributeGroupId": "ag-72", "externalId": "gx-72", "position": 1, "name": "Extras",
+            "attributes": [ { "id": 711, "externalId": "ox-711", "name": "Cheese", "price": 1 } ]
+          },
+          {
+            "id": 73, "attributeGroupId": "ag-73", "externalId": "gx-73", "position": 2, "name": "Sauce",
+            "attributes": [ { "id": 721, "attributeId": "a-721", "externalId": "ox-721", "name": "Tomato" } ]
+          }
+        ]
+      }
+    },
+    "footer": { "data": { "elements": [ { "data": { "label": "Add" } }, { "data": { "isEnabled": true } } ] } },
+    "actions": { "primary": { "events": [ { "data": { "requiredSections": [ "gx-73" ] } } ] } }
+  }
+}

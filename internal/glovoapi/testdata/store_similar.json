@@ -1,0 +1,1 @@
+{ "stores": [ { "id": 3, "name": "Alternative", "open": true }, { "id": 4, "title": "Other Market", "slug": "other-market", "categoryId": 4 } ] }

@@ -1,0 +1,58 @@
+{
+  "handling_strategy": "DELIVERY",
+  "fee_information": "Fees vary",
+  "minimum_basket_ranges": [
+    {
+      "lower_bound": 0,
+      "upper_bound": 10,
+      "upper_bound_text": "10 EUR",
+      "surcharge": "2 EUR",
+      "surcharge_strategy": "MBS"
+    },
+    {
+      "lower_bound": 10,
+      "success_text": "No surcharge"
+    }
+  ],
+  "restrictions_title": "Restrictions",
+  "restrictions": [
+    {
+      "id": "r1",
+      "text": "No alcohol"
+    },
+    {
+      "id": "r2",
+      "text": "Age check",
+      "link": "https://example.test/terms"
+    }
+  ],
+  "store_information": [
+    {
+      "type": "TEXT",
+      "text": "Open daily"
+    },
+    {
+      "type": "TITLE",
+      "text": "Example Market"
+    }
+  ],
+  "similar_stores": [
+    {
+      "id": "3",
+      "store_id": "3",
+      "name": "Alternative",
+      "open": true
+    },
+    {
+      "id": "4",
+      "store_id": "4",
+      "name": "Other Market",
+      "slug": "other-market",
+      "category_id": 4,
+      "store_class": "grocery",
+      "open": false,
+      "url": "https://glovoapp.com/en/es/barcelona/stores/other-market"
+    }
+  ],
+  "boundary": "Read-only pre-check. This does not create a basket, enter checkout, book a slot, pay, or place an order."
+}

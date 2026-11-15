@@ -1,0 +1,9 @@
+{
+  "valid": true,
+  "title": "Selected Place",
+  "country_code": "ES",
+  "city_code": "BCN",
+  "latitude": 41.4,
+  "longitude": 2.17,
+  "accuracy": 12
+}

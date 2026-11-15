@@ -1,0 +1,13 @@
+{
+  "id": "1001",
+  "store_id": "1001",
+  "store_address_id": 2001,
+  "name": "Example Market",
+  "slug": "example-market",
+  "category_id": 1,
+  "store_class": "restaurant",
+  "open": false,
+  "rating": null,
+  "image": "https://glovo.dhmedia.io/image/img-1",
+  "url": "https://glovoapp.com/en/es/barcelona/stores/example-market"
+}

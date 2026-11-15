@@ -1,0 +1,109 @@
+{
+  "kind": "all",
+  "count": 3,
+  "sections": [
+    {
+      "type": "CAROUSEL",
+      "title": "Order again",
+      "slug": "easy-reorder",
+      "collection_type": "EasyReorder",
+      "products": [
+        {
+          "id": "1",
+          "product_id": "1",
+          "external_id": "external-1",
+          "store_product_id": "store-product-1",
+          "name": "Whole Milk",
+          "price": "1.50 EUR",
+          "available": true,
+          "store_id": "1001",
+          "store_address_id": 2001,
+          "description": "1L",
+          "collection_type": "EasyReorder",
+          "ordered_before": true,
+          "source": "easy_reorder"
+        },
+        {
+          "id": "4",
+          "product_id": "4",
+          "external_id": "external-4",
+          "store_product_id": "store-product-4",
+          "name": "Butter",
+          "price": "€3.00",
+          "amount": 3,
+          "available": null,
+          "store_id": "1001",
+          "store_address_id": 2001,
+          "collection_type": "EasyReorder",
+          "ordered_before": false,
+          "source": "easy_reorder"
+        }
+      ]
+    },
+    {
+      "type": "CAROUSEL",
+      "title": "Popular",
+      "collection_type": "TopSellers",
+      "products": [
+        {
+          "id": "2",
+          "product_id": "2",
+          "external_id": "external-2",
+          "store_product_id": "store-product-2",
+          "name": "Bread",
+          "available": false,
+          "store_id": "1001",
+          "store_address_id": 2001,
+          "collection_type": "TopSellers",
+          "ordered_before": false,
+          "source": "top_sellers"
+        }
+      ]
+    }
+  ],
+  "products": [
+    {
+      "id": "1",
+      "product_id": "1",
+      "external_id": "external-1",
+      "store_product_id": "store-product-1",
+      "name": "Whole Milk",
+      "price": "1.50 EUR",
+      "available": true,
+      "store_id": "1001",
+      "store_address_id": 2001,
+      "description": "1L",
+      "collection_type": "EasyReorder",
+      "ordered_before": true,
+      "source": "easy_reorder"
+    },
+    {
+      "id": "4",
+      "product_id": "4",
+      "external_id": "external-4",
+      "store_product_id": "store-product-4",
+      "name": "Butter",
+      "price": "€3.00",
+      "amount": 3,
+      "available": null,
+      "store_id": "1001",
+      "store_address_id": 2001,
+      "collection_type": "EasyReorder",
+      "ordered_before": false,
+      "source": "easy_reorder"
+    },
+    {
+      "id": "2",
+      "product_id": "2",
+      "external_id": "external-2",
+      "store_product_id": "store-product-2",
+      "name": "Bread",
+      "available": false,
+      "store_id": "1001",
+      "store_address_id": 2001,
+      "collection_type": "TopSellers",
+      "ordered_before": false,
+      "source": "top_sellers"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "category": { "id": 4, "name": "Groceries" },
+    "stores": {
+      "pagination": { "next": { "offset": 24 } },
+      "entries": [
+        {
+          "id": 1001, "title": "Example Market", "slug": "example-market", "tag": "Supermarket",
+          "open": true, "eta": "20-30 min", "distance": "1.2 km",
+          "ratings": { "score": 94, "votes": 120 },
+          "deliveryFee": { "effectiveFee": 1.99 }, "serviceFee": 0.5,
+          "image": { "lightImage": "img-store-1" },
+          "logo": { "lightImage": "https://img.example.test/logo.png" },
+          "metadata": { "storeAddressId": 2001 }
+        },
+        {
+          "storeId": "1002", "name": "Sample Pharmacy", "categoryId": 3,
+          "availability": { "status": "OPEN" }, "addressId": 2002, "eta": null
+        }
+      ]
+    },
+    "widgets": [ { "id": "w1", "title": "Featured", "templateId": "T1" } ]
+  }
+}

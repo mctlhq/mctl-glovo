@@ -1,0 +1,34 @@
+{
+  "type": "STORE_MENU",
+  "count": 4,
+  "sections": [
+    {
+      "name": "Dairy",
+      "slug": "dairy",
+      "depth": 0,
+      "path": "Dairy",
+      "content_uri": "/v3/stores/1001/addresses/2001/content?nodeType=DEEP_LINK&link=dairy",
+      "tracking": {
+        "id": "t1"
+      }
+    },
+    {
+      "name": "Milk",
+      "slug": "milk",
+      "depth": 1,
+      "path": "Dairy > Milk"
+    },
+    {
+      "name": null,
+      "slug": "unnamed",
+      "depth": 1,
+      "path": "Dairy"
+    },
+    {
+      "name": "Bakery",
+      "slug": "bakery",
+      "depth": 0,
+      "path": "Bakery"
+    }
+  ]
+}
