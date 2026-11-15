@@ -24,6 +24,16 @@ the 401 challenge, the audience check) and the basket data.
 - No secrets in the repository. Configuration arrives through the
   environment, from Vault via ExternalSecrets in mctl-gitops.
 
+## glovo-home exception
+`cmd/glovo-home` is a separate, owner-only gateway that runs on the owner's
+own machine in front of the open-source glovo-skill. Two rules above do not
+apply to it, by owner decision: it does reach the real Glovo API (through
+glovo-skill, with basket writes and no checkout), and its authorization is a
+local principal allowlist (`GLOVO_HOME_ALLOWED_PRINCIPALS`, empty refuses
+everyone), not an mctl-api resolve call. Every other rule applies to it,
+fail-closed and exact `aud`/`iss`/EdDSA included. It must never gain a
+checkout, payment or order tool.
+
 ## Conventions
 - Go, standard library first. `go.mod` pins Go 1.26.11; if the local brew
   toolchain is broken, use `GOTOOLCHAIN=go1.26.11`.
