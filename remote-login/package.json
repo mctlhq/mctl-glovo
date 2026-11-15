@@ -1,0 +1,21 @@
+{
+  "name": "glovo-remote-login",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Prototype: locked-down remote browser that links a Glovo session, streamed to a phone over a local WebSocket.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "glovo-remote-login": "src/main.mjs"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-timeout=60000 test/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.64.1",
+    "ws": "8.22.1"
+  }
+}

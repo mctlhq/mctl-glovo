@@ -1,0 +1,7 @@
+{
+  "access": {
+    "accessToken": "eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDAsInN1YiI6Ijc3In0.fixture",
+    "refreshToken": "fixture-refresh-token-2fa-not-real",
+    "expiresIn": 3600
+  }
+}

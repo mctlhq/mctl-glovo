@@ -1,0 +1,7 @@
+{
+  "accessToken": "eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDAsImN1c3RvbWVySWQiOjQyfQ.fixture",
+  "refreshToken": "fixture-refresh-token-not-real",
+  "expiresIn": 3600,
+  "scope": null,
+  "tokenType": "bearer"
+}
