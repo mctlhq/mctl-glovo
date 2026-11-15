@@ -98,11 +98,12 @@ func run(log *slog.Logger) error {
 	defer stopChild()
 	go sup.Run(childCtx)
 
-	// Session hot-reload: a new session file (for example from
-	// scripts/glovo-relogin.sh) restarts the child. Stat only; the file is
-	// never read here.
-	if cfg.SessionPath != "" {
-		go childmcp.WatchSession(childCtx, cfg.SessionPath, 5*time.Second, log.With("component", "session"), sup.Restart)
+	// Session hot-reload: scripts/glovo-relogin.sh touches the reload
+	// marker after installing a new session, and that restarts the child.
+	// The session file itself is not watched (glovo-skill rewrites it on
+	// every token refresh) and is never read here.
+	if cfg.ReloadMarker != "" {
+		go childmcp.WatchSession(childCtx, cfg.ReloadMarker, 5*time.Second, log.With("component", "session"), sup.Restart)
 	}
 	if cfg.Keepalive > 0 {
 		klog := log.With("component", "keepalive")

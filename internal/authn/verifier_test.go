@@ -197,6 +197,9 @@ func TestVerifyTable(t *testing.T) {
 		{"exp missing", func(f *fixture) string {
 			return f.token(func(_, c map[string]any) { delete(c, "exp") })
 		}, ReasonExpired, 401},
+		{"nbf in the past is accepted", func(f *fixture) string {
+			return f.token(func(_, c map[string]any) { c["nbf"] = f.now.Add(-time.Minute).Unix() })
+		}, "", 0},
 		{"nbf in the future", func(f *fixture) string {
 			return f.token(func(_, c map[string]any) { c["nbf"] = f.now.Add(5 * time.Minute).Unix() })
 		}, ReasonNotYetValid, 401},

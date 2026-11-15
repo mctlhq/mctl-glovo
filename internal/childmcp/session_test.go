@@ -109,6 +109,30 @@ func TestWatchSessionStatOnly(t *testing.T) {
 	waitFor(t, "rewrite seen", func() bool { return changes.Load() == 2 })
 }
 
+// glovo-skill rewrites the session file on every token refresh; only the
+// relogin script's marker may restart the child.
+func TestSessionRewriteDoesNotRestart(t *testing.T) {
+	dir := t.TempDir()
+	session := filepath.Join(dir, "session.json")
+	var changes atomic.Int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go WatchSession(ctx, session+".reload", 20*time.Millisecond, slog.New(slog.NewTextHandler(io.Discard, nil)), func() { changes.Add(1) })
+	for i := 0; i < 5; i++ {
+		if err := os.WriteFile(session, []byte(strings.Repeat("x", i+1)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(60 * time.Millisecond)
+	}
+	if n := changes.Load(); n != 0 {
+		t.Fatalf("session rewrite restarted the child %d times", n)
+	}
+	if err := os.WriteFile(session+".reload", nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "marker seen", func() bool { return changes.Load() == 1 })
+}
+
 func pidOf(t *testing.T, h *harness) string {
 	t.Helper()
 	out, err := h.call("pid", nil)

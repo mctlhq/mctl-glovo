@@ -372,10 +372,48 @@ func TestBlocked(t *testing.T) {
 		"glovo_purchase", "glovo_buy_now", "GlovoCheckout", "glovo-place-order", "glovo_charge_card",
 		"glovo_order_now", "glovo_basket_submit", "glovo_order_submit", "glovo_basket_confirm",
 		"glovo_submit", "glovo_confirm", "glovo_order", "glovo_basket_send", "glovo_order_create",
-		"glovo_orders", "glovo_finalize",
+		"glovo_orders", "glovo_finalize", "order", "order_now", "glovo_order_basket", "glovo_order_cart",
 	} {
 		if !Blocked(n) {
 			t.Errorf("%s not blocked", n)
 		}
+	}
+}
+
+func openFDs(t *testing.T) int {
+	t.Helper()
+	// Readdirnames, not ReadDir: stat on some /dev/fd entries fails.
+	d, err := os.Open("/dev/fd")
+	if err != nil {
+		t.Skipf("cannot open /dev/fd: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+	names, err := d.Readdirnames(-1)
+	if err != nil {
+		t.Skipf("cannot list /dev/fd: %v", err)
+	}
+	return len(names)
+}
+
+func TestCrashesDoNotLeakPipes(t *testing.T) {
+	h := startHarness(t, nil, nil)
+	waitFor(t, "ready", h.ready)
+	before := openFDs(t)
+	const crashes = 6
+	for i := 0; i < crashes; i++ {
+		pid := pidOf(t, h)
+		_, _ = h.call("crash", nil)
+		waitFor(t, "restart", func() bool {
+			if !h.ready() {
+				return false
+			}
+			out, err := h.call("pid", nil)
+			return err == nil && !out.IsError && out.Content[0].(mcp.TextContent).Text != pid
+		})
+	}
+	// Leaking one descriptor per crash would add crashes; allow a little
+	// noise from the runtime.
+	if after := openFDs(t); after-before >= crashes {
+		t.Fatalf("open fds %d -> %d after %d crashes", before, after, crashes)
 	}
 }

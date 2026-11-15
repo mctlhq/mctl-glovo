@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// fileState is what the session watcher knows about the session file: only
-// what os.Stat reports. The file is never opened, read or hashed here.
+// fileState is what the watcher knows about the reload marker: only what
+// os.Stat reports. The file is never opened, read or hashed here.
 type fileState struct {
 	exists bool
 	size   int64
@@ -33,11 +33,15 @@ func statFile(path string) (fileState, error) {
 // appearing or disappearing), once the new state has held for one more poll
 // so a write in progress is not acted on. A failed stat is "could not
 // observe": it is logged and never counted as a change.
+//
+// path is the reload marker that the relogin script touches, never the
+// session file: glovo-skill rewrites the session on every token refresh,
+// and restarting on that would cause an outage per refresh.
 func WatchSession(ctx context.Context, path string, every time.Duration, log *slog.Logger, onChange func()) {
 	cur, err := statFile(path)
 	known := err == nil
 	if err != nil {
-		log.Warn("session file stat failed", "error", err)
+		log.Warn("reload marker stat failed", "error", err)
 	}
 	var pending *fileState
 	t := time.NewTicker(every)
@@ -50,7 +54,7 @@ func WatchSession(ctx context.Context, path string, every time.Duration, log *sl
 		}
 		st, err := statFile(path)
 		if err != nil {
-			log.Warn("session file stat failed", "error", err)
+			log.Warn("reload marker stat failed", "error", err)
 			pending = nil
 			continue
 		}
@@ -67,7 +71,7 @@ func WatchSession(ctx context.Context, path string, every time.Duration, log *sl
 			continue
 		}
 		cur, pending = st, nil
-		log.Info("session file changed: restarting the child", "exists", st.exists)
+		log.Info("session reload marker changed: restarting the child", "exists", st.exists)
 		onChange()
 	}
 }

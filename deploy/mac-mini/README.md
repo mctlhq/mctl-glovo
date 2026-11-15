@@ -26,8 +26,8 @@ What it does:
   duration). Arguments and results are never logged;
 - keeps the Glovo session alive with one `glovo_get_basket` call a day and
   runs an alert hook when that fails;
-- restarts glovo-skill when the session file changes, for example after
-  `scripts/glovo-relogin.sh`, without restarting itself.
+- restarts glovo-skill when `scripts/glovo-relogin.sh` installs a new
+  session, without restarting itself.
 
 Basket writes go straight through, as they do with the local tool. There is
 no approval step, and glovo-skill has no checkout or payment tool.
@@ -94,15 +94,18 @@ duration.
 
 ## Session hot-reload and re-login
 
-glovo-home checks the session file (`GLOVO_SESSION_PATH`, or
-`~/.glovo/session.json`) every 5s, using stat only (size and mtime). It
-never opens, reads, logs or hashes the file. When the size or mtime has
-changed and then held steady for one more check, glovo-home refuses new
-calls, waits for in-flight calls to finish, and restarts glovo-skill. A
-stat that fails is logged and is not treated as a change. glovo-skill
-already re-reads the file on every tool call, so the restart is a safety
-net. glovo-skill's own token refreshes rewrite the file too, so they also
-cause a short, drained restart.
+glovo-home checks a reload marker next to the session file
+(`<GLOVO_SESSION_PATH>.reload`, by default `~/.glovo/session.json.reload`)
+every 5s, using stat only (size and mtime). It never opens, reads, logs or
+hashes the marker, and it does not touch the session file at all. When the
+marker's size or mtime has changed and then held steady for one more check,
+glovo-home refuses new calls, waits for in-flight calls to finish, and
+restarts glovo-skill. A stat that fails is logged and is not treated as a
+change. The session file itself is not watched: glovo-skill rewrites it on
+every token refresh, and restarting on that would cause a short outage per
+refresh. glovo-skill already re-reads the session on every tool call, so
+the restart is a safety net. To force one by hand, run
+`date > ~/.glovo/session.json.reload` on the host.
 
 When the keepalive alert says a re-login is needed, run this on a machine
 with a browser and glovo-skill installed:
@@ -116,14 +119,15 @@ The script:
 1. runs glovo-skill's `scripts/login.mjs` into a session file inside a
    fresh 0700 temporary directory;
 2. streams the file over ssh into a 0600 temporary file in a 0700
-   directory on the host, then renames it over the old session (atomic);
+   directory on the host, then renames it over the old session (atomic),
+   then writes a timestamp to the reload marker;
 3. deletes the local temporary directory, also on error or Ctrl-C.
 
 The file is never printed. Optional variables: `GLOVO_SKILL_DIR` (default
 `~/.local/share/glovo-skill`), `GLOVO_NODE` (default `node`) and
 `GLOVO_HOME_REMOTE_SESSION` (default `.glovo/session.json`, relative to
-the remote home directory). glovo-home picks up the new file within about
-15s.
+the remote home directory). glovo-home sees the marker and restarts glovo-skill
+within about 15s.
 
 ## launchd
 

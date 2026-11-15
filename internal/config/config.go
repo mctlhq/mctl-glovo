@@ -36,8 +36,14 @@ type Config struct {
 	// AlertCmd is run with one fixed message argument when the keepalive
 	// fails. Empty only logs.
 	AlertCmd string
-	// SessionPath is the glovo-skill session file, watched by stat only.
+	// SessionPath is the glovo-skill session file. glovo-home never opens
+	// or stats it.
 	SessionPath string
+	// ReloadMarker is SessionPath + ".reload": scripts/glovo-relogin.sh
+	// touches it after installing a new session, and glovo-home stats it to
+	// restart the child. It is not the session file itself because
+	// glovo-skill rewrites that file on every token refresh.
+	ReloadMarker string
 }
 
 // childEnvKeys are inherited by the child verbatim when set. Everything
@@ -100,6 +106,9 @@ func Load(getenv func(string) string, environ []string) (*Config, error) {
 		if home := getenv("HOME"); home != "" {
 			c.SessionPath = home + "/.glovo/session.json"
 		}
+	}
+	if c.SessionPath != "" {
+		c.ReloadMarker = c.SessionPath + ".reload"
 	}
 	c.ChildEnv = childEnv(environ)
 	return c, nil

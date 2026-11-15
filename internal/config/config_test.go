@@ -47,7 +47,7 @@ func TestAllowlist(t *testing.T) {
 
 func TestKeepaliveAndAlert(t *testing.T) {
 	c, err := load(t, map[string]string{"HOME": "/h"})
-	if err != nil || c.Keepalive != 24*time.Hour || c.SessionPath != "/h/.glovo/session.json" {
+	if err != nil || c.Keepalive != 24*time.Hour || c.SessionPath != "/h/.glovo/session.json" || c.ReloadMarker != "/h/.glovo/session.json.reload" {
 		t.Fatalf("defaults: %+v %v", c, err)
 	}
 	c, err = load(t, map[string]string{"GLOVO_HOME_KEEPALIVE": "0", "GLOVO_SESSION_PATH": "/s.json"})

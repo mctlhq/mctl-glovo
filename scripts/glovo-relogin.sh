@@ -8,8 +8,10 @@
 #    (mode 0600, directory 0700) and moves it into place atomically.
 # 3. Deletes the local copy, also on failure or Ctrl-C.
 #
-# glovo-home notices the new file (size/mtime) and restarts glovo-skill;
-# glovo-home itself keeps running. The session file is never printed.
+# 4. Touches <session>.reload on the host; glovo-home notices the marker
+#    (size/mtime) and restarts glovo-skill, while glovo-home keeps running.
+#    The session file itself is not watched, because glovo-skill rewrites
+#    it on every token refresh. The session file is never printed.
 #
 # Environment:
 #   GLOVO_HOME_HOST            required: ssh destination of the glovo-home host
@@ -51,8 +53,9 @@ GLOVO_SESSION_PATH="$session" "$node" "$skill_dir/scripts/login.mjs"
 
 echo "glovo-relogin: installing the session on the host..."
 # The file travels on stdin only. Remotely: 0700 directory, 0600 temp file
-# in the same directory, then an atomic rename over the old session.
+# in the same directory, then an atomic rename over the old session, then
+# the reload marker (its content is only a timestamp).
 # shellcheck disable=SC2029 # $remote and $remote_dir are validated above and expand locally on purpose
-ssh "$host" "set -eu; umask 077; mkdir -p '$remote_dir'; chmod 700 '$remote_dir'; t=\$(mktemp '$remote.XXXXXX'); trap 'rm -f \"\$t\"' EXIT; cat > \"\$t\"; [ -s \"\$t\" ]; chmod 600 \"\$t\"; mv -f \"\$t\" '$remote'; trap - EXIT" < "$session"
+ssh "$host" "set -eu; umask 077; mkdir -p '$remote_dir'; chmod 700 '$remote_dir'; t=\$(mktemp '$remote.XXXXXX'); trap 'rm -f \"\$t\"' EXIT; cat > \"\$t\"; [ -s \"\$t\" ]; chmod 600 \"\$t\"; mv -f \"\$t\" '$remote'; trap - EXIT; date > '$remote.reload'" < "$session"
 
 echo "glovo-relogin: done. glovo-home restarts glovo-skill within about 15 seconds."

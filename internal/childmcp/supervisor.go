@@ -420,7 +420,11 @@ func (s *Supervisor) markDown(c *child) {
 	case <-c.eof:
 	case <-time.After(2 * time.Second):
 	}
+	// client.Close closes the stdin writer (mcp-go Stdio.Close); closing
+	// it here as well keeps that explicit. A second Close is a harmless
+	// error.
 	_ = c.client.Close()
+	_ = c.stdin.Close()
 	_ = c.stdout.Close()
 }
 
