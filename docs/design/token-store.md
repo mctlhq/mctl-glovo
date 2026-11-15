@@ -1,8 +1,9 @@
 # Design: token store for linked Glovo accounts (C2-0)
 
-Status: DRAFT for security review. Nothing here is built. C2-1 (linking)
-does not start until the reviewer has answered section 9 and the go
-criteria in 9.2 hold.
+Status: IN SECURITY REVIEW. Nothing here is built. The owner decided Q1,
+Q2 and Q4/Q5 on 2026-11-15 (9.3), and those decisions add the C2-3 go
+criteria in 9.4. C2-1 (linking) does not start until the open questions
+in 9.1 are answered and the go criteria in 9.2 hold.
 
 Scope: epic mctlhq/mctl-glovo#11, slice C2-0. The parent design is
 `docs/design/real-glovo-accounts.md` (PR #2): risks R1-R6 (section 3), the
@@ -821,6 +822,40 @@ go criterion (9.2).
   of the control row counts as "not killed";
 - Vault traffic goes through `secrets.mctl.ai` or any address outside the
   cluster.
+
+### 9.3 Review decisions (owner, 2026-11-15)
+
+Recorded on PR #14 (issue comment of 2026-11-15). Each one is accepted
+**for owner-only use**, meaning C2-1 and C2-2 while the owner is the only
+linked user. Each one adds a go criterion for C2-3 (9.4).
+
+| Question | Decision | Residual it accepts |
+|---|---|---|
+| Q1, app RCE exposes every linked session | Accepted while the owner is the only linked user | T3 |
+| Q2, plaintext pod-to-Vault traffic (SOC F15) | Accepted for C2-1 and C2-2 | T7 |
+| Q4/Q5, platform residuals: the `admin` policy, the policy-writing identities, unseal keys in a Kubernetes Secret | Detection only (the 3.2 alert on any `glovo-transit/` request not made by the `mctl-glovo` role) is accepted for the owner alone | T5, T6, T13 |
+
+Q3 and Q6-Q10 are still open. Go criterion 1 in 9.2 therefore does not
+hold yet: those answers are still needed before C2-1.
+
+### 9.4 Go criteria for C2-3
+
+These join the legal read on R1 and R4 and the new owner decision that
+§8 of the parent design already requires. External users stay behind the
+flag until every one of them holds:
+
+1. **Broker (from Q1).** Decryption and Glovo calls run in a separate
+   broker process, outside the MCP-facing process. Only the broker holds
+   the `mctl-glovo` Vault role and the store's database credentials. It
+   exposes typed Glovo operations and has no surface that returns a
+   session or a token.
+2. **Vault TLS listener (from Q2).** Vault serves TLS on its listener.
+   Clients use the in-cluster address only, never `secrets.mctl.ai`, and
+   the no-go rule in 9.2 still applies.
+3. **Unseal keys and provisioner policy writes (from Q4/Q5).** The unseal
+   keys are moved out of Kubernetes (no `vault-unseal-keys` Secret in the
+   cluster). The `argo-workflow-provisioner` identity can no longer write
+   `tenant-*` / `eso-tenant-*` policies with arbitrary content.
 
 ## 10. Implementation sketch (after review; no code in this PR)
 
