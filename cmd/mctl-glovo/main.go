@@ -28,6 +28,28 @@ func main() {
 	}
 }
 
+const (
+	// serverReadTimeout and serverWriteTimeout are the whole-request limits
+	// of the link flow and the probes. The MCP routes lift them per request
+	// (noDeadline).
+	serverReadTimeout  = 15 * time.Second
+	serverWriteTimeout = 30 * time.Second
+)
+
+// newServer is the one place the HTTP server is configured. ReadHeaderTimeout
+// stays for slowloris protection on every route; the read and write timeouts
+// are lifted per request on the MCP routes by noDeadline.
+func newServer(addr string, h http.Handler, read, write time.Duration) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       read,
+		WriteTimeout:      write,
+		IdleTimeout:       60 * time.Second,
+	}
+}
+
 func run(log *slog.Logger) error {
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
@@ -52,14 +74,7 @@ func run(log *slog.Logger) error {
 	health.New(2*time.Second, app.ready...).Register(mux)
 	app.Register(mux)
 
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	srv := newServer(addr, mux, serverReadTimeout, serverWriteTimeout)
 
 	errc := make(chan error, 1)
 	go func() {

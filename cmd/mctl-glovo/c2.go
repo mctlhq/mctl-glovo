@@ -37,6 +37,9 @@ type c2Config struct {
 	// (C2-1c). Both unset keeps the fail-closed UnavailableConsent.
 	consentAPI       string
 	consentTokenFile string
+	// auditKey keys the audit digest of the pid (GLOVO_C2_AUDIT_KEY, a
+	// per-deployment secret from Vault, at least minAuditKeyLen bytes).
+	auditKey []byte
 }
 
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
@@ -75,6 +78,11 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	if len(c.allowed) == 0 && c.consentAPI == "" {
 		return c2Config{}, errors.New("GLOVO_C2_ALLOWED_PRINCIPALS is required when GLOVO_C2_ENABLED=true and GLOVO_CONSENT_API_URL is unset")
 	}
+	key := getenv("GLOVO_C2_AUDIT_KEY")
+	if len(key) < minAuditKeyLen {
+		return c2Config{}, fmt.Errorf("GLOVO_C2_AUDIT_KEY is required when GLOVO_C2_ENABLED=true and must be at least %d bytes", minAuditKeyLen)
+	}
+	c.auditKey = []byte(key)
 	if c.databaseURL = getenv("GLOVO_DATABASE_URL"); c.databaseURL == "" {
 		return c2Config{}, errors.New("GLOVO_DATABASE_URL is required when GLOVO_C2_ENABLED=true")
 	}
@@ -201,14 +209,22 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		log.Warn("initial jwks fetch failed", "error", err)
 	}
 	cancelStart()
+	who, err := newHMACWho(c.auditKey)
+	if err != nil {
+		closeDB()
+		return nil, noop, err
+	}
 	routes, err := newMCPRoutes(mcpDeps{
 		Verifier: verifier,
 		Clients:  sessions,
 		Audit:    log.With("log", "audit"),
 		Log:      log,
-		// SEAM(C2-3): Admit (mctl-api join/consent per-call decision) and
-		// Who (masked identity) are wired here by later slices. Until then
-		// the verified principal alone selects the pid.
+		// Who is the keyed digest; the masked MCTL identity helper (build
+		// infra, MaskIdentity) can replace it behind the same seam.
+		Who: who,
+		// SEAM(C2-3): Admit (mctl-api join/consent per-call decision) is
+		// wired here by a later slice. Until then the verified principal
+		// alone selects the pid.
 	})
 	if err != nil {
 		closeDB()

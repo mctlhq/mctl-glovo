@@ -22,6 +22,7 @@ func fullEnv() map[string]string {
 	return map[string]string{
 		"GLOVO_C2_ENABLED":            "true",
 		"GLOVO_C2_ALLOWED_PRINCIPALS": "prn_owner",
+		"GLOVO_C2_AUDIT_KEY":          testAuditKey,
 		"GLOVO_DATABASE_URL":          "postgres://u@db.invalid/glovo",
 		"GLOVO_VAULT_ADDR":            "http://vault-active.vault.svc.cluster.local:8200",
 		"GLOVO_EGRESS_PROXY":          "http://glovo-egress.mctl-glovo.svc.cluster.local:3128",
@@ -74,7 +75,7 @@ func TestC2OnNeedsEverything(t *testing.T) {
 	if c, err := loadC2(env(fullEnv())); err != nil || !c.enabled || c.vaultRole != "mctl-glovo" {
 		t.Fatalf("%+v %v", c, err)
 	}
-	for _, k := range []string{"GLOVO_C2_ALLOWED_PRINCIPALS", "GLOVO_DATABASE_URL", "GLOVO_VAULT_ADDR", "GLOVO_EGRESS_PROXY"} {
+	for _, k := range []string{"GLOVO_C2_ALLOWED_PRINCIPALS", "GLOVO_C2_AUDIT_KEY", "GLOVO_DATABASE_URL", "GLOVO_VAULT_ADDR", "GLOVO_EGRESS_PROXY"} {
 		m := fullEnv()
 		delete(m, k)
 		if _, err := loadC2(env(m)); err == nil || !strings.Contains(err.Error(), k) {

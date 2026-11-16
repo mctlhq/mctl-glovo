@@ -22,6 +22,16 @@ import (
 	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
 )
 
+const testAuditKey = "0123456789abcdef0123456789abcdef-test-only"
+
+var testWho = func() auditWho {
+	w, err := newHMACWho([]byte(testAuditKey))
+	if err != nil {
+		panic(err)
+	}
+	return w
+}()
+
 const probeTool = "glovo_get_saved_locations" // makes one authenticated Glovo request
 
 type syncBuf struct {
@@ -43,9 +53,10 @@ func (s *syncBuf) String() string {
 
 // fakeGlovo records the access token of every request that reaches "Glovo".
 type fakeGlovo struct {
-	mu   sync.Mutex
-	auth []string
-	srv  *httptest.Server
+	mu    sync.Mutex
+	auth  []string
+	delay time.Duration // answer each request after this long
+	srv   *httptest.Server
 }
 
 func newFakeGlovo(t *testing.T) *fakeGlovo {
@@ -54,7 +65,13 @@ func newFakeGlovo(t *testing.T) *fakeGlovo {
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.auth = append(f.auth, r.Header.Get("Authorization"))
+		delay := f.delay
 		f.mu.Unlock()
+		select {
+		case <-time.After(delay):
+		case <-r.Context().Done():
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{}`))
 	}))
@@ -140,13 +157,21 @@ type mcpEnv struct {
 
 func newMCPEnv(t *testing.T, admit callAdmitter) *mcpEnv {
 	t.Helper()
+	return newMCPEnvWith(t, admit, nil, nil)
+}
+
+// newMCPEnvWith is newMCPEnv with a tweak of the routes' inputs and a hook
+// to build the test server (default: a plain httptest server).
+func newMCPEnvWith(t *testing.T, admit callAdmitter, tweak func(*mcpDeps), start func(http.Handler) *httptest.Server) *mcpEnv {
+	t.Helper()
 	fake := newFakeGlovo(t)
 	src := &fakeSource{clients: map[string]*glovoapi.Client{
 		"prn_A": hostedClient(t, fake.srv.URL, "A"),
 		"prn_B": hostedClient(t, fake.srv.URL, "B"),
 	}}
 	audit := &syncBuf{}
-	routes, err := newMCPRoutes(mcpDeps{
+	deps := mcpDeps{
+		Who: testWho,
 		Verifier: tokenVerifier{
 			"tok-a":   {ID: "prn_A"},
 			"tok-b":   {ID: "prn_B"},
@@ -157,13 +182,22 @@ func newMCPEnv(t *testing.T, admit callAdmitter) *mcpEnv {
 		Audit:   slog.New(slog.NewJSONHandler(audit, nil)),
 		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Admit:   admit,
-	})
+	}
+	if tweak != nil {
+		tweak(&deps)
+	}
+	routes, err := newMCPRoutes(deps)
 	if err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
 	routes.Register(mux)
-	ts := httptest.NewServer(mux)
+	var ts *httptest.Server
+	if start != nil {
+		ts = start(mux)
+	} else {
+		ts = httptest.NewServer(mux)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -319,7 +353,7 @@ func TestMCPNoPrincipalIsRefusedBeforeAnyLookup(t *testing.T) {
 	}
 	// 3. The middleware itself, with no principal in the context.
 	called := false
-	h := auditMiddleware(slog.New(slog.NewTextHandler(io.Discard, nil)), hashWho, nil, time.Second)(
+	h := auditMiddleware(slog.New(slog.NewTextHandler(io.Discard, nil)), testWho, nil, time.Second)(
 		func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			called = true
 			return mcp.NewToolResultText("x"), nil
@@ -405,7 +439,7 @@ func TestMCPAuditLine(t *testing.T) {
 		t.Fatalf("outcomes: %v %v", lines[0]["outcome"], lines[1]["outcome"])
 	}
 	for _, m := range lines {
-		if m["tool"] != probeTool || m["who"] != hashWho("prn_A") || m["msg"] != "tool_call" {
+		if m["tool"] != probeTool || m["who"] != testWho("prn_A") || m["msg"] != "tool_call" {
 			t.Fatalf("audit line %v", m)
 		}
 		if _, ok := m["duration_ms"]; !ok {

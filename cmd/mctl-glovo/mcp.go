@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -30,17 +33,33 @@ If a tool says your Glovo account is not linked or expired, link it again at htt
 // timeout on the MCP routes (see noDeadline), so this is the bound.
 const hostedCallTimeout = 3 * time.Minute
 
+// hostedBodyReadTimeout bounds reading one POST body on the MCP routes.
+const hostedBodyReadTimeout = 30 * time.Second
+
 // auditWho turns a verified principal id into what the audit line records.
 // It is a seam: the masked MCTL identity helper (slice build-infra,
 // tokenstore.Config.MaskIdentity) needs mctl-api and can replace it later.
-// The default is a one-way short digest: stable enough to follow one user
-// through the log, not an id anyone can paste into another system.
+// The production one is newHMACWho: a keyed one-way digest, stable enough to
+// follow one user through the log, but not joinable with another system's
+// logs (mctl-api audit events carry pids) without the per-deployment key.
 type auditWho func(pid string) string
 
-// hashWho is the default auditWho.
-func hashWho(pid string) string {
-	sum := sha256.Sum256([]byte(pid))
-	return "pid-" + hex.EncodeToString(sum[:6])
+// minAuditKeyLen is the shortest GLOVO_C2_AUDIT_KEY accepted, in bytes.
+const minAuditKeyLen = 32
+
+// newHMACWho returns an auditWho that is HMAC-SHA256(key, pid) truncated to
+// 96 bits. A key shorter than minAuditKeyLen is refused: a weak key would
+// make the digest enumerable again.
+func newHMACWho(key []byte) (auditWho, error) {
+	if len(key) < minAuditKeyLen {
+		return nil, errors.New("audit key is shorter than 32 bytes")
+	}
+	k := append([]byte(nil), key...)
+	return func(pid string) string {
+		m := hmac.New(sha256.New, k)
+		m.Write([]byte(pid))
+		return "pid-" + hex.EncodeToString(m.Sum(nil)[:12])
+	}, nil
 }
 
 // callAdmitter is the seam of the mctl-api join/consent client (slice C2-3):
@@ -57,11 +76,18 @@ type mcpDeps struct {
 	Clients  glovotools.ClientSource
 	// Audit receives one line per tool call. Nil is refused: a call must not
 	// run unaudited.
-	Audit   *slog.Logger
-	Log     *slog.Logger
+	Audit *slog.Logger
+	Log   *slog.Logger
+	// Who is required: an audit line must never carry a raw pid, so there
+	// is no unkeyed default.
 	Who     auditWho
 	Admit   callAdmitter
 	Version string
+	// CallTimeout bounds one tool call (default hostedCallTimeout) and
+	// BodyReadTimeout one POST body read (default hostedBodyReadTimeout).
+	// Tests shorten them.
+	CallTimeout     time.Duration
+	BodyReadTimeout time.Duration
 }
 
 // mcpRoutes is the hosted MCP surface. A nil *mcpRoutes is the flag-off
@@ -73,11 +99,14 @@ type mcpRoutes struct {
 }
 
 func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
-	if d.Verifier == nil || d.Clients == nil || d.Audit == nil {
-		return nil, errors.New("mcp: verifier, clients and audit logger are required")
+	if d.Verifier == nil || d.Clients == nil || d.Audit == nil || d.Who == nil {
+		return nil, errors.New("mcp: verifier, clients, audit logger and audit identity are required")
 	}
-	if d.Who == nil {
-		d.Who = hashWho
+	if d.CallTimeout <= 0 {
+		d.CallTimeout = hostedCallTimeout
+	}
+	if d.BodyReadTimeout <= 0 {
+		d.BodyReadTimeout = hostedBodyReadTimeout
 	}
 	log := d.Log
 	if log == nil {
@@ -95,7 +124,7 @@ func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
 		server.WithToolCapabilities(true),
 		server.WithInstructions(hostedInstructions),
 		server.WithRecovery(),
-		server.WithToolHandlerMiddleware(auditMiddleware(d.Audit, d.Who, d.Admit, hostedCallTimeout)),
+		server.WithToolHandlerMiddleware(auditMiddleware(d.Audit, d.Who, d.Admit, d.CallTimeout)),
 	)
 	backend.Install(srv)
 	streamable := gateway.NewStreamable(srv, log.With("component", "mcp"))
@@ -103,7 +132,7 @@ func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
 		Resource:            config.Resource,
 		AuthorizationServer: config.Issuer,
 		Verifier:            d.Verifier,
-		MCP:                 noDeadline(streamable),
+		MCP:                 noDeadline(streamable, d.BodyReadTimeout),
 		Log:                 log.With("component", "http"),
 		SkipLanding:         true,
 	})
@@ -132,20 +161,42 @@ func (m *mcpRoutes) Shutdown(ctx context.Context) error {
 
 // noDeadline lifts the server's read and write deadlines for the MCP
 // routes: they would cut a GET event stream and any tool call longer than
-// them. The body of a POST keeps a read deadline (the gateway also caps it
-// at 1 MiB), and tool calls are bounded by hostedCallTimeout. Where the
-// ResponseWriter cannot set deadlines the server's own stay in force.
-func noDeadline(next http.Handler) http.Handler {
+// them. A POST body keeps a read deadline of bodyTimeout (the gateway also
+// caps it at 1 MiB), cleared explicitly as soon as the body has been read.
+// net/http itself drops the connection's read deadline when it starts its
+// background read (the disconnect watcher, started at body EOF, or at
+// handler start for a bodyless request), but a deadline armed after that
+// point would make the read time out and cancel r.Context(), and with it the
+// tool call; the explicit clear does not rely on that ordering. Tool calls
+// are bounded by hostedCallTimeout instead. Where the ResponseWriter cannot
+// set deadlines the server's own stay in force.
+func noDeadline(next http.Handler, bodyTimeout time.Duration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rc := http.NewResponseController(w)
 		_ = rc.SetWriteDeadline(time.Time{})
-		if r.Method == http.MethodPost {
-			_ = rc.SetReadDeadline(time.Now().Add(30 * time.Second))
+		if r.Method == http.MethodPost && r.Body != nil && r.Body != http.NoBody {
+			_ = rc.SetReadDeadline(time.Now().Add(bodyTimeout))
+			r.Body = &clearOnDone{ReadCloser: r.Body, clear: func() { _ = rc.SetReadDeadline(time.Time{}) }}
 		} else {
 			_ = rc.SetReadDeadline(time.Time{})
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// clearOnDone runs clear once, when the body reports EOF or any error.
+type clearOnDone struct {
+	io.ReadCloser
+	once  sync.Once
+	clear func()
+}
+
+func (c *clearOnDone) Read(p []byte) (int, error) {
+	n, err := c.ReadCloser.Read(p)
+	if err != nil {
+		c.once.Do(c.clear)
+	}
+	return n, err
 }
 
 // auditMiddleware refuses a call with no usable verified principal (and one
