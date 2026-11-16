@@ -1249,3 +1249,31 @@ func TestSafetyWritesSurviveCancelledCaller(t *testing.T) {
 		}
 	})
 }
+
+// A key whose hits have all aged out is dropped from the window, so keys
+// seen once (an IP, a pid) do not grow the map forever, and the key is
+// still admitted afterwards.
+func TestCapWindowDropsExpiredKeys(t *testing.T) {
+	w := newWindow(1, time.Minute)
+	now := time.Unix(1_700_000_000, 0)
+	if allowAll(now, capHit{w, "a"}) != -1 {
+		t.Fatal("first hit refused")
+	}
+	if allowAll(now, capHit{w, "a"}) != 0 {
+		t.Fatal("second hit inside the window admitted")
+	}
+	later := now.Add(2 * time.Minute)
+	if allowAll(later, capHit{w, "b"}) != -1 {
+		t.Fatal("other key refused")
+	}
+	w.mu.Lock()
+	if !w.pruneLocked("a", later) {
+		t.Fatal("expired key still refused")
+	}
+	_, kept := w.hits["a"]
+	n := len(w.hits)
+	w.mu.Unlock()
+	if kept || n != 1 {
+		t.Fatalf("expired key kept=%v, keys=%d; want dropped, 1 key", kept, n)
+	}
+}

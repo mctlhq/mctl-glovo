@@ -67,8 +67,14 @@ func (w *window) pruneLocked(key string, now time.Time) bool {
 	for i < len(h) && !h[i].After(cut) {
 		i++
 	}
-	w.hits[key] = h[i:]
-	return len(w.hits[key]) < w.limit
+	if h = h[i:]; len(h) == 0 {
+		// No live hits: drop the key, so keys seen once (an IP, a pid)
+		// do not stay in the map forever.
+		delete(w.hits, key)
+		return w.limit > 0
+	}
+	w.hits[key] = h
+	return len(h) < w.limit
 }
 
 // capHit names one window and the key counted in it.
