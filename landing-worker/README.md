@@ -9,6 +9,13 @@ through the tunnel to glovo-home.
   `internal/gateway/landing.go`: run `go run ./cmd/landing-gen` from the
   repository root after changing the page. `go test ./cmd/landing-gen`
   fails while the file is stale.
+- The page uses the MCTL public-site shell. `mctl.css` and `site.css` are
+  vendored byte for byte from the pinned `ui.mctl.ai/<version>/` path
+  (`gateway.LandingDesignVersion`) into `internal/gateway/landingassets/` and
+  inlined into the one hashed `<style>`; the CSP stays `style-src 'sha256-...'`
+  with `default-src 'none'`, and no font, image or icon is fetched. To upgrade:
+  change the version, run `go run ./cmd/landing-css-sync`, review the diff,
+  then `go run ./cmd/landing-gen`. CI runs `go run ./cmd/landing-css-sync -check`.
 - `src/index.js` repeats glovo-home's language choice (`?lang`, then the
   `glovo_lang` cookie, then `Accept-Language`) and its headers.
 - Tests: `node --test test/*.test.js` (Node 22, no dependencies).
