@@ -104,7 +104,7 @@ func TestMCPCallTimeoutBoundsACall(t *testing.T) {
 func TestAuditMiddlewareCallTimeout(t *testing.T) {
 	ctx := authn.WithPrincipal(context.Background(), &authn.Principal{ID: "prn_A"})
 	run := func(timeout time.Duration) (hasDeadline bool) {
-		h := auditMiddleware(slog.New(slog.NewTextHandler(io.Discard, nil)), testWho, nil, timeout)(
+		h := auditMiddleware(slog.New(slog.NewTextHandler(io.Discard, nil)), testWho, notKilled, time.Second, nil, timeout)(
 			func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				_, hasDeadline = ctx.Deadline()
 				return mcp.NewToolResultText("x"), nil

@@ -182,6 +182,7 @@ func newMCPEnvWith(t *testing.T, admit callAdmitter, tweak func(*mcpDeps), start
 		Audit:   slog.New(slog.NewJSONHandler(audit, nil)),
 		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Admit:   admit,
+		Kill:    func(context.Context) error { return nil },
 	}
 	if tweak != nil {
 		tweak(&deps)
@@ -353,7 +354,7 @@ func TestMCPNoPrincipalIsRefusedBeforeAnyLookup(t *testing.T) {
 	}
 	// 3. The middleware itself, with no principal in the context.
 	called := false
-	h := auditMiddleware(slog.New(slog.NewTextHandler(io.Discard, nil)), testWho, nil, time.Second)(
+	h := auditMiddleware(slog.New(slog.NewTextHandler(io.Discard, nil)), testWho, notKilled, time.Second, nil, time.Second)(
 		func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			called = true
 			return mcp.NewToolResultText("x"), nil
@@ -479,3 +480,5 @@ func TestMCPCallAdmitterFailsClosed(t *testing.T) {
 		t.Fatalf("admitted call failed: %s", body)
 	}
 }
+
+func notKilled(context.Context) error { return nil }

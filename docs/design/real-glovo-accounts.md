@@ -299,3 +299,24 @@ The keepalive alert goes to the account's owner, not to the operator.
 with custody on the owner's own hardware. Moving to the shared service
 replaces only the allowlist (by 9.2) and the session store (by 9.4). The
 tool surface, the no-checkout rule and the token checks stay the same.
+
+## Kill switch flip path (C2-2 slice 5)
+
+State lives in the `glovo_control` row (the store ships killed; an unreadable
+or missing row is killed). `PUT /internal/v1/control/kill-switch` with body
+`{"killed": bool}` writes the row, reads it back, audits the flip
+(`kill_on` / `kill_off`, actor operator) and answers `200 {"killed": <stored>}`;
+any failure is a non-200 and means "state unknown" to the caller.
+
+- Auth: a machine-user bearer token verified by `authn.ServiceVerifier`
+  (pinned alg EdDSA or RS256, exact issuer, audience, exp/nbf/iat, key set
+  fetched over https) and an explicit subject allow-list. An empty allow-list
+  refuses everyone; with the four `GLOVO_C2_CONTROL_*` variables unset the
+  route is not mounted.
+- Cluster-internal only: a request carrying proxy forwarding headers is a 404
+  even with a valid token. The ingress must not route `/internal/` either.
+- Enforcement: every hosted tool call reads the switch (a "running" answer is
+  cached for at most 5 s; a failed or slow read is killed) before the admitter
+  and before any session lookup, and answers a fixed text.
+- A tripped switch (global decrypt cap) latches in the process until restart;
+  a later flip to running changes the row, not the latch.
