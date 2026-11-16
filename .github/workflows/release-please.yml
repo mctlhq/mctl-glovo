@@ -1,0 +1,90 @@
+name: release-please
+
+# Cuts releases (tag without a v prefix, e.g. 0.1.0) from conventional
+# commits and, once the owner switches it on, asks mctl-gitops to build and
+# publish ghcr.io/mctlhq/mctl-glovo:<tag>. Same shape as mctl-api.
+#
+# Runs on push to main only. Nothing here checks out or executes code from a
+# pull request, so the App keys are never reachable from PR code.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # The default GITHUB_TOKEN cannot open the release PR (the org setting
+      # "Allow GitHub Actions to create and approve pull requests" is off), so
+      # mint a token from the mctl-agents App, as the other repos do
+      # (mctl-telegram#498). A PR opened with an App token also raises
+      # pull_request events, so the release PR gets normal CI.
+      - name: Generate release token
+        id: release-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AGENTS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AGENTS_APP_PRIVATE_KEY }}
+          owner: mctlhq
+          repositories: mctl-glovo
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ steps.release-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Dark by default: it runs only when the repository variable
+  # GLOVO_IMAGE_DISPATCH is "true". The owner sets it after mctl-gitops has
+  # the mctl-glovo deployment file and the image name allow-listed;
+  # until then a release creates the tag and nothing else. Split from
+  # release-please so the dispatch key lives in the main-only app-dispatch
+  # environment, which no other step can reach.
+  dispatch:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' && vars.GLOVO_IMAGE_DISPATCH == 'true' }}
+    runs-on: ubuntu-latest
+    environment: app-dispatch
+    permissions: {}
+    steps:
+      - name: Generate dispatch token
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DISPATCH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DISPATCH_APP_PRIVATE_KEY }}
+          owner: mctlhq
+          repositories: mctl-gitops
+          permission-actions: write
+
+      - name: Dispatch centralized release-deploy
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          gh workflow run release-deploy.yaml \
+            --repo mctlhq/mctl-gitops \
+            --ref main \
+            -f repo=mctlhq/mctl-glovo \
+            -f git_ref="$TAG" \
+            -f image_name=ghcr.io/mctlhq/mctl-glovo \
+            -f image_tag="$TAG" \
+            -f team_name=admins \
+            -f component_name=mctl-glovo \
+            -f values_path=platform-gitops/bootstrap/templates/mctl-platform/mctl-glovo.yaml
