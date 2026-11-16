@@ -75,21 +75,31 @@ func mergeLocation(sess Session, update map[string]any) Session {
 // location lands next to the latest rotated tokens. Without a writer it
 // refuses instead of keeping an unsaved copy.
 func (c *Client) setLocation(ctx context.Context, update map[string]any) (Location, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.hosted() {
 		if c.writer == nil {
 			return nil, ErrHostedNoFile
 		}
+		// The writer waits for the store's refresh lease, whose holder may
+		// be a refresh of this very client, and that refresh needs c.mu to
+		// build its request. So c.mu must not be held across the writer;
+		// refreshMu serialises this write with this client's refreshes
+		// instead (lock order refreshMu, then c.mu), so a refresh cannot
+		// put its older copy of the session back over the new location.
+		c.refreshMu.Lock()
+		defer c.refreshMu.Unlock()
 		s, err := c.writer(ctx, func(cur Session) (Session, error) {
 			return mergeLocation(cur, update), nil
 		})
 		if err != nil {
 			return nil, err
 		}
+		c.mu.Lock()
+		defer c.mu.Unlock()
 		c.session, c.loadErr = s, nil
 		return c.locationLocked(), nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	s := mergeLocation(c.session, update)
 	if err := SaveSession(c.sessionPath, s, c.now()); err != nil {
 		return nil, err
