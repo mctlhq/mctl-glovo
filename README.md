@@ -69,6 +69,26 @@ with the flag on.
 the masked MCTL identity, asks y/N, and uploads `~/.glovo/session.json`
 (or `-session -` for stdin) over https.
 
+## Image and schema migration
+`Dockerfile` builds one image with two binaries: `mctl-glovo` (default
+entrypoint) and `glovo-migrate`. Releases are cut by release-please (tag
+without `v`); the image is built and published centrally by mctl-gitops'
+`build-image.yaml` as `ghcr.io/mctlhq/mctl-glovo:<semver>`. The dispatch to
+mctl-gitops is off until the repository variable `GLOVO_IMAGE_DISPATCH` is
+`true`.
+
+`glovo-migrate` applies the token store schema as the migration owner role.
+It reads the DSN from `GLOVO_MIGRATE_DATABASE_URL` (sslmode=require or
+stricter), checks the connected role (`-expect-role`, default
+`glovo_c2_migrator`), is safe to rerun (an up-to-date schema is left alone,
+the kill switch included; a partial or different schema is refused) and with
+`-runtime-role` also applies the runtime grants. Exit 0 ok, 1 refused, 3
+could not observe or failed.
+
+`internal/identmask` holds `Email` (the masked identity for the link
+preview, `a***@e***.com`) and `Pseudonym` (a keyed stable stand-in for a
+principal id in logs).
+
 ## Development
 ```bash
 go test -race ./...
