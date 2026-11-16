@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func hostedRC(next Session) RefreshCoordinator {
@@ -139,5 +141,68 @@ func TestHostedSetLocationUsesSessionWriter(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(home); len(entries) != 0 {
 		t.Fatalf("hosted write left files: %v", entries)
+	}
+}
+
+// A hosted location write must not hold the client's session lock while it
+// waits for the store's lease. A refresh in flight on the same client holds
+// that lease and needs the session lock to build its Glovo request: with the
+// lock held across the writer, the two wait on each other until the store's
+// busy timeout (found by the Postgres isolation suite, which saw 5 s stalls
+// and "link is busy" answers under concurrent refresh + set_location).
+func TestHostedSetLocationDoesNotHoldSessionLockWhileWaitingForTheLease(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"accessToken":"a2","refreshToken":"r2","expiresIn":3600}`))
+	}))
+	defer srv.Close()
+
+	var lease sync.Mutex // stands in for the store's refresh lease
+	refresherHasLease := make(chan struct{})
+	writerEntered := make(chan struct{})
+	rc := func(ctx context.Context, held Session, exchange func(context.Context, Session) (Session, error)) (Session, error) {
+		lease.Lock()
+		defer lease.Unlock()
+		close(refresherHasLease)
+		// Give a concurrent location write the chance to reach the lease
+		// first. If the client serialises it behind this refresh it never
+		// gets there, which is the fix.
+		select {
+		case <-writerEntered:
+			time.Sleep(50 * time.Millisecond)
+		case <-time.After(300 * time.Millisecond):
+		}
+		return exchange(ctx, held)
+	}
+	writer := func(ctx context.Context, apply func(Session) (Session, error)) (Session, error) {
+		close(writerEntered)
+		lease.Lock()
+		defer lease.Unlock()
+		return apply(Session{"accessToken": "a2", "refreshToken": "r2"})
+	}
+	c, err := New("", WithBaseURL(srv.URL), WithRefreshCoordinator(rc), WithSessionWriter(writer),
+		WithSession(Session{"accessToken": "a1", "refreshToken": "r1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 2)
+	go func() { done <- c.Refresh(context.Background()) }()
+	<-refresherHasLease
+	go func() {
+		_, err := c.SetLocationContext(context.Background(), LocationUpdate{CountryCode: "XX", CityCode: "TST", Latitude: "1", Longitude: "2"})
+		done <- err
+	}()
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("refresh and location write deadlocked on the session lock and the lease")
+		}
+	}
+	if c.Location()["cityCode"] != "TST" {
+		t.Fatalf("location = %v", c.Location())
 	}
 }
