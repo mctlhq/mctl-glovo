@@ -138,3 +138,37 @@ func TestLandingRoutes(t *testing.T) {
 		t.Fatalf("foreign host: %d, want 421", resp.StatusCode)
 	}
 }
+
+// The page once claimed more than the code guarantees: tools "blocked on the
+// server" and "no access to your payment details". The refusal is a name
+// rule and the tools simply do not read payment data, so the copy says that.
+func TestLandingDoesNotOverclaim(t *testing.T) {
+	banned := []string{
+		"blocked on the server", "no access to your payment",
+		"bloqueadas en el servidor", "no accede a tus datos de pago",
+		"заблокированы на сервере", "не имеет доступа к платёжным данным",
+		"the server that serves this page",
+	}
+	for _, l := range landingLangs {
+		page, err := RenderLanding(l, resource)
+		if err != nil {
+			t.Fatal(err)
+		}
+		low := strings.ToLower(string(page))
+		for _, b := range banned {
+			if strings.Contains(low, b) {
+				t.Errorf("%s: page contains retired claim %q", l, b)
+			}
+		}
+	}
+}
+
+func TestLandingTextParity(t *testing.T) {
+	en := landingTexts["en"]
+	for _, l := range landingLangs {
+		tx := landingTexts[l]
+		if len(tx.Can) != len(en.Can) || len(tx.Never) != len(en.Never) || len(tx.Safe) != len(en.Safe) {
+			t.Errorf("%s: list lengths differ from en", l)
+		}
+	}
+}
