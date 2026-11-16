@@ -115,6 +115,33 @@ func TestC2ConsentAPIConfig(t *testing.T) {
 	}
 }
 
+// The consent route is validated at boot: scheme http or https, no userinfo,
+// path or query, and an absolute clean token path.
+func TestC2ConsentAPIBootValidation(t *testing.T) {
+	ok := func(url, tf string) error {
+		m := fullEnv()
+		m["GLOVO_CONSENT_API_URL"] = url
+		m["GLOVO_CONSENT_TOKEN_FILE"] = tf
+		_, err := loadC2(env(m))
+		return err
+	}
+	for _, u := range []string{"http://mctl-api.ns.svc.cluster.local", "https://api.mctl.ai", "http://mctl-api.ns.svc:8080/"} {
+		if err := ok(u, "/var/run/secrets/mctl-api/token"); err != nil {
+			t.Errorf("%q refused: %v", u, err)
+		}
+	}
+	for _, u := range []string{"ftp://api.mctl.ai", "api.mctl.ai", "https://u:p@api.mctl.ai", "https://api.mctl.ai?x=1", "https://api.mctl.ai/api", "https://api.mctl.ai#f"} {
+		if err := ok(u, "/var/run/secrets/mctl-api/token"); err == nil {
+			t.Errorf("url %q accepted", u)
+		}
+	}
+	for _, tf := range []string{"token", "./token", "/var/run/../token", "/var/run//token"} {
+		if err := ok("https://api.mctl.ai", tf); err == nil {
+			t.Errorf("token file %q accepted", tf)
+		}
+	}
+}
+
 // On, the build refuses a Vault outside the cluster and a bad proxy before
 // it opens anything.
 func TestC2OnRefusesBadDependencies(t *testing.T) {
