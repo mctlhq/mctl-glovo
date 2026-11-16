@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
@@ -36,8 +37,10 @@ var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9._~+/=-]+$`)
 
 // APIConsentConfig configures APIConsent.
 type APIConsentConfig struct {
-	// BaseURL is mctl-api's http or https origin, e.g. https://api.mctl.ai
-	// (http for an in-cluster service address).
+	// BaseURL is mctl-api's origin, e.g. https://api.mctl.ai. http is
+	// accepted only for a cluster-internal host (name.svc,
+	// name.namespace.svc, optionally .cluster.local), never for an IP
+	// literal or any other name.
 	BaseURL string
 	// TokenFile is an absolute path to the service credential mctl-api
 	// accepts for the consent reader (a short-lived machine-user token
@@ -61,11 +64,60 @@ type APIConsent struct {
 	client    *http.Client
 }
 
+// dnsLabel is one RFC 1123 label.
+var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// clusterInternalHost reports whether host (already lower-cased, no port)
+// is an in-cluster service name: name.svc, name.namespace.svc, or either
+// followed by .cluster.local. Anything else, IP literals included, is not.
+func clusterInternalHost(host string) bool {
+	var prefix string
+	switch {
+	case strings.HasSuffix(host, ".svc.cluster.local"):
+		prefix = strings.TrimSuffix(host, ".svc.cluster.local")
+	case strings.HasSuffix(host, ".svc"):
+		prefix = strings.TrimSuffix(host, ".svc")
+	default:
+		return false
+	}
+	labels := strings.Split(prefix, ".")
+	if len(labels) > 2 {
+		return false
+	}
+	for _, l := range labels {
+		if !dnsLabel.MatchString(l) {
+			return false
+		}
+	}
+	return true
+}
+
+// validateConsentBaseURL accepts an https origin, or an http origin only
+// for a cluster-internal service host. The error never echoes the URL.
+func validateConsentBaseURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil ||
+		(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.ForceQuery || u.Opaque != "" {
+		return nil, errors.New("linkflow: consent API base URL must be a bare https origin (http only for a cluster-internal .svc host)")
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+	case "http":
+		if !clusterInternalHost(strings.ToLower(u.Hostname())) {
+			return nil, errors.New("linkflow: consent API base URL must be https unless the host is a cluster-internal .svc or .svc.cluster.local name")
+		}
+	default:
+		return nil, errors.New("linkflow: consent API base URL must be a bare https origin (http only for a cluster-internal .svc host)")
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	return u, nil
+}
+
 // NewAPIConsent validates cfg.
 func NewAPIConsent(cfg APIConsentConfig) (*APIConsent, error) {
-	u, err := url.Parse(cfg.BaseURL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
-		return nil, errors.New("linkflow: consent API base URL must be an http or https origin")
+	u, err := validateConsentBaseURL(cfg.BaseURL)
+	if err != nil {
+		return nil, err
 	}
 	if cfg.TokenFile == "" || !filepath.IsAbs(cfg.TokenFile) || filepath.Clean(cfg.TokenFile) != cfg.TokenFile {
 		return nil, errors.New("linkflow: consent API token file must be a clean absolute path")
@@ -84,7 +136,7 @@ func NewAPIConsent(cfg APIConsentConfig) (*APIConsent, error) {
 	// A 3xx is an answer, not a pointer: it lands on the non-200 path and
 	// fails closed, so a redirect can never supply the consent.
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &APIConsent{base: u.Scheme + "://" + u.Host, tokenFile: cfg.TokenFile, client: &c}, nil
+	return &APIConsent{base: u.Scheme + "://" + strings.ToLower(u.Host), tokenFile: cfg.TokenFile, client: &c}, nil
 }
 
 type consentAnswer struct {
@@ -107,7 +159,7 @@ func (c *APIConsent) RecordedConsent(ctx context.Context, pid tokenstore.PID) (s
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+ConsentReadPath+url.PathEscape(id), nil) //nolint:gosec // origin is operator config validated as https; pid is a validated prn_ id
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+ConsentReadPath+url.PathEscape(id), nil) //nolint:gosec // origin is operator config validated (https, or http for a cluster-internal host); pid is a validated prn_ id
 	if err != nil {
 		return "", unavailable("request")
 	}
@@ -144,7 +196,14 @@ func (c *APIConsent) RecordedConsent(ctx context.Context, pid tokenstore.PID) (s
 // ErrConsentUnavailable and happens before any request, so a bad file never
 // reaches the network. The contents never reach an error.
 func readToken(path string) (string, error) {
-	f, err := os.Open(path) //nolint:gosec // operator-configured absolute token path
+	// Stat before Open: opening a FIFO for reading blocks until a writer
+	// appears, so a non-regular path must be refused before it is opened.
+	// O_NONBLOCK covers a swap between the Stat and the Open; the
+	// descriptor is checked again after opening.
+	if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() { //nolint:gosec // operator-configured absolute token path
+		return "", unavailable("token file unreadable")
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0) //nolint:gosec // operator-configured absolute token path
 	if err != nil {
 		return "", unavailable("token file unreadable")
 	}

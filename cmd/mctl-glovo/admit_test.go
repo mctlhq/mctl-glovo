@@ -55,7 +55,7 @@ func newAdmitEnv(t *testing.T, ttl time.Duration) *admitEnv {
 	t.Helper()
 	e := &admitEnv{clock: &fakeClock{t: time.Unix(1_800_000_000, 0)}}
 	e.answer = func(pid string) (int, string) { return 200, activeBody(pid) }
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		e.hits.Add(1)
 		pid := strings.TrimPrefix(r.URL.Path, linkflow.ConsentReadPath)
 		if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, linkflow.ConsentReadPath) || r.Header.Get("Authorization") != "Bearer "+admToken {
@@ -71,9 +71,11 @@ func newAdmitEnv(t *testing.T, ttl time.Duration) *admitEnv {
 	t.Cleanup(srv.Close)
 	e.tokenFile = filepath.Join(t.TempDir(), "token")
 	e.setToken(t, admToken+"\n")
+	cl := srv.Client()
+	cl.Timeout = 300 * time.Millisecond
 	src, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{
 		BaseURL: srv.URL, TokenFile: e.tokenFile,
-		Client: &http.Client{Timeout: 300 * time.Millisecond},
+		Client: cl,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -151,13 +153,15 @@ func TestAdmitEveryFailureClassRefuses(t *testing.T) {
 func TestAdmitTimeoutAndTransportRefuse(t *testing.T) {
 	// A server that never answers within the client timeout.
 	release := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
 	t.Cleanup(func() { close(release); srv.Close() })
 	tf := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(tf, []byte(admToken), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	src, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: srv.URL, TokenFile: tf, Client: &http.Client{Timeout: 100 * time.Millisecond}})
+	slow := srv.Client()
+	slow.Timeout = 100 * time.Millisecond
+	src, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: srv.URL, TokenFile: tf, Client: slow})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +173,7 @@ func TestAdmitTimeoutAndTransportRefuse(t *testing.T) {
 		t.Fatal("timeout admitted")
 	}
 	// Connection refused.
-	dead := httptest.NewServer(http.NotFoundHandler())
+	dead := httptest.NewTLSServer(http.NotFoundHandler())
 	url := dead.URL
 	dead.Close()
 	src2, _ := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: url, TokenFile: tf})
