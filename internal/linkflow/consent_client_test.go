@@ -133,3 +133,30 @@ func TestNewAPIConsentValidates(t *testing.T) {
 		t.Errorf("valid config refused: %v", err)
 	}
 }
+
+// A redirect is never followed: a 3xx fails closed even when its target
+// would answer with a consent.
+func TestAPIConsentDoesNotFollowRedirects(t *testing.T) {
+	target := 0
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/elsewhere" {
+			target++
+			_, _ = w.Write([]byte(`{"principal_id":"` + testPID + `","state":"active","consent_version":"c2-link-v1"}`))
+			return
+		}
+		http.Redirect(w, r, "/elsewhere", http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+	tf := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tf, []byte(testToken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewAPIConsent(APIConsentConfig{BaseURL: srv.URL, TokenFile: tf, Client: srv.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := c.RecordedConsent(context.Background(), pidOf(testPID))
+	if v != "" || !errors.Is(err, ErrConsentUnavailable) || target != 0 {
+		t.Fatalf("302 = %q %v (target hit %d), want ErrConsentUnavailable and no hop", v, err, target)
+	}
+}

@@ -32,6 +32,7 @@ type APIConsentConfig struct {
 	TokenFile string
 	// Client is the HTTP client; nil is a direct client with a 5 s
 	// timeout. mctl-api traffic never goes through the Glovo egress proxy.
+	// Redirects are never followed, whichever client is given.
 	Client *http.Client
 }
 
@@ -55,11 +56,16 @@ func NewAPIConsent(cfg APIConsentConfig) (*APIConsent, error) {
 	if strings.TrimSpace(cfg.TokenFile) == "" {
 		return nil, errors.New("linkflow: consent API token file is required")
 	}
-	c := cfg.Client
-	if c == nil {
-		c = &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{Proxy: nil}}
+	var c http.Client
+	if cfg.Client != nil {
+		c = *cfg.Client
+	} else {
+		c = http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	}
-	return &APIConsent{base: "https://" + u.Host, tokenFile: cfg.TokenFile, client: c}, nil
+	// A 3xx is an answer, not a pointer: it lands on the non-200 path and
+	// fails closed, so a redirect can never supply the consent.
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &APIConsent{base: "https://" + u.Host, tokenFile: cfg.TokenFile, client: &c}, nil
 }
 
 type consentAnswer struct {
