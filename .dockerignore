@@ -1,0 +1,8 @@
+.git
+.github
+.worktrees
+docs
+deploy
+landing-worker
+scripts
+*.md

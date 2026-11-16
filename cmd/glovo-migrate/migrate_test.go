@@ -1,0 +1,407 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"net/url"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
+)
+
+const (
+	pgDSNEnv      = "TOKENSTORE_TEST_PG_DSN"
+	pgRequiredEnv = "TOKENSTORE_TEST_PG_REQUIRED"
+	sentinelPass  = "s3cr3t-sentinel-pw"
+)
+
+func randHex(t *testing.T) string {
+	t.Helper()
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	return hex.EncodeToString(b)
+}
+
+// pgEnv is a fresh schema on the test Postgres. dsn() is a DSN bound to it.
+type pgEnv struct {
+	t      *testing.T
+	admin  *sql.DB
+	schema string
+	base   string
+	user   string
+}
+
+func newPG(t *testing.T) *pgEnv {
+	t.Helper()
+	base := os.Getenv(pgDSNEnv)
+	if base == "" {
+		if os.Getenv(pgRequiredEnv) != "" {
+			t.Fatalf("%s is set but %s is empty: the Postgres tests cannot run", pgRequiredEnv, pgDSNEnv)
+		}
+		t.Skip(pgDSNEnv + " not set")
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := sql.Open("pgx", base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema := "gm_" + randHex(t)
+	if _, err := admin.Exec(`CREATE SCHEMA ` + schema); err != nil {
+		t.Fatalf("postgres from %s unusable: %v", pgDSNEnv, err)
+	}
+	t.Cleanup(func() {
+		_, _ = admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)
+		_ = admin.Close()
+	})
+	return &pgEnv{t: t, admin: admin, schema: schema, base: base, user: u.User.Username()}
+}
+
+func (p *pgEnv) dsn() string {
+	u, _ := url.Parse(p.base)
+	q := u.Query()
+	q.Set("search_path", p.schema)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// exec runs a statement inside the schema, as the admin connection user.
+func (p *pgEnv) exec(q string, a ...any) {
+	p.t.Helper()
+	if _, err := p.admin.Exec(`SET search_path = `+p.schema+`; `+q, a...); err != nil {
+		// A multi-statement string cannot take arguments; run separately.
+		tx, e2 := p.admin.Begin()
+		if e2 != nil {
+			p.t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, e := tx.Exec(`SET LOCAL search_path = ` + p.schema); e != nil {
+			p.t.Fatal(e)
+		}
+		if _, e := tx.Exec(q, a...); e != nil {
+			p.t.Fatal(e)
+		}
+		if e := tx.Commit(); e != nil {
+			p.t.Fatal(e)
+		}
+	}
+}
+
+func (p *pgEnv) queryInt(q string) int {
+	p.t.Helper()
+	tx, err := p.admin.Begin()
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`SET LOCAL search_path = ` + p.schema); err != nil {
+		p.t.Fatal(err)
+	}
+	var n int
+	if err := tx.QueryRow(q).Scan(&n); err != nil {
+		p.t.Fatal(err)
+	}
+	return n
+}
+
+func (p *pgEnv) queryBool(q string) bool {
+	p.t.Helper()
+	tx, err := p.admin.Begin()
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`SET LOCAL search_path = ` + p.schema); err != nil {
+		p.t.Fatal(err)
+	}
+	var b bool
+	if err := tx.QueryRow(q).Scan(&b); err != nil {
+		p.t.Fatal(err)
+	}
+	return b
+}
+
+type out struct {
+	code           int
+	stdout, stderr string
+}
+
+func (p *pgEnv) run(extra ...string) out {
+	p.t.Helper()
+	return runWith(p.t, p.dsn(), append([]string{"-insecure-no-tls", "-expect-role", p.user}, extra...)...)
+}
+
+func runWith(t *testing.T, dsn string, args ...string) out {
+	t.Helper()
+	var so, se bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	getenv := func(k string) string {
+		if k == "GLOVO_MIGRATE_DATABASE_URL" {
+			return dsn
+		}
+		return ""
+	}
+	code := run(ctx, args, getenv, &so, &se)
+	return out{code, so.String(), se.String()}
+}
+
+func TestFreshDatabaseIsMigratedAndShipsKilled(t *testing.T) {
+	p := newPG(t)
+	o := p.run()
+	if o.code != exitOK || !strings.Contains(o.stdout, "applied at version 1") {
+		t.Fatalf("code %d stdout %q stderr %q", o.code, o.stdout, o.stderr)
+	}
+	if got := p.queryInt(`SELECT version FROM glovo_schema_version`); got != 1 {
+		t.Fatalf("version %d", got)
+	}
+	if !p.queryBool(`SELECT c2_killed FROM glovo_control`) {
+		t.Fatal("the store must ship killed")
+	}
+}
+
+// The core idempotence invariant: a rerun neither fails nor undoes an
+// operator's decision. After the kill switch is turned off, a second run
+// must leave it off.
+func TestRerunIsANoOpAndKeepsKillSwitchState(t *testing.T) {
+	p := newPG(t)
+	if o := p.run(); o.code != exitOK {
+		t.Fatalf("first run: %+v", o)
+	}
+	p.exec(`UPDATE glovo_control SET c2_killed = false, updated_by = 'operator'`)
+	o := p.run()
+	if o.code != exitOK || !strings.Contains(o.stdout, "already current at version 1") {
+		t.Fatalf("second run: %+v", o)
+	}
+	if p.queryBool(`SELECT c2_killed FROM glovo_control`) {
+		t.Fatal("a rerun reset the kill switch")
+	}
+	if got := p.queryInt(`SELECT count(*) FROM glovo_control`); got != 1 {
+		t.Fatalf("glovo_control rows %d", got)
+	}
+}
+
+func TestConcurrentRunsAllSucceedAndMigrateOnce(t *testing.T) {
+	p := newPG(t)
+	const n = 6
+	var wg sync.WaitGroup
+	outs := make([]out, n)
+	start := make(chan struct{})
+	for i := range outs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			outs[i] = p.run()
+		}()
+	}
+	close(start)
+	wg.Wait()
+	applied := 0
+	for _, o := range outs {
+		if o.code != exitOK {
+			t.Fatalf("a concurrent run failed: %+v", o)
+		}
+		if strings.Contains(o.stdout, "applied at") {
+			applied++
+		}
+	}
+	if applied != 1 {
+		t.Fatalf("%d runs applied the schema, want exactly 1", applied)
+	}
+}
+
+func TestOtherSchemaVersionIsRefused(t *testing.T) {
+	p := newPG(t)
+	if o := p.run(); o.code != exitOK {
+		t.Fatalf("%+v", o)
+	}
+	p.exec(`UPDATE glovo_schema_version SET version = 2`)
+	if o := p.run(); o.code != exitRefused {
+		t.Fatalf("newer version: code %d, want %d (%q)", o.code, exitRefused, o.stderr)
+	}
+	p.exec(`UPDATE glovo_schema_version SET version = 0`)
+	if o := p.run(); o.code != exitRefused {
+		t.Fatalf("older version: code %d, want %d (%q)", o.code, exitRefused, o.stderr)
+	}
+}
+
+// A partial schema (tables without a version row) is not "absent" and not
+// "current": the migrator must stop, and must not try to create over it.
+func TestPartialSchemaIsRefused(t *testing.T) {
+	p := newPG(t)
+	if o := p.run(); o.code != exitOK {
+		t.Fatalf("%+v", o)
+	}
+	p.exec(`DROP TABLE glovo_schema_version`)
+	o := p.run()
+	if o.code != exitRefused || !strings.Contains(o.stderr, "partial schema") {
+		t.Fatalf("code %d stderr %q", o.code, o.stderr)
+	}
+}
+
+// A version table that exists but cannot be read as exactly one row is a
+// failure to observe (exit 3), never version 0 or "absent" (which would
+// migrate over it).
+func TestUnreadableVersionIsAFailureNotAbsence(t *testing.T) {
+	p := newPG(t)
+	if o := p.run(); o.code != exitOK {
+		t.Fatalf("%+v", o)
+	}
+	p.exec(`ALTER TABLE glovo_schema_version DISABLE TRIGGER ALL`)
+	p.exec(`DELETE FROM glovo_schema_version`)
+	o := p.run()
+	if o.code != exitFailed {
+		t.Fatalf("empty version table: code %d, want %d (%q)", o.code, exitFailed, o.stderr)
+	}
+	if got := p.queryInt(`SELECT count(*) FROM glovo_schema_version`); got != 0 {
+		t.Fatalf("the migrator wrote to a schema it could not read: %d rows", got)
+	}
+}
+
+// A version row that cannot be decoded is a failed read (3), not version 0
+// (which would be a refusal) and not a pass.
+func TestUndecodableVersionIsAFailure(t *testing.T) {
+	p := newPG(t)
+	if o := p.run(); o.code != exitOK {
+		t.Fatalf("%+v", o)
+	}
+	p.exec(`ALTER TABLE glovo_schema_version ALTER COLUMN version TYPE text USING version::text`)
+	p.exec(`UPDATE glovo_schema_version SET version = 'one'`)
+	if o := p.run(); o.code != exitFailed {
+		t.Fatalf("code %d, want %d (%q)", o.code, exitFailed, o.stderr)
+	}
+}
+
+func TestWrongRoleIsRefusedBeforeAnyChange(t *testing.T) {
+	p := newPG(t)
+	o := runWith(t, p.dsn(), "-insecure-no-tls", "-expect-role", "glovo_c2_migrator_not_me")
+	if o.code != exitRefused {
+		t.Fatalf("code %d (%q)", o.code, o.stderr)
+	}
+	if got := p.queryBool(`SELECT to_regclass('glovo_schema_version') IS NULL`); !got {
+		t.Fatal("schema created despite the wrong role")
+	}
+}
+
+func TestRuntimeGrantsBothWays(t *testing.T) {
+	p := newPG(t)
+	role := "gm_rt_" + randHex(t)
+	if _, err := p.admin.Exec(`CREATE ROLE ` + role + ` NOLOGIN`); err != nil {
+		t.Skipf("cannot create a role here: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = p.admin.Exec(`DROP SCHEMA IF EXISTS ` + p.schema + ` CASCADE`)
+		_, _ = p.admin.Exec(`DROP ROLE IF EXISTS ` + role)
+	})
+	o := p.run("-runtime-role", role)
+	if o.code != exitOK || !strings.Contains(o.stdout, "runtime grants applied") {
+		t.Fatalf("%+v", o)
+	}
+	// A second run keeps working and keeps the grants.
+	if o := p.run("-runtime-role", role); o.code != exitOK {
+		t.Fatalf("rerun: %+v", o)
+	}
+	priv := func(table, priv string) bool {
+		return p.queryBool(`SELECT has_table_privilege('` + role + `', '` + table + `', '` + priv + `')`)
+	}
+	for _, c := range []struct {
+		table, priv string
+		want        bool
+	}{
+		{"glovo_links", "DELETE", true},
+		{"glovo_link_codes", "INSERT", true},
+		{"glovo_store_audit", "INSERT", true},
+		{"glovo_store_audit", "UPDATE", false},
+		{"glovo_store_audit", "DELETE", false},
+		{"glovo_control", "INSERT", false},
+		{"glovo_control", "DELETE", false},
+		{"glovo_schema_version", "UPDATE", false},
+	} {
+		if got := priv(c.table, c.priv); got != c.want {
+			t.Errorf("%s %s = %v, want %v", c.table, c.priv, got, c.want)
+		}
+	}
+	if !p.queryBool(`SELECT has_column_privilege('` + role + `', 'glovo_control', 'c2_killed', 'UPDATE')`) {
+		t.Error("runtime role cannot flip c2_killed")
+	}
+	if p.queryBool(`SELECT has_column_privilege('` + role + `', 'glovo_control', 'singleton', 'UPDATE')`) {
+		t.Error("runtime role can update glovo_control.singleton")
+	}
+	if !p.queryBool(`SELECT has_sequence_privilege('` + role + `', 'glovo_link_version_seq', 'USAGE')`) {
+		t.Error("runtime role cannot use the version sequence")
+	}
+}
+
+// A runtime role that does not exist is a failure, not a silent skip, and
+// leaves the (already applied) schema alone.
+func TestMissingRuntimeRoleFails(t *testing.T) {
+	p := newPG(t)
+	o := p.run("-runtime-role", "gm_no_such_role_"+randHex(t))
+	if o.code != exitFailed {
+		t.Fatalf("code %d (%q)", o.code, o.stderr)
+	}
+	if got := p.queryInt(`SELECT version FROM glovo_schema_version`); got != 1 {
+		t.Fatalf("version %d", got)
+	}
+}
+
+// Flag handling and TLS need no database.
+
+func TestRefusesWithoutTLS(t *testing.T) {
+	for _, dsn := range []string{
+		"postgres://u:" + sentinelPass + "@127.0.0.1:1/db?sslmode=disable",
+		"postgres://u:" + sentinelPass + "@127.0.0.1:1/db?sslmode=prefer",
+		"postgres://u:" + sentinelPass + "@127.0.0.1:1/db?sslmode=allow",
+	} {
+		o := runWith(t, dsn)
+		if o.code != exitRefused {
+			t.Errorf("%s: code %d, want %d (%q)", dsn[:40], o.code, exitRefused, o.stderr)
+		}
+		if strings.Contains(o.stderr+o.stdout, sentinelPass) {
+			t.Errorf("output leaks the DSN password: %q", o.stderr)
+		}
+	}
+}
+
+func TestRefusesBadInput(t *testing.T) {
+	if o := runWith(t, ""); o.code != exitRefused {
+		t.Errorf("empty DSN env: code %d", o.code)
+	}
+	if o := runWith(t, "postgres://u@h/d?sslmode=require", "extra"); o.code != exitRefused {
+		t.Errorf("stray argument: code %d", o.code)
+	}
+	if o := runWith(t, "postgres://u@h/d?sslmode=require", "-expect-role", `x"; DROP`); o.code != exitRefused {
+		t.Errorf("bad role name: code %d", o.code)
+	}
+	if o := runWith(t, "postgres://u@h/d?sslmode=require", "-runtime-role", "glovo_c2_migrator"); o.code != exitRefused {
+		t.Errorf("runtime role equal to migration role: code %d", o.code)
+	}
+	o := runWith(t, "not a dsn "+sentinelPass+"\x00")
+	if o.code != exitRefused || strings.Contains(o.stderr, sentinelPass) {
+		t.Errorf("garbage DSN: code %d stderr %q", o.code, o.stderr)
+	}
+}
+
+// An unreachable database is a failed read (3), not a refusal and not
+// success.
+func TestUnreachableDatabaseIsAFailure(t *testing.T) {
+	o := runWith(t, "postgres://u:"+sentinelPass+"@127.0.0.1:1/db?sslmode=disable&connect_timeout=2", "-insecure-no-tls")
+	if o.code != exitFailed {
+		t.Fatalf("code %d (%q)", o.code, o.stderr)
+	}
+	if strings.Contains(o.stderr+o.stdout, sentinelPass) {
+		t.Errorf("output leaks the DSN password: %q", o.stderr)
+	}
+}

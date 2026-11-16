@@ -58,3 +58,22 @@ jobs:
         run: |
           go build ./...
           go test -race -count=1 ./...
+
+  # The image must keep building. No push, no secrets, read-only token: a PR
+  # cannot publish anything. Publishing is release-please.yml plus
+  # mctl-gitops' build-image.yaml, from a release tag on main only.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: docker build (no push)
+        run: docker build -t mctl-glovo:ci .
+
+      - name: both entrypoints exist and the image runs non-root
+        run: |
+          docker run --rm --entrypoint sh mctl-glovo:ci -c 'test -x /usr/local/bin/mctl-glovo && test -x /usr/local/bin/glovo-migrate && test "$(id -u)" = 10001'
+          # The migrator refuses an empty DSN with exit 1 and prints no secret.
+          set +e
+          docker run --rm --entrypoint glovo-migrate mctl-glovo:ci
+          test $? -eq 1
