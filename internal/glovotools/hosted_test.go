@@ -356,6 +356,8 @@ func TestHostedHandlerErrorsAreMappedLikeLookupErrors(t *testing.T) {
 		{tokenstore.ErrUnavailable, childmcp.ErrUnavailable, ""},
 		{tokenstore.ErrIntegrity, childmcp.ErrUnavailable, ""},
 		{tokenstore.ErrSuperseded, childmcp.ErrUnavailable, ""},
+		{tokenstore.ErrSessionRefused, childmcp.ErrUnavailable, ""},
+		{fmt.Errorf("wrapped: %w", tokenstore.ErrSessionRefused), childmcp.ErrUnavailable, ""},
 		{tokenstore.ErrKilled, nil, "switched off"},
 		{tokenstore.ErrRateLimited, nil, "rate limit"},
 		{tokenstore.ErrNeedsRelink, nil, "Link your account again"},

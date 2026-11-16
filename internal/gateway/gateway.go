@@ -42,6 +42,9 @@ type Config struct {
 	// MCP is the streamable HTTP handler the authenticated /mcp reaches.
 	MCP http.Handler
 	Log *slog.Logger
+	// SkipLanding leaves out "GET /": the cluster service does not serve the
+	// landing page, the landing Worker owns it.
+	SkipLanding bool
 }
 
 // Gateway serves the routes.
@@ -84,7 +87,9 @@ func (g *Gateway) Register(mux *http.ServeMux) {
 	mux.Handle("GET /.well-known/oauth-protected-resource/mcp", meta)
 	// GET also matches HEAD. "/{$}" is the root only; every other unknown
 	// path stays a 404.
-	mux.Handle("GET /{$}", g.securityHeaders(g.hostGuard(http.HandlerFunc(g.handleLanding))))
+	if !g.cfg.SkipLanding {
+		mux.Handle("GET /{$}", g.securityHeaders(g.hostGuard(http.HandlerFunc(g.handleLanding))))
+	}
 	mcpH := g.securityHeaders(g.hostGuard(g.authenticate(g.bindSession(g.cfg.MCP))))
 	mux.Handle("POST /mcp", mcpH)
 	mux.Handle("GET /mcp", mcpH)

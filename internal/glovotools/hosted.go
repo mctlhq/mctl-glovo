@@ -67,5 +67,10 @@ func isStoreFailure(err error) bool {
 	return errors.Is(err, tokenstore.ErrUnavailable) ||
 		errors.Is(err, tokenstore.ErrIntegrity) ||
 		errors.Is(err, tokenstore.ErrSuperseded) ||
-		errors.Is(err, tokenstore.ErrInvalidPID)
+		errors.Is(err, tokenstore.ErrInvalidPID) ||
+		// A refresh whose result fails validation comes back from the
+		// refresh coordinator mid-call. It is no user state (the user cannot
+		// fix it by relinking), so it is unavailable, never a tool error
+		// that would echo the sentinel text.
+		errors.Is(err, tokenstore.ErrSessionRefused)
 }

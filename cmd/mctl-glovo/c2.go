@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"strings"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
 
@@ -16,6 +18,7 @@ import (
 	"github.com/mctlhq/mctl-glovo/internal/config"
 	"github.com/mctlhq/mctl-glovo/internal/consentgate"
 	"github.com/mctlhq/mctl-glovo/internal/glovoapi"
+	"github.com/mctlhq/mctl-glovo/internal/health"
 	"github.com/mctlhq/mctl-glovo/internal/linkflow"
 	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
 )
@@ -100,17 +103,35 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	return c, nil
 }
 
-// buildLink returns the link handlers. With the flag off it builds nothing:
+// c2App is everything the C2 flag mounts: the link flow and the MCP routes.
+// With the flag off both are inert and nothing is registered.
+type c2App struct {
+	link *linkflow.Handler
+	mcp  *mcpRoutes
+	// ready are the extra readiness checks (token verification keys).
+	ready []health.Checker
+}
+
+// Register mounts the link and MCP routes.
+func (a *c2App) Register(mux *http.ServeMux) {
+	a.link.Register(mux)
+	a.mcp.Register(mux)
+}
+
+// Shutdown drains the MCP surface; safe with the flag off.
+func (a *c2App) Shutdown(ctx context.Context) error { return a.mcp.Shutdown(ctx) }
+
+// buildLink returns the C2 handlers. With the flag off it builds nothing:
 // no store, no Vault login, no database (design 6). With it on, every
 // dependency is required. The consent source is mctl-api's consent read
 // route (C2-1c) when GLOVO_CONSENT_API_URL is set, and otherwise the
 // fail-closed one, so no code can be issued. closeFn releases what was
 // opened.
-func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Handler, func(), error) {
+func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(), error) {
 	noop := func() {}
 	if !c.enabled {
 		h, err := linkflow.New(linkflow.Config{Enabled: false})
-		return h, noop, err
+		return &c2App{link: h}, noop, err
 	}
 	consent, admit, err := c2Access(c)
 	if err != nil {
@@ -168,6 +189,32 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		closeDB()
 		return nil, noop, err
 	}
+	sessions, err := tokenstore.NewSessions(store, 0, scfg.ClientOptions...)
+	if err != nil {
+		closeDB()
+		return nil, noop, err
+	}
+	// A failed first fetch is not fatal: readiness stays false and requests
+	// get 503 until a refresh succeeds (as glovo-home).
+	startCtx, cancelStart := context.WithTimeout(ctx, 10*time.Second)
+	if err := verifier.Refresh(startCtx); err != nil {
+		log.Warn("initial jwks fetch failed", "error", err)
+	}
+	cancelStart()
+	routes, err := newMCPRoutes(mcpDeps{
+		Verifier: verifier,
+		Clients:  sessions,
+		Audit:    log.With("log", "audit"),
+		Log:      log,
+		// SEAM(C2-3): Admit (mctl-api join/consent per-call decision) and
+		// Who (masked identity) are wired here by later slices. Until then
+		// the verified principal alone selects the pid.
+	})
+	if err != nil {
+		closeDB()
+		return nil, noop, err
+	}
+	go sweepSessions(ctx, sessions)
 	h, err := linkflow.New(linkflow.Config{
 		Enabled:        true,
 		Store:          store,
@@ -180,7 +227,22 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		closeDB()
 		return nil, noop, err
 	}
-	return h, closeDB, nil
+	return &c2App{link: h, mcp: routes, ready: []health.Checker{verifier.Ready}}, closeDB, nil
+}
+
+// sweepSessions drops idle hosted clients, and every client when the kill
+// switch is on or unreadable, at least every MaxKillCache (Sessions.Sweep).
+func sweepSessions(ctx context.Context, s *tokenstore.Sessions) {
+	t := time.NewTicker(tokenstore.MaxKillCache)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.Sweep(ctx)
+		}
+	}
 }
 
 // c2Access returns the consent source and whether it admits principals at
