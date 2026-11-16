@@ -360,6 +360,7 @@ func TestHostedHandlerErrorsAreMappedLikeLookupErrors(t *testing.T) {
 		{tokenstore.ErrRateLimited, nil, "rate limit"},
 		{tokenstore.ErrNeedsRelink, nil, "Link your account again"},
 		{tokenstore.ErrBusy, nil, "busy"},
+		{tokenstore.ErrSessionRefused, nil, "link your account again"},
 		{fmt.Errorf("wrapped: %w", tokenstore.ErrRateLimited), nil, "rate limit"},
 	}
 	for _, c := range cases {
