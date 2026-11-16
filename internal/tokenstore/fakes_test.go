@@ -277,7 +277,10 @@ func (m *memDB) CommitLease(ctx context.Context, w LeaseCommit) (int64, error) {
 	}
 	m.seq++
 	r.Ciphertext, r.KeyVersion, r.writeID, r.Version = w.Ciphertext, w.KeyVersion, w.WriteID, m.seq
-	r.LeaseHolder, r.LeaseUntil, r.RefreshFailures = "", time.Time{}, 0
+	r.LeaseHolder, r.LeaseUntil = "", time.Time{}
+	if !w.KeepRefreshState {
+		r.RefreshFailures = 0
+	}
 	return r.Version, nil
 }
 

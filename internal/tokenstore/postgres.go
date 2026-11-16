@@ -142,10 +142,12 @@ func (p *Postgres) CommitLease(ctx context.Context, w LeaseCommit) (int64, error
 		   SET ciphertext = $4, key_version = $5, write_id = $6,
 		       version = nextval('glovo_link_version_seq'),
 		       lease_token = NULL, lease_until = NULL,
-		       refresh_failures = 0, last_refresh_at = now(), updated_at = now()
+		       refresh_failures = CASE WHEN $7 THEN refresh_failures ELSE 0 END,
+		       last_refresh_at = CASE WHEN $7 THEN last_refresh_at ELSE now() END,
+		       updated_at = now()
 		 WHERE pid = $1 AND link_id = $2 AND version = $3
 		RETURNING version`,
-		w.PID, w.LinkID, w.BaseVersion, w.Ciphertext, w.KeyVersion, w.WriteID).Scan(&v)
+		w.PID, w.LinkID, w.BaseVersion, w.Ciphertext, w.KeyVersion, w.WriteID, w.KeepRefreshState).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, errFenceLost
 	}

@@ -37,6 +37,15 @@ A linked account is one glovo-skill session object. It is what
 | `expiresIn`, `createdAt`, `tokenType`, `scope`, `updatedAt` | Metadata. |
 | unknown fields | Kept and written back unchanged (the type is a generic map on purpose). |
 
+The hosted `location` is not a separate record: `glovo_set_location` and
+`glovo_select_location` write it into this same encrypted session blob,
+through the lease's fenced update (`Lease.writeSession`), onto the session the
+row holds at that moment so rotated tokens are never overwritten. It is
+encrypted at rest, erased with the link (Unlink/Erase), has no separate
+retention and is never logged. A location write is audited as `refresh` with
+reason `location_set`; a dedicated audit event would need a migration of the
+`glovo_store_audit.event` check and is left as an open question.
+
 The **whole object** is encrypted as one blob. Splitting out "only the
 refresh token" would leave an address and an account id in clear, and
 unknown fields would land on whichever side the code forgot.

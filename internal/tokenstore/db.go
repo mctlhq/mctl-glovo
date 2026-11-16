@@ -27,7 +27,7 @@ type DB interface {
 	// link. Nothing matched is errNoRow; the caller re-reads to classify.
 	AcquireLease(ctx context.Context, pid, linkID, holder string, ttl time.Duration) (LinkRow, error)
 	// CommitLease stores a new ciphertext if the row still has linkID and
-	// baseVersion, clears the lease and the failure counter, and returns
+	// baseVersion, clears the lease and (unless KeepRefreshState) the failure counter, and returns
 	// the new version. The fence is (linkID, baseVersion), never the lease
 	// token: a lease only keeps two holders from calling Glovo at once, so
 	// a write still lands after its lease expired, as long as nobody else
@@ -97,6 +97,10 @@ type LeaseCommit struct {
 	Ciphertext  string
 	KeyVersion  int
 	WriteID     string
+	// KeepRefreshState leaves refresh_failures and last_refresh_at as they
+	// are: the write is not a refresh (a location change), so it must neither
+	// clear the needs_relink failure count nor count as a refresh.
+	KeepRefreshState bool
 }
 
 // LinkWrite is a new link.

@@ -39,6 +39,27 @@ func WithRefreshCoordinator(rc RefreshCoordinator) Option {
 	}
 }
 
+// SessionWriter persists a change to a hosted client's session, other than a
+// token refresh. apply receives the session as the store holds it now and
+// returns the session to store; the writer runs it under the store's own
+// cross-replica fence, so a concurrent refresh is never overwritten with
+// stale tokens. It returns the session the client must use from now on. On
+// an error nothing was stored and the client keeps its current session.
+type SessionWriter func(ctx context.Context, apply func(Session) (Session, error)) (Session, error)
+
+// WithSessionWriter lets a hosted client persist location changes through
+// the token store. Without it a hosted client refuses them with
+// ErrHostedNoFile: it never keeps an unsaved copy. nil is refused.
+func WithSessionWriter(w SessionWriter) Option {
+	return func(c *Client) {
+		if w == nil {
+			c.setOptErr(errors.New("glovoapi: WithSessionWriter: nil writer"))
+			return
+		}
+		c.writer = w
+	}
+}
+
 // WithRequestGate installs a check that runs before every request to Glovo,
 // refreshes included. A non-nil error refuses the request and is returned
 // unchanged. The token store uses it for the kill switch and the request

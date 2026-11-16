@@ -57,8 +57,12 @@ func hostedState(err error) (*mcp.CallToolResult, bool) {
 		text = "Glovo request rate limit reached. Try again later."
 	case errors.Is(err, tokenstore.ErrBusy):
 		text = "Your Glovo link is busy. Retry in a moment."
+	case errors.Is(err, tokenstore.ErrLocationRefused):
+		text = "That location was not accepted."
 	case errors.Is(err, glovoapi.ErrHostedNoFile):
-		text = "Setting the location is not available for hosted accounts yet."
+		// A hosted client built without a session writer cannot store a
+		// location change. The store wires one, so this is a fallback.
+		text = "Setting the location is not available for this account."
 	default:
 		return nil, false
 	}

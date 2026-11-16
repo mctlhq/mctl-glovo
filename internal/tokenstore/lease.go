@@ -80,6 +80,7 @@ func (l *Lease) Client(opts ...glovoapi.Option) (*glovoapi.Client, error) {
 	all = append(all,
 		glovoapi.WithSession(sess),
 		glovoapi.WithRefreshCoordinator(l.coordinate),
+		glovoapi.WithSessionWriter(l.writeSession),
 		glovoapi.WithRequestGate(l.gate),
 	)
 	return glovoapi.New("", all...)
@@ -121,6 +122,9 @@ func (l *Lease) coordinate(ctx context.Context, held glovoapi.Session, exchange 
 		// Rotating again before the last rotation is stored would spend
 		// the only copy of the newest refresh token.
 		if err := l.persistPending(ctx); err != nil {
+			if errors.Is(err, errPendingConflict) {
+				return nil, ErrSuperseded
+			}
 			return nil, err
 		}
 	}
@@ -136,6 +140,53 @@ func (l *Lease) coordinate(ctx context.Context, held glovoapi.Session, exchange 
 	}
 	l.mu.Lock()
 	l.version, l.pending, l.session = ver, p, copySession(next)
+	l.mu.Unlock()
+	return next, nil
+}
+
+// writeSession is the client's SessionWriter, used for location changes. It
+// applies the change to the session the row holds now (not to the client's
+// copy), so tokens another holder rotated are kept, under the same fence and
+// lease as a refresh. The location is part of the one encrypted session blob
+// (design 1): it is stored encrypted and erased with the link. A write that
+// could not be confirmed is ErrUnavailable and adopts nothing: unlike a
+// rotated refresh token there is no only-copy to keep, and the stale version
+// makes the session cache reload from the row.
+func (l *Lease) writeSession(ctx context.Context, apply func(glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {
+	if l.Unpersisted() {
+		if err := l.persistPending(ctx); err != nil {
+			if errors.Is(err, errPendingConflict) {
+				return nil, ErrSuperseded
+			}
+			return nil, err
+		}
+	}
+	// A change that does not pass validation is the caller's fault, not a
+	// failed refresh: it must not reach update's failure accounting, which
+	// counts toward needs_relink. It is held aside and the row is left as is.
+	var rejected error
+	next, ver, p, err := l.store.updateWith(ctx, l.pid, l.LinkID(), actorUser, "location_set", true, func(_ context.Context, cur glovoapi.Session) (glovoapi.Session, bool, error) {
+		n, err := apply(cur)
+		if err == nil {
+			_, err = checkSession(n)
+		}
+		if err != nil {
+			rejected = err
+			return cur, false, nil //nolint:nilerr // intentional: the validation error is held in rejected and answered as ErrLocationRefused, so it must not reach the refresh failure accounting
+		}
+		return n, true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if rejected != nil {
+		return nil, ErrLocationRefused
+	}
+	if p != nil {
+		return nil, ErrUnavailable
+	}
+	l.mu.Lock()
+	l.version, l.session = ver, copySession(next)
 	l.mu.Unlock()
 	return next, nil
 }

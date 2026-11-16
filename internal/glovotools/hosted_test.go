@@ -412,9 +412,9 @@ func TestHostedKeepsOtherHandlerErrorText(t *testing.T) {
 	}
 }
 
-// Setting the location is not available on a hosted client yet: a fixed
-// refusal, without the package name.
-func TestHostedSetLocationIsAFixedRefusal(t *testing.T) {
+// A hosted client built without a session writer refuses a location change
+// with a fixed text, without the package name; it never keeps an unsaved copy.
+func TestHostedSetLocationWithoutWriterIsAFixedRefusal(t *testing.T) {
 	e := newHostedEnv(t)
 	res, err := e.b.Call(pidCtx("prn_A"), "glovo_set_location", map[string]any{
 		"country_code": "XX", "city_code": "TST", "latitude": 1.5, "longitude": 2.5,
@@ -423,7 +423,137 @@ func TestHostedSetLocationIsAFixedRefusal(t *testing.T) {
 		t.Fatalf("got res=%v err=%v", res, err)
 	}
 	txt := resultText(res)
-	if !strings.Contains(txt, "not available for hosted accounts") || strings.Contains(txt, "glovoapi") {
+	if !strings.Contains(txt, "not available for this account") || strings.Contains(txt, "glovoapi") {
 		t.Fatalf("text = %q", txt)
+	}
+	got, err := e.b.Call(pidCtx("prn_A"), "glovo_get_location", map[string]any{})
+	if err != nil || strings.Contains(resultText(got), "1.5") {
+		t.Fatalf("refused location leaked into the client: %v %v", got, err)
+	}
+}
+
+// fakeSessionStore stands in for the token store row of one pid.
+type fakeSessionStore struct {
+	mu   sync.Mutex
+	sess glovoapi.Session
+	err  error
+}
+
+func (f *fakeSessionStore) write(_ context.Context, apply func(glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+	next, err := apply(f.sess)
+	if err != nil {
+		return nil, err
+	}
+	f.sess = next
+	return next, nil
+}
+
+func hostedWriterClient(t *testing.T, base, owner string, st *fakeSessionStore) *glovoapi.Client {
+	t.Helper()
+	c, err := glovoapi.New("",
+		glovoapi.WithBaseURL(base),
+		glovoapi.WithSession(st.sess),
+		glovoapi.WithRefreshCoordinator(func(context.Context, glovoapi.Session, func(context.Context, glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {
+			return nil, errors.New("unexpected refresh")
+		}),
+		glovoapi.WithSessionWriter(st.write),
+		glovoapi.WithClock(func() time.Time { return time.Unix(1_800_000_000, 0) }),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func writerSession(owner string) glovoapi.Session {
+	return glovoapi.Session{
+		"accessToken": marker(owner), "refreshToken": "refresh-" + owner, "customerId": float64(1),
+		"location": map[string]any{"cityCode": "OLD", "latitude": "1", "longitude": "2", "countryCode": "XX"},
+	}
+}
+
+// glovo_set_location on a hosted client stores through the caller's own
+// session writer: the other principal's location does not move.
+func TestHostedSetLocationIsPerPID(t *testing.T) {
+	fake := newFakeGlovoHosted(t)
+	stA := &fakeSessionStore{sess: writerSession("A")}
+	stB := &fakeSessionStore{sess: writerSession("B")}
+	src := &fakeSource{clients: map[string]*glovoapi.Client{
+		"prn_A": hostedWriterClient(t, fake.srv.URL, "A", stA),
+		"prn_B": hostedWriterClient(t, fake.srv.URL, "B", stB),
+	}}
+	b, err := New(Config{Clients: src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := b.Call(pidCtx("prn_A"), "glovo_set_location", map[string]any{
+		"country_code": "ES", "city_code": "NEW", "latitude": 41.5, "longitude": 2.5,
+	})
+	if err != nil || res == nil || res.IsError {
+		t.Fatalf("set: res=%v err=%v", res, err)
+	}
+	if txt := resultText(res); !strings.Contains(txt, "NEW") {
+		t.Fatalf("result %q", txt)
+	}
+	if loc, _ := stA.sess["location"].(map[string]any); loc["cityCode"] != "NEW" {
+		t.Fatalf("A stored %v", stA.sess["location"])
+	}
+	if loc, _ := stB.sess["location"].(map[string]any); loc["cityCode"] != "OLD" {
+		t.Fatalf("B's stored location moved: %v", stB.sess["location"])
+	}
+	got, err := b.Call(pidCtx("prn_B"), "glovo_get_location", map[string]any{})
+	if err != nil || !strings.Contains(resultText(got), "OLD") || strings.Contains(resultText(got), "NEW") {
+		t.Fatalf("B reads %v %v", got, err)
+	}
+	if n := fake.count(); n != 0 {
+		t.Fatalf("a location change made %d requests to Glovo", n)
+	}
+}
+
+// A failed or refused store write is an error, never a success, and the
+// client keeps its previous location. Store sentinels from a write map like
+// any other hosted failure, ErrSessionRefused (the refresh coordinator can
+// return it mid-call) included.
+func TestHostedSetLocationStoreFailures(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		text string // substring of the isError text; empty = unavailable error
+	}{
+		{"refused", tokenstore.ErrLocationRefused, "not accepted"},
+		{"killed", tokenstore.ErrKilled, "switched off"},
+		{"session refused", tokenstore.ErrSessionRefused, "refused your session"},
+		{"unavailable", tokenstore.ErrUnavailable, ""},
+		{"integrity", tokenstore.ErrIntegrity, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			fake := newFakeGlovoHosted(t)
+			st := &fakeSessionStore{sess: writerSession("A"), err: c.err}
+			src := &fakeSource{clients: map[string]*glovoapi.Client{"prn_A": hostedWriterClient(t, fake.srv.URL, "A", st)}}
+			b, err := New(Config{Clients: src})
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := b.Call(pidCtx("prn_A"), "glovo_set_location", map[string]any{
+				"country_code": "ES", "city_code": "NEW", "latitude": 41.5, "longitude": 2.5,
+			})
+			if c.text == "" {
+				if !errors.Is(err, childmcp.ErrUnavailable) {
+					t.Fatalf("want unavailable, got res=%v err=%v", res, err)
+				}
+			} else if err != nil || res == nil || !res.IsError || !strings.Contains(resultText(res), c.text) {
+				t.Fatalf("got res=%v err=%v", res, err)
+			}
+			got, _ := b.Call(pidCtx("prn_A"), "glovo_get_location", map[string]any{})
+			if strings.Contains(resultText(got), "NEW") {
+				t.Fatalf("a failed write changed the client: %s", resultText(got))
+			}
+		})
 	}
 }

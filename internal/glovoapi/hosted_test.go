@@ -92,3 +92,52 @@ func TestHostedRequestGateRunsBeforeNetwork(t *testing.T) {
 		t.Fatalf("gate refused but %d requests reached the network", hits.Load())
 	}
 }
+
+// A hosted client with a session writer stores a location change through it,
+// applied to the session the writer hands over (not the client's copy), and
+// leaves the client untouched when the writer fails. No file is written.
+func TestHostedSetLocationUsesSessionWriter(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	rc := func(context.Context, Session, func(context.Context, Session) (Session, error)) (Session, error) {
+		return nil, errors.New("unexpected refresh")
+	}
+	if _, err := New("", WithRefreshCoordinator(rc), WithSessionWriter(nil)); err == nil {
+		t.Fatal("nil writer accepted")
+	}
+	stored := Session{"accessToken": "a-store", "refreshToken": "r-store", "location": map[string]any{"cityCode": "OLD", "label": "keep"}}
+	var failWith error
+	w := func(_ context.Context, apply func(Session) (Session, error)) (Session, error) {
+		if failWith != nil {
+			return nil, failWith
+		}
+		next, err := apply(stored)
+		if err == nil {
+			stored = next
+		}
+		return next, err
+	}
+	c, err := New("", WithRefreshCoordinator(rc), WithSessionWriter(w), WithSession(Session{"accessToken": "a-stale", "refreshToken": "r-stale"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.SetLocationContext(context.Background(), LocationUpdate{CityCode: "NEW", CountryCode: "ES", Latitude: 1.5, Longitude: 2.5}); err != nil {
+		t.Fatal(err)
+	}
+	if stored["refreshToken"] != "r-store" || get(map[string]any(stored), "location").(map[string]any)["cityCode"] != "NEW" || get(map[string]any(stored), "location").(map[string]any)["label"] != "keep" {
+		t.Fatalf("stored = %v", stored)
+	}
+	if s := c.Session(); s["refreshToken"] != "r-store" {
+		t.Fatalf("client did not adopt the stored session: %v", s)
+	}
+	failWith = errors.New("store down")
+	if _, err := c.SetLocationContext(context.Background(), LocationUpdate{CityCode: "BAD"}); err == nil {
+		t.Fatal("a failed store write returned success")
+	}
+	if loc := c.Location(); loc["cityCode"] != "NEW" {
+		t.Fatalf("failed write changed the client: %v", loc)
+	}
+	if entries, _ := os.ReadDir(home); len(entries) != 0 {
+		t.Fatalf("hosted write left files: %v", entries)
+	}
+}
