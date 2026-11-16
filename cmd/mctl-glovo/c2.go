@@ -34,6 +34,11 @@ type c2Config struct {
 	// (C2-1c). Both unset keeps the fail-closed UnavailableConsent.
 	consentAPI       string
 	consentTokenFile string
+	// capacity is the cohort size (GLOVO_C2_CAPACITY, 1..20); caps are the
+	// token store limits derived from it and the GLOVO_C2_CAP_* overrides.
+	// The kill switch and HTTP routes read them from here.
+	capacity int
+	caps     tokenstore.Caps
 }
 
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
@@ -53,7 +58,11 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	default:
 		return c2Config{}, fmt.Errorf("GLOVO_C2_ENABLED: %q is not true or false", v)
 	}
-	c := c2Config{enabled: true, vaultRole: getenv("GLOVO_VAULT_ROLE")}
+	capacity, caps, err := loadC2Caps(getenv)
+	if err != nil {
+		return c2Config{}, err
+	}
+	c := c2Config{enabled: true, capacity: capacity, caps: caps, vaultRole: getenv("GLOVO_VAULT_ROLE")}
 	if c.vaultRole == "" {
 		c.vaultRole = "mctl-glovo"
 	}
@@ -163,6 +172,10 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		ClientOptions: []glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()},
 	}
 	withLinkConsent(&scfg, gate)
+	if err := withCaps(&scfg, c); err != nil {
+		closeDB()
+		return nil, noop, err
+	}
 	store, err := tokenstore.New(scfg)
 	if err != nil {
 		closeDB()
@@ -224,4 +237,16 @@ func verifierConfig(c c2Config, gate authn.Admitter, admit bool) authn.Config {
 // no session can be stored, as no code can be issued.
 func withLinkConsent(cfg *tokenstore.Config, gate *consentgate.Gate) {
 	cfg.LinkConsent = gate.LinkConsent
+}
+
+// withCaps sets the store's caps from the validated C2 configuration. A
+// config that never went through loadC2 has zero Caps, which tokenstore.New
+// would read as "use defaults"; that is refused so the configured limits can
+// never be silently replaced.
+func withCaps(cfg *tokenstore.Config, c c2Config) error {
+	if c.caps == (tokenstore.Caps{}) {
+		return errors.New("c2: caps are not configured")
+	}
+	cfg.Caps = c.caps
+	return nil
 }

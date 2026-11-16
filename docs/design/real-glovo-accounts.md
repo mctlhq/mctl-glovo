@@ -149,6 +149,11 @@ How the two fit together:
 - **Target scale is a small friends cohort of 10-20 people**, not a public
   launch. `GLOVO_C2_CAPACITY` defaults to 10 and can be raised to 20 by
   env; going past that is a new decision.
+  The service reads `GLOVO_C2_CAPACITY` (1-20) and sizes the cohort-wide
+  caps from it (12 requests/min, 10 decrypts/h and 5 link attempts/h per
+  slot); `GLOVO_C2_CAP_*` variables override single caps within fixed
+  ceilings. Zero, negative, malformed or oversized values stop the service
+  at start (fail closed, never uncapped).
 - **The written legal read (R1 terms, R4 GDPR) and the formal security
   review of the token store are parked**, not blockers for the code work
   or for the C2-3 gate at this scale. Revisit both before any growth
