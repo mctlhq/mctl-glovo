@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/mctlhq/mctl-glovo/internal/consentgate"
 	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
 )
 
@@ -33,7 +34,8 @@ type ConsentSource interface {
 
 var (
 	// ErrNoConsent means mctl-api has no consent record for the principal.
-	ErrNoConsent = errors.New("linkflow: no consent recorded")
+	// It is consentgate.ErrNoConsent, so the gate reads it as a definite no.
+	ErrNoConsent = consentgate.ErrNoConsent
 	// ErrConsentUnavailable means the consent record could not be read.
 	ErrConsentUnavailable = errors.New("linkflow: consent record unavailable")
 )

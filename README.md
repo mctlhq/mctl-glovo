@@ -34,14 +34,36 @@ tool refusal and an audit log. See
 [docs/design/token-store.md](docs/design/token-store.md) 4.1 only when
 `GLOVO_C2_ENABLED=true`. Off (the default), no `/link` route exists, and no
 store, Vault login or database connection is built. Any other value is a
-startup error. On, it needs `GLOVO_C2_ALLOWED_PRINCIPALS`,
-`GLOVO_DATABASE_URL`, `GLOVO_VAULT_ADDR` (in-cluster only),
-`GLOVO_EGRESS_PROXY`, and optionally `GLOVO_VAULT_ROLE` (default
-`mctl-glovo`) and `GLOVO_LINK_TRUSTED_PROXIES` (CIDRs whose
-`X-Forwarded-For` is believed).
+startup error. On, it needs `GLOVO_DATABASE_URL`, `GLOVO_VAULT_ADDR`
+(in-cluster only), `GLOVO_EGRESS_PROXY`, an access gate (below), and
+optionally `GLOVO_VAULT_ROLE` (default `mctl-glovo`) and
+`GLOVO_LINK_TRUSTED_PROXIES` (CIDRs whose `X-Forwarded-For` is believed).
 
-Until mctl-api serves consent records and masked identities (C2-1c), no
-code can be issued and no preview answers, even with the flag on.
+### Who may use C2
+Every token must be an mctl-api token for this resource that names exactly
+one grant: a team grant (`tgr` + `stn`) or a personal grant (`tgr` +
+`tgk=personal`, no `stn`). Who is admitted then depends on whether
+mctl-api's consent route is configured (`GLOVO_CONSENT_API_URL` and
+`GLOVO_CONSENT_TOKEN_FILE`, set together):
+
+| Consent route | `GLOVO_C2_ALLOWED_PRINCIPALS` | Admitted |
+|---|---|---|
+| set | unset | any principal with an active `glovo:c2` consent |
+| set | set | an active consent **and** on the list (staged pilot) |
+| unset | set | the list alone; no code can be issued (no consent source) |
+| unset | unset | startup error |
+
+The consent is read through `internal/consentgate`: a positive answer is
+cached for at most 60 s (30 s by default), a "no" and a failed read are never
+cached, and a failed read refuses (503), never passes. Withdrawing the
+consent in mctl-api therefore takes effect here within a minute. The same
+gate re-checks the consent on `/link/upload`, after the code is redeemed and
+before the session is validated or stored; `/link/code` reads the consent
+uncached. Any future MCP route that acts with a stored session must check
+the same gate on every call.
+
+Until mctl-api serves masked identities (C2-1c), no preview answers, even
+with the flag on.
 
 `cmd/glovo-link` is the local helper. It reads the code from stdin, shows
 the masked MCTL identity, asks y/N, and uploads `~/.glovo/session.json`

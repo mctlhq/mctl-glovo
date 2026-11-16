@@ -8,6 +8,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/mctlhq/mctl-glovo/internal/consentgate"
+	"github.com/mctlhq/mctl-glovo/internal/linkflow"
+	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
 )
 
 func env(m map[string]string) func(string) string {
@@ -127,5 +131,91 @@ func TestC2OnRefusesBadDependencies(t *testing.T) {
 		if _, _, err := buildLink(context.Background(), c, log); err == nil {
 			t.Errorf("%s=%s accepted", k, v)
 		}
+	}
+}
+
+// With mctl-api's consent route configured, consent is the access gate and
+// the allowlist is optional (an extra restriction when set). Without it the
+// allowlist is required, and with neither the service does not boot.
+func TestC2AccessModes(t *testing.T) {
+	withAPI := func() map[string]string {
+		m := fullEnv()
+		m["GLOVO_CONSENT_API_URL"] = "https://api.mctl.ai"
+		m["GLOVO_CONSENT_TOKEN_FILE"] = "/var/run/secrets/mctl-api/token"
+		return m
+	}
+	// Consent API, allowlist unset: boots, consent admits.
+	m := withAPI()
+	delete(m, "GLOVO_C2_ALLOWED_PRINCIPALS")
+	c, err := loadC2(env(m))
+	if err != nil || len(c.allowed) != 0 {
+		t.Fatalf("consent without allowlist: %+v %v", c, err)
+	}
+	src, admit, err := c2Access(c)
+	if err != nil || !admit {
+		t.Fatalf("consent mode: %v admit=%v", err, admit)
+	}
+	if _, ok := src.(*linkflow.APIConsent); !ok {
+		t.Fatalf("source %T", src)
+	}
+	// Consent API and allowlist: both bind.
+	c, err = loadC2(env(withAPI()))
+	if err != nil || len(c.allowed) != 1 {
+		t.Fatalf("consent with allowlist: %+v %v", c, err)
+	}
+	if _, admit, err := c2Access(c); err != nil || !admit {
+		t.Fatalf("consent+allowlist: %v %v", admit, err)
+	}
+	// No consent API: the allowlist alone, and the source never consents.
+	c, err = loadC2(env(fullEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, admit, err = c2Access(c)
+	if err != nil || admit {
+		t.Fatalf("allowlist mode: %v admit=%v", err, admit)
+	}
+	if _, ok := src.(linkflow.UnavailableConsent); !ok {
+		t.Fatalf("source %T", src)
+	}
+	// Neither: no boot.
+	m = fullEnv()
+	delete(m, "GLOVO_C2_ALLOWED_PRINCIPALS")
+	if _, err := loadC2(env(m)); err == nil || !strings.Contains(err.Error(), "GLOVO_C2_ALLOWED_PRINCIPALS") {
+		t.Fatalf("neither configured booted: %v", err)
+	}
+	if _, _, err := c2Access(c2Config{enabled: true}); err == nil {
+		t.Fatal("c2Access with neither configured")
+	}
+}
+
+type nopAdmitter struct{}
+
+func (nopAdmitter) Admit(context.Context, string) error { return nil }
+
+func TestC2VerifierConfig(t *testing.T) {
+	c := c2Config{allowed: []string{"prn_owner"}}
+	v := verifierConfig(c, nopAdmitter{}, true)
+	if v.Admitter == nil || !v.RequireGrant || len(v.AllowedPrincipals) != 1 {
+		t.Fatalf("consent mode: %+v", v)
+	}
+	if v := verifierConfig(c, nopAdmitter{}, false); v.Admitter != nil || !v.RequireGrant {
+		t.Fatalf("allowlist mode: %+v", v)
+	}
+}
+
+// The upload consent re-check is wired from the gate.
+func TestC2StoreRechecksConsent(t *testing.T) {
+	g, err := consentgate.New(consentgate.Config{Source: linkflow.UnavailableConsent{}, Version: linkflow.ConsentVersion})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg tokenstore.Config
+	withLinkConsent(&cfg, g)
+	if cfg.LinkConsent == nil {
+		t.Fatal("no upload consent check")
+	}
+	if err := cfg.LinkConsent(context.Background(), tokenstore.PID{}); err == nil {
+		t.Fatal("upload consent check passed with no consent")
 	}
 }

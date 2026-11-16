@@ -201,6 +201,23 @@ in the shape that the v1 service already uses:
 - revoking a grant stops the next call; it does not wait for the token to
   expire.
 
+Implementation for `glovo:c2` (owner decision 2026-11-16: access is an
+active consent plus a slot, with no manual step per user):
+
+- The `glovo:c2` grant is the consent mctl-api records
+  (`/api/v1/glovo/link-consent`), which holds a slot under
+  `GLOVO_C2_CAPACITY`. mctl-glovo reads it through `internal/consentgate`:
+  positive answers cached for at most 60 s, no negative or error cache, a
+  failed read refuses with 503.
+- The token verifier admits a principal through that gate when
+  `GLOVO_CONSENT_API_URL` is configured. `GLOVO_C2_ALLOWED_PRINCIPALS`, when
+  set, still narrows access (an intersection). Until C2-3 it stays set to
+  the owner in mctl-gitops, which keeps C2 owner-only; removing it is the
+  switch that opens C2 to every consenting principal.
+- A token must name one grant: a team grant, or a personal grant
+  (`tgk=personal`) that mctl-api issues to a human with no team who holds
+  the consent. Both are keyed by `pid`.
+
 ### 9.3 First use, step by step
 
 1. The user adds `https://glovo.mctl.ai/mcp` in their client. The client

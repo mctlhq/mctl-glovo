@@ -151,6 +151,8 @@ func storeRefusal(err error) refusal {
 		return refCode
 	case errors.Is(err, tokenstore.ErrSessionRefused):
 		return refSession
+	case errors.Is(err, tokenstore.ErrConsentRefused):
+		return refNoConsent
 	default:
 		return refUnavailable
 	}
@@ -307,6 +309,9 @@ func (h *Handler) principal(r *http.Request) (tokenstore.PID, *refusal) {
 		case http.StatusServiceUnavailable:
 			return tokenstore.PID{}, &refAuthUnavailable
 		case http.StatusForbidden:
+			if ae.Reason == authn.ReasonNotAdmitted {
+				return tokenstore.PID{}, &refNoConsent
+			}
 			return tokenstore.PID{}, &refForbidden
 		default:
 			return tokenstore.PID{}, &refUnauthorized
