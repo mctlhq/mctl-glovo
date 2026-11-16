@@ -19,7 +19,8 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/mctl-glovo ./cmd/mctl-glovo \
  && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/glovo-migrate ./cmd/glovo-migrate
 
-FROM alpine:3.24
+# Runtime base: alpine:3.24 multi-arch index digest (resolved 2026-11-17).
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 
 RUN apk add --no-cache ca-certificates \
  && addgroup -g 10001 app && adduser -D -u 10001 -G app app

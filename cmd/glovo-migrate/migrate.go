@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -16,6 +19,56 @@ import (
 // lockKey is the session advisory lock that serialises concurrent
 // migrators (two Job pods, a retry overlapping a slow first run).
 const lockKey int64 = 0x676c6f766f633200 // "glovoc2\0"
+
+// unlockTimeout bounds the explicit unlock; closing the session releases
+// the lock regardless.
+const unlockTimeout = 5 * time.Second
+
+// schemaObjects is every object migration 0001 creates, by kind. A test
+// applies the migrations to an empty schema and fails if the catalog holds
+// an object that is not listed here, so a new migration cannot slip past the
+// partial-schema probe.
+var schemaObjects = []schemaObject{
+	{"table", "glovo_schema_version"},
+	{"sequence", "glovo_link_version_seq"},
+	{"table", "glovo_links"},
+	{"table", "glovo_link_codes"},
+	{"index", "glovo_link_codes_live"},
+	{"table", "glovo_control"},
+	{"table", "glovo_audit_subjects"},
+	{"table", "glovo_store_audit"},
+	{"function", "glovo_store_audit_immutable"},
+	{"trigger", "glovo_store_audit_no_update_delete"},
+	{"trigger", "glovo_store_audit_no_truncate"},
+}
+
+type schemaObject struct{ kind, name string }
+
+// probeSchema reports which of schemaObjects exist. A failed query is an
+// error, never "absent".
+func probeSchema(ctx context.Context, conn *sql.Conn) (present, missing []string, err error) {
+	for _, o := range schemaObjects {
+		var q string
+		switch o.kind {
+		case "function":
+			q = `SELECT to_regprocedure($1 || '()') IS NOT NULL`
+		case "trigger":
+			q = `SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = $1 AND tgrelid = to_regclass('glovo_store_audit'))`
+		default:
+			q = `SELECT to_regclass($1) IS NOT NULL`
+		}
+		var ok bool
+		if err := conn.QueryRowContext(ctx, q, o.name).Scan(&ok); err != nil {
+			return nil, nil, errors.New("cannot read the catalog")
+		}
+		if ok {
+			present = append(present, o.name)
+		} else {
+			missing = append(missing, o.name)
+		}
+	}
+	return present, missing, nil
+}
 
 type config struct {
 	DSN         string
@@ -83,7 +136,10 @@ func migrate(ctx context.Context, c config) (result, error) {
 	defer func() {
 		// Closing the session releases it anyway; unlock explicitly on a
 		// fresh context so a cancelled run does not leave it to the pool.
-		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, lockKey)
+		// Bounded: a dead socket must not outlive the Job's -timeout.
+		uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), unlockTimeout)
+		defer cancel()
+		_, _ = conn.ExecContext(uctx, `SELECT pg_advisory_unlock($1)`, lockKey)
 	}()
 
 	var role string
@@ -95,20 +151,21 @@ func migrate(ctx context.Context, c config) (result, error) {
 	}
 
 	var res result
-	var hasVersion, hasLinks bool
-	if err := conn.QueryRowContext(ctx,
-		`SELECT to_regclass('glovo_schema_version') IS NOT NULL, to_regclass('glovo_links') IS NOT NULL`,
-	).Scan(&hasVersion, &hasLinks); err != nil {
-		return result{}, errors.New("cannot read the catalog")
+	present, missing, err := probeSchema(ctx, conn)
+	if err != nil {
+		return result{}, err
 	}
+	hasVersion := slices.Contains(present, "glovo_schema_version")
 	switch {
-	case !hasVersion && hasLinks:
-		return result{}, refuse("glovo_links exists without glovo_schema_version: partial schema, not touching it")
-	case !hasVersion:
+	case len(present) == 0:
 		if err := tokenstore.Migrate(ctx, db); err != nil {
 			return result{}, fmt.Errorf("apply schema: %w", err)
 		}
 		res.Outcome = "applied"
+	case !hasVersion:
+		return result{}, refuse("partial schema: %s exist without glovo_schema_version, not touching it", strings.Join(present, ", "))
+	case len(missing) > 0:
+		return result{}, refuse("partial schema: glovo_schema_version exists but %s missing, not touching it", strings.Join(missing, ", "))
 	default:
 		v, err := readVersion(ctx, conn)
 		if err != nil {

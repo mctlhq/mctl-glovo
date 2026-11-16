@@ -405,3 +405,139 @@ func TestUnreachableDatabaseIsAFailure(t *testing.T) {
 		t.Errorf("output leaks the DSN password: %q", o.stderr)
 	}
 }
+
+// dropObject removes one listed object from an applied schema, leaving a
+// partial state for the probe tests.
+func (p *pgEnv) dropObject(o schemaObject) {
+	p.t.Helper()
+	switch o.kind {
+	case "table":
+		p.exec(`DROP TABLE ` + o.name + ` CASCADE`)
+	case "sequence":
+		p.exec(`DROP SEQUENCE ` + o.name)
+	case "index":
+		p.exec(`DROP INDEX ` + o.name)
+	case "function":
+		p.exec(`DROP FUNCTION ` + o.name + `() CASCADE`)
+	case "trigger":
+		p.exec(`DROP TRIGGER ` + o.name + ` ON glovo_store_audit`)
+	}
+}
+
+// Direction 1: a version row exists but any object of migration 0001 is
+// missing. Never "already current".
+func TestVersionWithAnyObjectMissingIsRefused(t *testing.T) {
+	for _, o := range schemaObjects {
+		if o.name == "glovo_schema_version" {
+			continue
+		}
+		t.Run(o.name, func(t *testing.T) {
+			p := newPG(t)
+			if r := p.run(); r.code != exitOK {
+				t.Fatalf("%+v", r)
+			}
+			p.dropObject(o)
+			r := p.run()
+			if r.code != exitRefused || !strings.Contains(r.stderr, "partial schema") || strings.Contains(r.stdout, "already current") {
+				t.Fatalf("code %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
+			}
+		})
+	}
+}
+
+// Direction 2: any object of migration 0001 exists without a version row,
+// not just glovo_links.
+func TestAnyObjectWithoutVersionIsRefused(t *testing.T) {
+	for _, o := range schemaObjects {
+		if o.name == "glovo_schema_version" {
+			continue
+		}
+		t.Run(o.name, func(t *testing.T) {
+			p := newPG(t)
+			if r := p.run(); r.code != exitOK {
+				t.Fatalf("%+v", r)
+			}
+			// Leave only this object: drop everything else.
+			p.exec(`DROP TABLE glovo_schema_version, glovo_links, glovo_link_codes, glovo_control, glovo_store_audit, glovo_audit_subjects CASCADE`)
+			p.exec(`DROP FUNCTION IF EXISTS glovo_store_audit_immutable() CASCADE`)
+			p.exec(`DROP SEQUENCE IF EXISTS glovo_link_version_seq`)
+			switch o.kind {
+			case "table":
+				p.exec(`CREATE TABLE ` + o.name + ` (x int)`)
+			case "sequence":
+				p.exec(`CREATE SEQUENCE ` + o.name)
+			case "index":
+				p.exec(`CREATE TABLE tmp_idx (x int); CREATE INDEX ` + o.name + ` ON tmp_idx (x)`)
+			case "function":
+				p.exec(`CREATE FUNCTION ` + o.name + `() RETURNS int LANGUAGE sql AS 'SELECT 1'`)
+			case "trigger":
+				p.exec(`CREATE TABLE glovo_store_audit (x int)`)
+				p.exec(`CREATE FUNCTION tmp_trg() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$`)
+				p.exec(`CREATE TRIGGER ` + o.name + ` BEFORE INSERT ON glovo_store_audit FOR EACH ROW EXECUTE FUNCTION tmp_trg()`)
+			}
+			r := p.run()
+			if r.code != exitRefused || !strings.Contains(r.stderr, "partial schema") {
+				t.Fatalf("code %d stderr %q", r.code, r.stderr)
+			}
+			if p.queryBool(`SELECT to_regclass('glovo_schema_version') IS NOT NULL`) {
+				t.Fatal("the migrator created the schema over a partial state")
+			}
+		})
+	}
+}
+
+// schemaObjects must list everything the migrations create. Applies them to
+// an empty schema and compares with the catalog; a new migration that adds
+// an unlisted object fails here.
+func TestSchemaObjectsCoverTheMigrations(t *testing.T) {
+	p := newPG(t)
+	if r := p.run(); r.code != exitOK {
+		t.Fatalf("%+v", r)
+	}
+	tx, err := p.admin.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`SET LOCAL search_path = ` + p.schema); err != nil {
+		t.Fatal(err)
+	}
+	// Indexes that back a constraint exist iff their table does.
+	rows, err := tx.Query(`
+		SELECT CASE c.relkind WHEN 'r' THEN 'table' WHEN 'S' THEN 'sequence' WHEN 'i' THEN 'index' ELSE 'other:' || c.relkind::text END, c.relname
+		  FROM pg_class c
+		 WHERE c.relnamespace = $1::regnamespace
+		   AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = c.oid AND c.relkind = 'i')
+		UNION ALL
+		SELECT 'function', proname FROM pg_proc WHERE pronamespace = $1::regnamespace
+		UNION ALL
+		SELECT 'trigger', tgname FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+		 WHERE c.relnamespace = $1::regnamespace AND NOT t.tgisinternal`, p.schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	listed := map[schemaObject]bool{}
+	for _, o := range schemaObjects {
+		listed[o] = true
+	}
+	found := map[schemaObject]bool{}
+	for rows.Next() {
+		var o schemaObject
+		if err := rows.Scan(&o.kind, &o.name); err != nil {
+			t.Fatal(err)
+		}
+		found[o] = true
+		if !listed[o] {
+			t.Errorf("migrations create %s %s, missing from schemaObjects", o.kind, o.name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for o := range listed {
+		if !found[o] {
+			t.Errorf("schemaObjects lists %s %s, which the migrations do not create", o.kind, o.name)
+		}
+	}
+}
