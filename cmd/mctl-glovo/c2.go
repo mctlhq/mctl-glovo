@@ -76,6 +76,12 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	if (c.consentAPI == "") != (c.consentTokenFile == "") {
 		return c2Config{}, errors.New("GLOVO_CONSENT_API_URL and GLOVO_CONSENT_TOKEN_FILE are set together or not at all")
 	}
+	if c.consentAPI != "" {
+		// Validate at boot: scheme, no userinfo/query, absolute token path.
+		if _, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: c.consentAPI, TokenFile: c.consentTokenFile}); err != nil {
+			return c2Config{}, fmt.Errorf("GLOVO_CONSENT_API_URL / GLOVO_CONSENT_TOKEN_FILE: %w", err)
+		}
+	}
 	for _, p := range strings.Split(getenv("GLOVO_C2_ALLOWED_PRINCIPALS"), ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			if !strings.HasPrefix(p, "prn_") {
@@ -227,6 +233,14 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		closeDB()
 		return nil, noop, err
 	}
+	// Per-call decision: only in consent mode. In allowlist-only mode the
+	// consent source never consents, so an admitter would refuse everyone;
+	// there the verifier's allowlist is the gate.
+	callAdmit, err := admitterFor(consent, admit)
+	if err != nil {
+		closeDB()
+		return nil, noop, err
+	}
 	routes, err := newMCPRoutes(mcpDeps{
 		Verifier: verifier,
 		Clients:  sessions,
@@ -235,9 +249,9 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		// Who is the keyed digest; the masked MCTL identity helper (build
 		// infra, MaskIdentity) can replace it behind the same seam.
 		Who: who,
-		// SEAM(C2-3): Admit (mctl-api join/consent per-call decision) is
-		// wired here by a later slice. Until then the verified principal
-		// alone selects the pid.
+		// Admit is mctl-api's consent (and slot) decision per tool call,
+		// with a few-second positive cache (admit.go).
+		Admit: callAdmit,
 	})
 	if err != nil {
 		closeDB()

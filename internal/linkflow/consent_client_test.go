@@ -121,13 +121,21 @@ func TestAPIConsentTransportAndTokenFailures(t *testing.T) {
 }
 
 func TestNewAPIConsentValidates(t *testing.T) {
-	for _, base := range []string{"", "http://api.mctl.ai", "https://", "https://api.mctl.ai/api", "https://u@api.mctl.ai", "https://api.mctl.ai?x=1"} {
+	for _, base := range []string{"", "ftp://api.mctl.ai", "api.mctl.ai", "https://", "https://api.mctl.ai/api", "https://u@api.mctl.ai", "https://api.mctl.ai?x=1"} {
 		if _, err := NewAPIConsent(APIConsentConfig{BaseURL: base, TokenFile: "/t"}); err == nil {
 			t.Errorf("%q accepted", base)
 		}
 	}
 	if _, err := NewAPIConsent(APIConsentConfig{BaseURL: "https://api.mctl.ai"}); err == nil {
 		t.Error("no token file accepted")
+	}
+	for _, tf := range []string{"token", "./token", "/a/../token", "/a//token"} {
+		if _, err := NewAPIConsent(APIConsentConfig{BaseURL: "https://api.mctl.ai", TokenFile: tf}); err == nil {
+			t.Errorf("token file %q accepted", tf)
+		}
+	}
+	if _, err := NewAPIConsent(APIConsentConfig{BaseURL: "http://mctl-api.ns.svc.cluster.local:8080", TokenFile: "/t"}); err != nil {
+		t.Errorf("in-cluster http origin refused: %v", err)
 	}
 	if _, err := NewAPIConsent(APIConsentConfig{BaseURL: "https://api.mctl.ai/", TokenFile: "/t"}); err != nil {
 		t.Errorf("valid config refused: %v", err)
