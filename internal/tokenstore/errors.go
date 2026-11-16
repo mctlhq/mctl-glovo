@@ -35,6 +35,9 @@ var (
 	// ErrSessionRefused means an uploaded or refreshed session failed
 	// validation (shape or size).
 	ErrSessionRefused = errors.New("glovo session refused")
+	// ErrLocationRefused means a location change failed validation (shape
+	// or size) and was not stored.
+	ErrLocationRefused = errors.New("glovo location refused")
 	// ErrConsentRefused means the principal no longer holds the glovo:c2
 	// consent when its link code is redeemed: nothing is stored.
 	ErrConsentRefused = errors.New("glovo link consent not held")

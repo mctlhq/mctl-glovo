@@ -467,6 +467,12 @@ func publicRefreshErr(err error, counted bool) error {
 // in Postgres, and a pendingWrite when Glovo rotated the session but the
 // write could not be confirmed.
 func (s *store) update(ctx context.Context, pid PID, linkID string, actor string, fn updateFn) (glovoapi.Session, int64, *pendingWrite, error) {
+	return s.updateWith(ctx, pid, linkID, actor, "rotated", fn)
+}
+
+// updateWith is update with the audit reason of a successful write: a
+// location change must not be recorded as a token rotation.
+func (s *store) updateWith(ctx context.Context, pid PID, linkID string, actor string, okReason string, fn updateFn) (glovoapi.Session, int64, *pendingWrite, error) {
 	if !pid.valid() {
 		return nil, 0, nil, ErrInvalidPID
 	}
@@ -524,7 +530,7 @@ func (s *store) update(ctx context.Context, pid PID, linkID string, actor string
 	v, err := s.commit(ctx, pid, p)
 	switch {
 	case err == nil:
-		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "refresh", Outcome: outcomeOK, Reason: "rotated", Actor: actor})
+		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "refresh", Outcome: outcomeOK, Reason: okReason, Actor: actor})
 		return next, v, nil, nil
 	case errors.Is(err, errFenceLost):
 		// A relink, an unlink or another writer won. The rotated session

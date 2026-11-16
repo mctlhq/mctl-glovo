@@ -313,7 +313,7 @@ func TestSelectLocationDoesNotPersistOnFailure(t *testing.T) {
 func TestSetLocationInternalMergeKeepsOtherKeys(t *testing.T) {
 	f := newFake(t)
 	c, path := newTestClient(t, f, testSession())
-	loc, err := c.setLocation(map[string]any{"cityCode": "NEW", "longitude": nil, "label": ""})
+	loc, err := c.setLocation(context.Background(), map[string]any{"cityCode": "NEW", "longitude": nil, "label": ""})
 	if err != nil {
 		t.Fatal(err)
 	}

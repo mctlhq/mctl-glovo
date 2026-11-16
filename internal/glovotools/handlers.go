@@ -66,8 +66,8 @@ func handlers(b *Backend) map[string]handler {
 		"glovo_get_location": func(_ context.Context, c *glovoapi.Client, _ args) (any, error) {
 			return c.Location(), nil
 		},
-		"glovo_set_location": func(_ context.Context, c *glovoapi.Client, a args) (any, error) {
-			return c.SetLocation(glovoapi.LocationUpdate{
+		"glovo_set_location": func(ctx context.Context, c *glovoapi.Client, a args) (any, error) {
+			return c.SetLocationContext(ctx, glovoapi.LocationUpdate{
 				CountryCode:  a.str("country_code"),
 				CityCode:     a.str("city_code"),
 				Latitude:     a.raw("latitude"),

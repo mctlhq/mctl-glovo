@@ -108,6 +108,7 @@ type Client struct {
 
 	// Hosted mode (hosted.go): the session lives in the token store.
 	coordinator RefreshCoordinator
+	writer      SessionWriter
 	gate        func(context.Context) error
 
 	refreshMu sync.Mutex // serialises refreshes

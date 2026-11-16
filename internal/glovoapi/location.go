@@ -22,13 +22,19 @@ type LocationUpdate struct {
 // every LocationUpdate field, so omitted fields clear. The updated session
 // is persisted, which also replaces a session file that failed to load.
 func (c *Client) SetLocation(u LocationUpdate) (Location, error) {
+	return c.SetLocationContext(context.Background(), u)
+}
+
+// SetLocationContext is SetLocation with a context for the token store write
+// of a hosted client. A file-backed client ignores ctx.
+func (c *Client) SetLocationContext(ctx context.Context, u LocationUpdate) (Location, error) {
 	str := func(v string) Value {
 		if v == "" {
 			return nil
 		}
 		return v
 	}
-	return c.setLocation(map[string]any{
+	return c.setLocation(ctx, map[string]any{
 		"countryCode":  str(u.CountryCode),
 		"cityCode":     str(u.CityCode),
 		"latitude":     u.Latitude,
@@ -37,15 +43,13 @@ func (c *Client) SetLocation(u LocationUpdate) (Location, error) {
 	})
 }
 
-// setLocation is setLocation (api.mjs:145). Every key in update overrides
-// the session location; a key mapped to nil removes that field, exactly like
-// the upstream spread of undefined values followed by cleanObject. Keys not
-// in update are kept.
-func (c *Client) setLocation(update map[string]any) (Location, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// mergeLocation returns a copy of sess whose location has update applied:
+// every key in update overrides the stored one and a key mapped to nil
+// removes that field, like the upstream spread of undefined values followed
+// by cleanObject. Keys not in update are kept.
+func mergeLocation(sess Session, update map[string]any) Session {
 	next := map[string]any{}
-	if cur, ok := get(map[string]any(c.session), "location").(map[string]any); ok {
+	if cur, ok := get(map[string]any(sess), "location").(map[string]any); ok {
 		for k, v := range cur {
 			next[k] = v
 		}
@@ -58,16 +62,35 @@ func (c *Client) setLocation(update map[string]any) (Location, error) {
 			delete(next, k)
 		}
 	}
-	s := make(Session, len(c.session)+1)
-	for k, v := range c.session {
+	s := make(Session, len(sess)+1)
+	for k, v := range sess {
 		s[k] = v
 	}
 	s["location"] = next
+	return s
+}
+
+// setLocation is setLocation (api.mjs:145). A hosted client stores the
+// change through its SessionWriter, onto the session the store holds, so the
+// location lands next to the latest rotated tokens. Without a writer it
+// refuses instead of keeping an unsaved copy.
+func (c *Client) setLocation(ctx context.Context, update map[string]any) (Location, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.hosted() {
-		// Location changes for hosted sessions go through the token store
-		// (C2-1b); until then refuse rather than keep an unsaved copy.
-		return nil, ErrHostedNoFile
+		if c.writer == nil {
+			return nil, ErrHostedNoFile
+		}
+		s, err := c.writer(ctx, func(cur Session) (Session, error) {
+			return mergeLocation(cur, update), nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		c.session, c.loadErr = s, nil
+		return c.locationLocked(), nil
 	}
+	s := mergeLocation(c.session, update)
 	if err := SaveSession(c.sessionPath, s, c.now()); err != nil {
 		return nil, err
 	}
@@ -146,7 +169,7 @@ func (c *Client) SelectLocation(ctx context.Context, placeID, provider string) (
 	if !validLocationCodes(strOrNil(countryCode), strOrNil(cityCode)) {
 		return &SelectLocationResult{Deliverable: true, Title: resolved.Title, CityCode: cityCode, CountryCode: countryCode, Reason: "invalid_codes"}, nil
 	}
-	if _, err := c.setLocation(map[string]any{
+	if _, err := c.setLocation(ctx, map[string]any{
 		"countryCode": *countryCode,
 		"cityCode":    *cityCode,
 		"latitude":    jsNumberString(float64(resolved.Latitude)),
