@@ -29,6 +29,10 @@ type c2Config struct {
 	vaultRole      string
 	proxy          *url.URL
 	trustedProxies []netip.Prefix
+	// consentAPI and consentTokenFile name mctl-api's consent read route
+	// (C2-1c). Both unset keeps the fail-closed UnavailableConsent.
+	consentAPI       string
+	consentTokenFile string
 }
 
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
@@ -72,6 +76,10 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 		return c2Config{}, errors.New("GLOVO_EGRESS_PROXY is not a URL")
 	}
 	c.proxy = u
+	c.consentAPI, c.consentTokenFile = getenv("GLOVO_CONSENT_API_URL"), getenv("GLOVO_CONSENT_TOKEN_FILE")
+	if (c.consentAPI == "") != (c.consentTokenFile == "") {
+		return c2Config{}, errors.New("GLOVO_CONSENT_API_URL and GLOVO_CONSENT_TOKEN_FILE are set together or not at all")
+	}
 	for _, s := range strings.Split(getenv("GLOVO_LINK_TRUSTED_PROXIES"), ",") {
 		if s = strings.TrimSpace(s); s == "" {
 			continue
@@ -87,9 +95,10 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 
 // buildLink returns the link handlers. With the flag off it builds nothing:
 // no store, no Vault login, no database (design 6). With it on, every
-// dependency is required, and the consent source is the fail-closed one
-// until mctl-api serves consent records (C2-1c), so no code can be issued
-// yet. closeFn releases what was opened.
+// dependency is required. The consent source is mctl-api's consent read
+// route (C2-1c) when GLOVO_CONSENT_API_URL is set, and otherwise the
+// fail-closed one, so no code can be issued. closeFn releases what was
+// opened.
 func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Handler, func(), error) {
 	noop := func() {}
 	if !c.enabled {
@@ -147,11 +156,20 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		closeDB()
 		return nil, noop, err
 	}
+	var consent linkflow.ConsentSource = linkflow.UnavailableConsent{}
+	if c.consentAPI != "" {
+		api, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: c.consentAPI, TokenFile: c.consentTokenFile})
+		if err != nil {
+			closeDB()
+			return nil, noop, err
+		}
+		consent = api
+	}
 	h, err := linkflow.New(linkflow.Config{
 		Enabled:        true,
 		Store:          store,
 		Verifier:       verifier,
-		Consent:        linkflow.UnavailableConsent{},
+		Consent:        consent,
 		TrustedProxies: c.trustedProxies,
 		Log:            log.With("component", "linkflow"),
 	})
