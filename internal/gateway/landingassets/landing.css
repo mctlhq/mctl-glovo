@@ -1,0 +1,29 @@
+/* Landing-specific rules. The shared shell comes from the vendored mctl.css
+   and site.css; nothing here redefines a token or a .mctl-site-* class. */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--surface-bg);color:var(--surface-fg);font-family:var(--font-display);font-size:var(--text-body-size);line-height:1.55}
+main{flex:1 0 auto;--mctl-site-narrow-width:720px;--mctl-site-hero-text-width:760px}
+.skip-link{position:absolute;left:var(--site-gutter);top:0;z-index:var(--mctl-z-index-dropdown);transform:translateY(-120%);padding:10px 14px;border-radius:var(--mctl-radius-md);background:var(--surface-bg);color:var(--surface-fg);border:1px solid var(--surface-line-strong);text-decoration:none}
+.skip-link:focus{transform:none;outline:var(--focus-ring-width) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}
+a{color:inherit;text-decoration-color:var(--link-underline);text-underline-offset:3px}
+a:focus-visible,pre:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}
+.mctl-site-header__context{cursor:default;padding-inline:4px}
+.mctl-site-nav{gap:4px}
+.mctl-site-nav a{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:32px;padding:0 6px;border-radius:var(--mctl-radius-md)}
+.mctl-site-nav a:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}
+.mctl-site-nav a[aria-current='page']{text-underline-offset:6px}
+.mctl-site-hero{padding-block:clamp(40px,6vw,72px) clamp(8px,2vw,24px)}
+.mctl-site-hero__title{font-size:clamp(32px,5vw,52px)}
+.mctl-site-hero__text>.mctl-site-chip{margin-top:20px}
+.mctl-site-section{padding-block:clamp(20px,3vw,32px)}
+.mctl-site-section+.mctl-site-section{padding-top:0}
+.mctl-site-section__title{font-size:clamp(22px,3vw,30px)}
+.card{background:var(--surface-card);border:1px solid var(--surface-line);border-radius:var(--mctl-radius-lg);padding:18px 20px;overflow-wrap:anywhere}
+.card p{margin:10px 0}.card p:first-child{margin-top:0}.card p:last-child{margin-bottom:0}
+.card ul{margin:0;padding-left:20px}.card li{margin:6px 0}
+code{font-family:var(--font-mono);font-size:.9em;color:var(--code-fg);background:var(--code-bg);border-radius:6px;padding:2px 6px;overflow-wrap:anywhere}
+pre{margin:8px 0;background:var(--code-bg);border-radius:8px;padding:10px 12px;overflow-x:auto}
+pre code{padding:0;background:none;overflow-wrap:normal}
+.endpoint{font-size:1.05em;font-weight:500}
+.mctl-site-footer{margin-top:clamp(32px,5vw,56px);padding-block:32px}

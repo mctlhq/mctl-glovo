@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
 // The landing page at "/": what the server is, how to connect a client and
 // what it will never do. Server-rendered in English, Spanish or Russian, no
-// JavaScript, no external resources. The only inline style is admitted by
+// JavaScript, no external resources (the shared MCTL stylesheet is vendored
+// into the page, see landing_css.go). The only inline style is admitted by
 // its hash, so the page keeps a CSP as strict as the API routes.
 
 const langCookie = "glovo_lang"
@@ -29,6 +31,9 @@ type landingText struct {
 	SafeH                                     string
 	Safe                                      []string
 	Footer                                    string
+	Locale, ProductName                       string
+	SkipL, LangNavL, FooterNavL               string
+	PrivacyL, ContactL                        string
 }
 
 var landingTexts = map[string]landingText{
@@ -64,6 +69,9 @@ var landingTexts = map[string]landingText{
 			"Every tool call writes one audit line, without arguments or results.",
 		},
 		Footer: "Not affiliated with or endorsed by Glovo.",
+		Locale: "en_US", ProductName: "Glovo MCP",
+		SkipL: "Skip to content", LangNavL: "Language", FooterNavL: "Footer",
+		PrivacyL: "Privacy", ContactL: "Contact",
 	},
 	"es": {
 		Lang:           "es",
@@ -97,6 +105,9 @@ var landingTexts = map[string]landingText{
 			"Cada llamada a una herramienta deja una línea de auditoría, sin argumentos ni resultados.",
 		},
 		Footer: "Sin relación con Glovo ni respaldo de Glovo.",
+		Locale: "es_ES", ProductName: "Glovo MCP",
+		SkipL: "Saltar al contenido", LangNavL: "Idioma", FooterNavL: "Pie de página",
+		PrivacyL: "Privacidad", ContactL: "Contacto",
 	},
 	"ru": {
 		Lang:           "ru",
@@ -130,32 +141,11 @@ var landingTexts = map[string]landingText{
 			"Каждый вызов инструмента оставляет одну строку аудита, без аргументов и результатов.",
 		},
 		Footer: "Не связан с Glovo и не одобрен Glovo.",
+		Locale: "ru_RU", ProductName: "Glovo MCP",
+		SkipL: "К содержимому", LangNavL: "Язык", FooterNavL: "Нижняя навигация",
+		PrivacyL: "Конфиденциальность", ContactL: "Контакты",
 	},
 }
-
-const landingCSS = `:root{--bg:#fbfaf7;--fg:#1d1d1b;--muted:#5d5b55;--line:#e3e0d8;--card:#fff;--accent:#00a082;--code:#f1efe9}
-@media (prefers-color-scheme:dark){:root{--bg:#141413;--fg:#ecebe6;--muted:#a6a39b;--line:#2c2b28;--card:#1c1c1a;--accent:#3cc9a8;--code:#24231f}}
-*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-main{max-width:720px;margin:0 auto;padding:40px 16px 56px}
-nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:40px;font-size:14px}
-nav .brand{font-weight:600;letter-spacing:.02em}
-nav .langs a{color:var(--muted);text-decoration:none;margin-left:12px}
-nav .langs a[aria-current]{color:var(--fg);font-weight:600}
-h1{font-size:34px;line-height:1.15;margin:0 0 16px;letter-spacing:-.01em}
-.lead{font-size:18px;color:var(--muted);margin:0 0 16px}
-.pill{display:inline-block;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--muted)}
-section{margin-top:36px}
-h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
-code{font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);border-radius:6px;padding:2px 6px;overflow-wrap:anywhere}
-pre{margin:8px 0;background:var(--code);border-radius:8px;padding:10px 12px;overflow-x:auto}
-pre code{padding:0;background:none}
-.endpoint{font-size:17px;color:var(--accent)}
-ul{margin:0;padding-left:20px}li{margin:6px 0}
-.card p{margin:10px 0}.card p:first-child{margin-top:0}.card p:last-child{margin-bottom:0}
-footer{margin-top:48px;font-size:13px;color:var(--muted)}
-footer a{color:var(--muted)}`
 
 var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <html lang="{{.T.Lang}}">
@@ -164,30 +154,70 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{.T.Title}}</title>
 <meta name="description" content="{{.T.Lead}}">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="` + landingThemeDark + `">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="` + landingThemeLight + `">
+<link rel="canonical" href="{{.SelfURL}}">
+{{range .Langs}}<link rel="alternate" hreflang="{{.Code}}" href="{{.Alt}}">
+{{end}}<link rel="alternate" hreflang="x-default" href="{{.Canonical}}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MCTL">
+<meta property="og:title" content="{{.T.Title}}">
+<meta property="og:description" content="{{.T.Lead}}">
+<meta property="og:url" content="{{.SelfURL}}">
+<meta property="og:locale" content="{{.T.Locale}}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{{.T.Title}}">
+<meta name="twitter:description" content="{{.T.Lead}}">
 <style>{{.CSS}}</style>
 </head>
 <body>
-<main>
-<nav><span class="brand">Glovo MCP · MCTL</span><span class="langs">{{range .Langs}}<a href="/?lang={{.Code}}" hreflang="{{.Code}}"{{if .Current}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</span></nav>
-<h1>{{.T.Title}}</h1>
-<p class="lead">{{.T.Lead}}</p>
-<span class="pill">{{.T.Preview}}</span>
-<section>
-<h2>{{.T.ConnectH}}</h2>
+<a class="skip-link" href="#main">{{.T.SkipL}}</a>
+<header class="mctl-site-header mctl-site-header--app">
+<div class="mctl-site-container mctl-site-header__inner">
+<a class="mctl-site-brand" href="https://mctl.ai" aria-label="MCTL"><span class="mctl-site-brand__accent">M</span><span>CTL</span></a>
+<span class="mctl-site-header__context">{{.T.ProductName}}</span>
+<nav class="mctl-site-nav" aria-label="{{.T.LangNavL}}">{{range .Langs}}<a href="/?lang={{.Code}}" lang="{{.Code}}" hreflang="{{.Code}}" aria-label="{{.Name}} ({{.Label}})"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}</nav>
+</div>
+</header>
+<main id="main">
+<div class="mctl-site-container">
+<div class="mctl-site-hero mctl-site-hero--stacked">
+<div class="mctl-site-hero__text">
+<h1 class="mctl-site-hero__title">{{.T.Title}}</h1>
+<p class="mctl-site-hero__lede">{{.T.Lead}}</p>
+<span class="mctl-site-chip">{{.T.Preview}}</span>
+</div>
+</div>
+<section class="mctl-site-section">
+<div class="mctl-site-section__narrow">
+<h2 class="mctl-site-section__title">{{.T.ConnectH}}</h2>
 <div class="card">
 <p>{{.T.EndpointL}}: <code class="endpoint">{{.Endpoint}}</code></p>
 <p>{{.T.ClaudeAI}}</p>
 <p>{{.T.ClaudeCode}}</p>
-<pre><code>claude mcp add --transport http glovo {{.Endpoint}}</code></pre>
+<pre tabindex="0"><code>claude mcp add --transport http glovo {{.Endpoint}}</code></pre>
 <p>{{.T.ClaudeCodeThen}}</p>
 <p>{{.T.Other}}</p>
 </div>
+</div>
 </section>
-<section><h2>{{.T.CanH}}</h2><div class="card"><ul>{{range .T.Can}}<li>{{.}}</li>{{end}}</ul></div></section>
-<section><h2>{{.T.NeverH}}</h2><div class="card"><ul>{{range .T.Never}}<li>{{.}}</li>{{end}}</ul></div></section>
-<section><h2>{{.T.SafeH}}</h2><div class="card"><ul>{{range .T.Safe}}<li>{{.}}</li>{{end}}</ul></div></section>
-<footer>{{.T.Footer}} · <a href="https://mctl.ai">mctl.ai</a></footer>
+<section class="mctl-site-section"><div class="mctl-site-section__narrow"><h2 class="mctl-site-section__title">{{.T.CanH}}</h2><div class="card"><ul>{{range .T.Can}}<li>{{.}}</li>{{end}}</ul></div></div></section>
+<section class="mctl-site-section"><div class="mctl-site-section__narrow"><h2 class="mctl-site-section__title">{{.T.NeverH}}</h2><div class="card"><ul>{{range .T.Never}}<li>{{.}}</li>{{end}}</ul></div></div></section>
+<section class="mctl-site-section"><div class="mctl-site-section__narrow"><h2 class="mctl-site-section__title">{{.T.SafeH}}</h2><div class="card"><ul>{{range .T.Safe}}<li>{{.}}</li>{{end}}</ul></div></div></section>
+</div>
 </main>
+<footer class="mctl-site-footer">
+<div class="mctl-site-container mctl-site-footer__inner">
+<nav class="mctl-site-footer__links" aria-label="{{.T.FooterNavL}}">
+<a href="https://mctl.ai" rel="noopener">MCTL</a>
+<a href="` + landingPrivacyURL + `" rel="noopener">{{.T.PrivacyL}}</a>
+<a href="mailto:` + landingContactEmail + `">{{.T.ContactL}}</a>
+</nav>
+<p class="mctl-site-footer__copy">{{.T.Footer}}</p>
+</div>
+</footer>
 </body>
 </html>
 `))
@@ -199,8 +229,37 @@ var landingCSP = func() string {
 }()
 
 type landingLang struct {
-	Code, Label string
-	Current     bool
+	Code, Label, Name, Alt string
+	Current                bool
+}
+
+// Page-level constants. The theme colours are --mctl-surface-{dark,light}-bg
+// of the pinned design version (TestLandingThemeColorsMatchTokens keeps them
+// in step); Privacy is the platform's page (trailing slash: the bare path
+// redirects), Contact is the platform's public support address.
+const (
+	landingThemeDark    = "#0a0b0d"
+	landingThemeLight   = "#f1ede4"
+	landingPrivacyURL   = "https://mctl.ai/privacy/"
+	landingContactEmail = "support@mctl.ai"
+)
+
+// landingLangNames are the languages' own names, for the accessible name of
+// each language link.
+var landingLangNames = map[string]string{"en": "English", "es": "Español", "ru": "Русский"}
+
+// Canonical is per language: each variant names its own ?lang= URL, which the
+// hreflang set also lists, and x-default is the bare URL. A bare-URL canonical
+// on every variant would contradict the alternates.
+
+// landingOrigin is the page's bare URL derived from the MCP endpoint
+// ("https://host/mcp" -> "https://host/").
+func landingOrigin(endpoint string) string {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return "/"
+	}
+	return u.Scheme + "://" + u.Host + "/"
 }
 
 // pickLang chooses the page language: an explicit ?lang, then the cookie
@@ -244,17 +303,23 @@ func RenderLanding(lang, endpoint string) ([]byte, error) {
 	if !isLandingLang(lang) {
 		lang = "en"
 	}
+	origin := landingOrigin(endpoint)
 	langs := make([]landingLang, 0, len(landingLangs))
 	for _, l := range landingLangs {
-		langs = append(langs, landingLang{Code: l, Label: strings.ToUpper(l), Current: l == lang})
+		langs = append(langs, landingLang{
+			Code: l, Label: strings.ToUpper(l), Name: landingLangNames[l],
+			Alt: origin + "?lang=" + l, Current: l == lang,
+		})
 	}
 	var buf bytes.Buffer
 	err := landingTmpl.Execute(&buf, struct {
-		T        landingText
-		CSS      template.CSS
-		Endpoint string
-		Langs    []landingLang
-	}{landingTexts[lang], template.CSS(landingCSS), endpoint, langs}) //nolint:gosec // G203: landingCSS is a compile-time constant, never input
+		T         landingText
+		CSS       template.CSS
+		Endpoint  string
+		Canonical string
+		SelfURL   string
+		Langs     []landingLang
+	}{landingTexts[lang], template.CSS(landingCSS), endpoint, origin, origin + "?lang=" + lang, langs}) //nolint:gosec // G203: landingCSS is a compile-time constant, never input
 	return buf.Bytes(), err
 }
 
@@ -290,5 +355,5 @@ func (g *Gateway) handleLanding(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	_, _ = w.Write(page)
+	_, _ = w.Write(page) //nolint:gosec // G705: page is html/template output; lang is one of landingLangs (pickLang validates it)
 }

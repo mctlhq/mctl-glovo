@@ -46,3 +46,38 @@ test("routing", async () => {
   assert.equal(h.status, 200);
   assert.equal(await h.text(), "");
 });
+
+// The CSP admits one style by hash. Recompute it from the served HTML, so a
+// header/body mismatch fails even though both come from pages.gen.js.
+test("CSP hash matches the served <style>", async () => {
+  const { createHash } = await import("node:crypto");
+  for (const lang of ["en", "es", "ru"]) {
+    const r = await get("/?lang=" + lang);
+    const body = await r.text();
+    assert.equal(body.split("<style>").length, 2, `${lang}: exactly one <style>`);
+    const style = body.slice(body.indexOf("<style>") + 7, body.indexOf("</style>"));
+    const hash = createHash("sha256").update(style).digest("base64");
+    assert.ok(
+      r.headers.get("Content-Security-Policy").includes(`style-src 'sha256-${hash}'`),
+      `${lang}: CSP does not pin the served style`,
+    );
+  }
+});
+
+test("head metadata for an invitation-only preview", async () => {
+  for (const lang of ["en", "es", "ru"]) {
+    const body = await (await get("/?lang=" + lang)).text();
+    for (const want of [
+      '<meta name="robots" content="noindex">',
+      `<link rel="canonical" href="https://glovo.mctl.ai/?lang=${lang}">`,
+      '<link rel="alternate" hreflang="x-default" href="https://glovo.mctl.ai/">',
+      '<link rel="alternate" hreflang="ru" href="https://glovo.mctl.ai/?lang=ru">',
+      '<meta property="og:type" content="website">',
+      'class="mctl-site-header',
+      'class="mctl-site-footer"',
+      'href="https://mctl.ai/privacy/"',
+    ]) assert.ok(body.includes(want), `${lang}: ${want}`);
+    assert.ok(body.includes(`hreflang="${lang}" aria-label=`) && body.includes(" aria-current=\"page\""));
+    assert.ok(!body.includes("og:image") && !body.includes('rel="icon"'));
+  }
+});

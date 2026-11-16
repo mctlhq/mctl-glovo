@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -169,6 +170,15 @@ func TestLandingTextParity(t *testing.T) {
 		tx := landingTexts[l]
 		if len(tx.Can) != len(en.Can) || len(tx.Never) != len(en.Never) || len(tx.Safe) != len(en.Safe) {
 			t.Errorf("%s: list lengths differ from en", l)
+		}
+		v := reflect.ValueOf(tx)
+		for i := 0; i < v.NumField(); i++ {
+			if f := v.Field(i); f.Kind() == reflect.String && f.String() == "" {
+				t.Errorf("%s: text field %s is empty", l, v.Type().Field(i).Name)
+			}
+		}
+		if landingLangNames[l] == "" {
+			t.Errorf("%s: no language name", l)
 		}
 	}
 }
