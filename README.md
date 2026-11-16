@@ -29,6 +29,24 @@ verification against mctl-api, a principal allowlist, a checkout/payment
 tool refusal and an audit log. See
 [deploy/mac-mini/README.md](deploy/mac-mini/README.md).
 
+## Account link flow (C2, off by default)
+`cmd/mctl-glovo` serves the account-link flow of
+[docs/design/token-store.md](docs/design/token-store.md) 4.1 only when
+`GLOVO_C2_ENABLED=true`. Off (the default), no `/link` route exists, and no
+store, Vault login or database connection is built. Any other value is a
+startup error. On, it needs `GLOVO_C2_ALLOWED_PRINCIPALS`,
+`GLOVO_DATABASE_URL`, `GLOVO_VAULT_ADDR` (in-cluster only),
+`GLOVO_EGRESS_PROXY`, and optionally `GLOVO_VAULT_ROLE` (default
+`mctl-glovo`) and `GLOVO_LINK_TRUSTED_PROXIES` (CIDRs whose
+`X-Forwarded-For` is believed).
+
+Until mctl-api serves consent records and masked identities (C2-1c), no
+code can be issued and no preview answers, even with the flag on.
+
+`cmd/glovo-link` is the local helper. It reads the code from stdin, shows
+the masked MCTL identity, asks y/N, and uploads `~/.glovo/session.json`
+(or `-session -` for stdin) over https.
+
 ## Development
 ```bash
 go test -race ./...

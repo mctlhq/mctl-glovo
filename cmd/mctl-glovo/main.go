@@ -1,8 +1,9 @@
 // Command mctl-glovo serves the Glovo Basket MCP for glovo.mctl.ai.
 //
-// This is the bootstrap skeleton: it serves only the health probes. The MCP
-// routes, token verification and the mctl-api join client arrive in later
-// changes (see the migration plan in README.md).
+// It serves the health probes and, behind GLOVO_C2_ENABLED (off by
+// default), the account-link flow of slice C2-1b (internal/linkflow). The
+// MCP routes and the mctl-api join client arrive in later changes (see the
+// migration plan in README.md).
 package main
 
 import (
@@ -32,8 +33,23 @@ func run(log *slog.Logger) error {
 		addr = ":8080"
 	}
 
+	c2, err := loadC2(os.Getenv)
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	link, closeLink, err := buildLink(ctx, c2, log)
+	if err != nil {
+		return err
+	}
+	defer closeLink()
+	log.Info("c2 link flow", "enabled", c2.enabled)
+
 	mux := http.NewServeMux()
 	health.New(2 * time.Second).Register(mux)
+	link.Register(mux)
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -43,9 +59,6 @@ func run(log *slog.Logger) error {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	errc := make(chan error, 1)
 	go func() {
