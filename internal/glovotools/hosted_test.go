@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -98,6 +99,11 @@ func (s *fakeSource) askedPIDs() []string {
 
 func hostedClient(t *testing.T, base, owner string) *glovoapi.Client {
 	t.Helper()
+	return hostedClientGate(t, base, owner, func(context.Context) error { return nil })
+}
+
+func hostedClientGate(t *testing.T, base, owner string, gate func(context.Context) error) *glovoapi.Client {
+	t.Helper()
 	noRefresh := func(context.Context, glovoapi.Session, func(context.Context, glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {
 		return nil, errors.New("unexpected refresh")
 	}
@@ -110,6 +116,7 @@ func hostedClient(t *testing.T, base, owner string) *glovoapi.Client {
 			"location":     map[string]any{"cityCode": "TST", "latitude": "1", "longitude": "2", "countryCode": "XX"},
 		}),
 		glovoapi.WithRefreshCoordinator(noRefresh),
+		glovoapi.WithRequestGate(gate),
 		glovoapi.WithClock(func() time.Time { return time.Unix(1_800_000_000, 0) }),
 	)
 	if err != nil {
@@ -334,5 +341,87 @@ func TestHostedServesSameToolsAsFileMode(t *testing.T) {
 		if childmcp.Blocked(n) {
 			t.Fatalf("blocked tool %q served", n)
 		}
+	}
+}
+
+// Sentinels that come back from inside the handler (request gate, refresh
+// coordinator) get the same answers as at lookup time, and no internal
+// dependency is named.
+func TestHostedHandlerErrorsAreMappedLikeLookupErrors(t *testing.T) {
+	cases := []struct {
+		err      error
+		wantErr  error
+		wantText string
+	}{
+		{tokenstore.ErrUnavailable, childmcp.ErrUnavailable, ""},
+		{tokenstore.ErrIntegrity, childmcp.ErrUnavailable, ""},
+		{tokenstore.ErrSuperseded, childmcp.ErrUnavailable, ""},
+		{tokenstore.ErrKilled, nil, "switched off"},
+		{tokenstore.ErrRateLimited, nil, "rate limit"},
+		{tokenstore.ErrNeedsRelink, nil, "Link your account again"},
+		{tokenstore.ErrBusy, nil, "busy"},
+		{fmt.Errorf("wrapped: %w", tokenstore.ErrRateLimited), nil, "rate limit"},
+	}
+	for _, c := range cases {
+		fake := newFakeGlovoHosted(t)
+		gateErr := c.err
+		src := &fakeSource{clients: map[string]*glovoapi.Client{
+			"prn_A": hostedClientGate(t, fake.srv.URL, "A", func(context.Context) error { return gateErr }),
+		}}
+		b, err := New(Config{Clients: src})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := b.Call(pidCtx("prn_A"), probeTool, map[string]any{})
+		if c.wantErr != nil {
+			if !errors.Is(err, c.wantErr) || res != nil {
+				t.Fatalf("%v: got res=%v err=%v, want %v", c.err, res, err, c.wantErr)
+			}
+		} else {
+			if err != nil || res == nil || !res.IsError || !strings.Contains(resultText(res), c.wantText) {
+				t.Fatalf("%v: got res=%v err=%v, want isError text containing %q", c.err, res, err, c.wantText)
+			}
+			low := strings.ToLower(resultText(res))
+			for _, leak := range []string{"token store", "tokenstore", "glovoapi"} {
+				if strings.Contains(low, leak) {
+					t.Fatalf("%v: text %q names %q", c.err, low, leak)
+				}
+			}
+		}
+		if n := fake.count(); n != 0 {
+			t.Fatalf("%v: %d requests reached Glovo past the gate", c.err, n)
+		}
+	}
+}
+
+// A non-store handler error keeps its upstream text in hosted mode.
+func TestHostedKeepsOtherHandlerErrorText(t *testing.T) {
+	fake := newFakeGlovoHosted(t)
+	src := &fakeSource{clients: map[string]*glovoapi.Client{
+		"prn_A": hostedClientGate(t, fake.srv.URL, "A", func(context.Context) error { return errors.New("gate says no") }),
+	}}
+	b, err := New(Config{Clients: src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := b.Call(pidCtx("prn_A"), probeTool, map[string]any{})
+	if err != nil || res == nil || !res.IsError || !strings.Contains(resultText(res), "ate says no") {
+		t.Fatalf("got res=%v err=%v", res, err)
+	}
+}
+
+// Setting the location is not available on a hosted client yet: a fixed
+// refusal, without the package name.
+func TestHostedSetLocationIsAFixedRefusal(t *testing.T) {
+	e := newHostedEnv(t)
+	res, err := e.b.Call(pidCtx("prn_A"), "glovo_set_location", map[string]any{
+		"country_code": "XX", "city_code": "TST", "latitude": 1.5, "longitude": 2.5,
+	})
+	if err != nil || res == nil || !res.IsError {
+		t.Fatalf("got res=%v err=%v", res, err)
+	}
+	txt := resultText(res)
+	if !strings.Contains(txt, "not available for hosted accounts") || strings.Contains(txt, "glovoapi") {
+		t.Fatalf("text = %q", txt)
 	}
 }

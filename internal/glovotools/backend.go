@@ -290,6 +290,16 @@ func (b *Backend) Call(ctx context.Context, name string, rawArgs map[string]any)
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, errors.Join(cerr, err)
 		}
+		if b.cfg.Clients != nil {
+			// Store sentinels also surface from inside the handler (request
+			// gate, refresh coordinator): same answers as at lookup time.
+			if res, ok := hostedState(err); ok {
+				return res, nil
+			}
+			if isStoreFailure(err) {
+				return nil, childmcp.ErrUnavailable
+			}
+		}
 		return mcp.NewToolResultError(errorText(err)), nil
 	}
 	if s, ok := data.(textResult); ok {
