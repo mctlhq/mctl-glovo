@@ -44,9 +44,21 @@ var schemaObjects = []schemaObject{
 
 type schemaObject struct{ kind, name string }
 
+// catalogQuery answers one boolean catalog question (does object name
+// exist?). It is the probe's only database access, so tests can make it fail.
+type catalogQuery func(ctx context.Context, q, name string) (bool, error)
+
+func connCatalogQuery(conn *sql.Conn) catalogQuery {
+	return func(ctx context.Context, q, name string) (bool, error) {
+		var ok bool
+		err := conn.QueryRowContext(ctx, q, name).Scan(&ok)
+		return ok, err
+	}
+}
+
 // probeSchema reports which of schemaObjects exist. A failed query is an
 // error, never "absent".
-func probeSchema(ctx context.Context, conn *sql.Conn) (present, missing []string, err error) {
+func probeSchema(ctx context.Context, query catalogQuery) (present, missing []string, err error) {
 	for _, o := range schemaObjects {
 		var q string
 		switch o.kind {
@@ -57,8 +69,8 @@ func probeSchema(ctx context.Context, conn *sql.Conn) (present, missing []string
 		default:
 			q = `SELECT to_regclass($1) IS NOT NULL`
 		}
-		var ok bool
-		if err := conn.QueryRowContext(ctx, q, o.name).Scan(&ok); err != nil {
+		ok, err := query(ctx, q, o.name)
+		if err != nil {
 			return nil, nil, errors.New("cannot read the catalog")
 		}
 		if ok {
@@ -70,11 +82,29 @@ func probeSchema(ctx context.Context, conn *sql.Conn) (present, missing []string
 	return present, missing, nil
 }
 
+// execer is the part of *sql.Conn the unlock needs.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// unlockSession releases the advisory lock on a fresh context so a cancelled
+// run does not leave it to the pool. Bounded: a dead socket must not outlive
+// the Job's -timeout. Closing the session releases the lock regardless.
+func unlockSession(ctx context.Context, conn execer, timeout time.Duration) {
+	uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+	_, _ = conn.ExecContext(uctx, `SELECT pg_advisory_unlock($1)`, lockKey)
+}
+
 type config struct {
 	DSN         string
 	ExpectRole  string
 	RuntimeRole string
 	AllowNoTLS  bool
+
+	// wrapCatalog decorates the schema probe's database access; tests use it
+	// to inject failures. Nil in production.
+	wrapCatalog func(catalogQuery) catalogQuery
 }
 
 type result struct {
@@ -133,14 +163,7 @@ func migrate(ctx context.Context, c config) (result, error) {
 	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, lockKey); err != nil {
 		return result{}, errors.New("cannot take the migration lock")
 	}
-	defer func() {
-		// Closing the session releases it anyway; unlock explicitly on a
-		// fresh context so a cancelled run does not leave it to the pool.
-		// Bounded: a dead socket must not outlive the Job's -timeout.
-		uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), unlockTimeout)
-		defer cancel()
-		_, _ = conn.ExecContext(uctx, `SELECT pg_advisory_unlock($1)`, lockKey)
-	}()
+	defer unlockSession(ctx, conn, unlockTimeout)
 
 	var role string
 	if err := conn.QueryRowContext(ctx, `SELECT current_user`).Scan(&role); err != nil {
@@ -151,7 +174,11 @@ func migrate(ctx context.Context, c config) (result, error) {
 	}
 
 	var res result
-	present, missing, err := probeSchema(ctx, conn)
+	query := connCatalogQuery(conn)
+	if c.wrapCatalog != nil {
+		query = c.wrapCatalog(query)
+	}
+	present, missing, err := probeSchema(ctx, query)
 	if err != nil {
 		return result{}, err
 	}

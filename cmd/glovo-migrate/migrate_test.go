@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
+	"errors"
 	"net/url"
 	"os"
 	"strings"
@@ -438,7 +440,7 @@ func TestVersionWithAnyObjectMissingIsRefused(t *testing.T) {
 			}
 			p.dropObject(o)
 			r := p.run()
-			if r.code != exitRefused || !strings.Contains(r.stderr, "partial schema") || strings.Contains(r.stdout, "already current") {
+			if r.code != exitRefused || !strings.Contains(r.stderr, "glovo_schema_version exists but ") || !strings.Contains(r.stderr, o.name) || strings.Contains(r.stdout, "already current") {
 				t.Fatalf("code %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
 			}
 		})
@@ -476,7 +478,9 @@ func TestAnyObjectWithoutVersionIsRefused(t *testing.T) {
 				p.exec(`CREATE TRIGGER ` + o.name + ` BEFORE INSERT ON glovo_store_audit FOR EACH ROW EXECUTE FUNCTION tmp_trg()`)
 			}
 			r := p.run()
-			if r.code != exitRefused || !strings.Contains(r.stderr, "partial schema") {
+			// The distinct message for this direction: objects exist without
+			// the version row (not "version exists but X missing").
+			if r.code != exitRefused || !strings.Contains(r.stderr, o.name+" exist without glovo_schema_version") || strings.Contains(r.stderr, "exists but") {
 				t.Fatalf("code %d stderr %q", r.code, r.stderr)
 			}
 			if p.queryBool(`SELECT to_regclass('glovo_schema_version') IS NOT NULL`) {
@@ -540,4 +544,137 @@ func TestSchemaObjectsCoverTheMigrations(t *testing.T) {
 			t.Errorf("schemaObjects lists %s %s, which the migrations do not create", o.kind, o.name)
 		}
 	}
+}
+
+// migrateWith runs migrate() in-process so a fault can be injected into the
+// probe's database access.
+func (p *pgEnv) migrateWith(ctx context.Context, runtimeRole string, wrap func(catalogQuery) catalogQuery) (result, error) {
+	return migrate(ctx, config{DSN: p.dsn(), ExpectRole: p.user, RuntimeRole: runtimeRole, AllowNoTLS: true, wrapCatalog: wrap})
+}
+
+// A probe that cannot read the catalog is a failure (exit 3): nothing is
+// applied, and nothing reports "applied" or "already current". Covers an
+// error on the first read, an error mid-scan (after earlier objects were
+// read as present or absent) and a context cancelled during the probe.
+func TestProbeFailureIsAFailureNotAbsence(t *testing.T) {
+	failAt := func(n int, err error) func(catalogQuery) catalogQuery {
+		return func(real catalogQuery) catalogQuery {
+			calls := 0
+			return func(ctx context.Context, q, name string) (bool, error) {
+				calls++
+				if calls == n {
+					return false, err
+				}
+				return real(ctx, q, name)
+			}
+		}
+	}
+	cancelAt := func(n int, cancel context.CancelFunc) func(catalogQuery) catalogQuery {
+		return func(real catalogQuery) catalogQuery {
+			calls := 0
+			return func(ctx context.Context, q, name string) (bool, error) {
+				calls++
+				if calls == n {
+					cancel() // the real query then fails on the dead context
+				}
+				return real(ctx, q, name)
+			}
+		}
+	}
+	cases := []struct {
+		name  string
+		apply bool // start from an applied schema instead of an empty one
+		wrap  func(cancel context.CancelFunc) func(catalogQuery) catalogQuery
+	}{
+		{"first read fails, empty db", false, func(context.CancelFunc) func(catalogQuery) catalogQuery { return failAt(1, errors.New("boom")) }},
+		{"mid-scan fails, empty db", false, func(context.CancelFunc) func(catalogQuery) catalogQuery { return failAt(5, errors.New("boom")) }},
+		{"last read fails, empty db", false, func(context.CancelFunc) func(catalogQuery) catalogQuery {
+			return failAt(len(schemaObjects), errors.New("boom"))
+		}},
+		{"mid-scan fails, applied db", true, func(context.CancelFunc) func(catalogQuery) catalogQuery { return failAt(5, errors.New("boom")) }},
+		{"driver error, applied db", true, func(context.CancelFunc) func(catalogQuery) catalogQuery { return failAt(1, driver.ErrBadConn) }},
+		{"context cancelled mid-scan, empty db", false, func(c context.CancelFunc) func(catalogQuery) catalogQuery { return cancelAt(4, c) }},
+		{"context cancelled mid-scan, applied db", true, func(c context.CancelFunc) func(catalogQuery) catalogQuery { return cancelAt(4, c) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newPG(t)
+			if tc.apply {
+				if r := p.run(); r.code != exitOK {
+					t.Fatalf("%+v", r)
+				}
+				p.exec(`UPDATE glovo_control SET c2_killed = false`)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			res, err := p.migrateWith(ctx, "", tc.wrap(cancel))
+			if err == nil {
+				t.Fatalf("probe failure reported success: %+v", res)
+			}
+			if exitCode(err) != exitFailed {
+				t.Fatalf("exit code %d, want %d (%v)", exitCode(err), exitFailed, err)
+			}
+			if res != (result{}) {
+				t.Fatalf("a result accompanied the error: %+v", res)
+			}
+			present := p.queryBool(`SELECT to_regclass('glovo_schema_version') IS NOT NULL`)
+			if present != tc.apply {
+				t.Fatalf("schema present=%v, want %v: the failed probe changed the database", present, tc.apply)
+			}
+			if tc.apply && p.queryBool(`SELECT c2_killed FROM glovo_control`) {
+				t.Fatal("the kill switch was reset by a failed probe")
+			}
+		})
+	}
+}
+
+type blockingExecer struct{ called chan struct{} }
+
+func (b blockingExecer) ExecContext(ctx context.Context, _ string, _ ...any) (sql.Result, error) {
+	close(b.called)
+	<-ctx.Done() // a dead socket: only the context frees us
+	return nil, ctx.Err()
+}
+
+// The explicit unlock is bounded: a connection whose unlock never returns
+// must not hold the run past the injected bound.
+func TestUnlockIsBounded(t *testing.T) {
+	b := blockingExecer{called: make(chan struct{})}
+	done := make(chan struct{})
+	start := time.Now()
+	go func() {
+		unlockSession(context.Background(), b, 50*time.Millisecond)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("unlockSession did not return: the unlock is unbounded")
+	}
+	<-b.called
+	if d := time.Since(start); d < 40*time.Millisecond {
+		t.Fatalf("returned after %v, before the bound", d)
+	}
+}
+
+// A cancelled run context must not cancel the unlock (that is the point of
+// the fresh context), and the production bound stays small.
+func TestUnlockBoundIsSmallAndSurvivesCancelledRun(t *testing.T) {
+	if unlockTimeout <= 0 || unlockTimeout > 30*time.Second {
+		t.Fatalf("unlockTimeout %v out of range", unlockTimeout)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var uctxErr error
+	unlockSession(ctx, ctxProbe{&uctxErr}, time.Second)
+	if uctxErr != nil {
+		t.Fatalf("unlock context already dead: %v", uctxErr)
+	}
+}
+
+type ctxProbe struct{ err *error }
+
+func (c ctxProbe) ExecContext(ctx context.Context, _ string, _ ...any) (sql.Result, error) {
+	*c.err = ctx.Err()
+	return nil, nil
 }
