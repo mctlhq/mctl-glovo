@@ -89,6 +89,27 @@ func TestC2OnNeedsEverything(t *testing.T) {
 	}
 }
 
+// The consent route is configured whole or not at all; neither set keeps
+// the fail-closed source.
+func TestC2ConsentAPIConfig(t *testing.T) {
+	if c, err := loadC2(env(fullEnv())); err != nil || c.consentAPI != "" || c.consentTokenFile != "" {
+		t.Fatalf("unset = %+v %v", c, err)
+	}
+	for _, k := range []string{"GLOVO_CONSENT_API_URL", "GLOVO_CONSENT_TOKEN_FILE"} {
+		m := fullEnv()
+		m[k] = "x"
+		if _, err := loadC2(env(m)); err == nil {
+			t.Errorf("only %s accepted", k)
+		}
+	}
+	m := fullEnv()
+	m["GLOVO_CONSENT_API_URL"] = "https://api.mctl.ai"
+	m["GLOVO_CONSENT_TOKEN_FILE"] = "/var/run/secrets/mctl-api/token"
+	if c, err := loadC2(env(m)); err != nil || c.consentAPI != "https://api.mctl.ai" || c.consentTokenFile != "/var/run/secrets/mctl-api/token" {
+		t.Fatalf("both = %+v %v", c, err)
+	}
+}
+
 // On, the build refuses a Vault outside the cluster and a bad proxy before
 // it opens anything.
 func TestC2OnRefusesBadDependencies(t *testing.T) {
