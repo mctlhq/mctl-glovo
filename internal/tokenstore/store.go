@@ -89,6 +89,12 @@ type Config struct {
 	// MaskIdentity returns the masked MCTL identity of a pid, from
 	// mctl-api. Nil makes PreviewLink refuse.
 	MaskIdentity func(ctx context.Context, pid string) (string, error)
+	// LinkConsent re-checks the code's principal holds the glovo:c2
+	// consent after the code is redeemed and before anything else is done
+	// with the session (consentgate.Gate.LinkConsent). nil is yes; an error
+	// wrapping ErrConsentRefused is a definite no; any other error is a
+	// failed read. Both refuse and store nothing. Nil skips the check.
+	LinkConsent func(ctx context.Context, pid PID) error
 	// ClientOptions apply to every client a Lease builds (proxy, base URL).
 	ClientOptions []glovoapi.Option
 
@@ -106,6 +112,7 @@ type store struct {
 	log          *slog.Logger
 	validateLink func(context.Context, glovoapi.Session) error
 	maskIdentity func(context.Context, string) (string, error)
+	linkConsent  func(context.Context, PID) error
 	clientOpts   []glovoapi.Option
 
 	leaseTTL, refreshDeadline, busyWait time.Duration
@@ -143,6 +150,7 @@ func New(cfg Config) (Store, error) {
 		log:             cfg.Logger,
 		validateLink:    cfg.ValidateLink,
 		maskIdentity:    cfg.MaskIdentity,
+		linkConsent:     cfg.LinkConsent,
 		clientOpts:      append([]glovoapi.Option(nil), cfg.ClientOptions...),
 		leaseTTL:        orDur(cfg.LeaseTTL, 30*time.Second),
 		refreshDeadline: orDur(cfg.RefreshDeadline, 15*time.Second),
@@ -692,6 +700,14 @@ func (s *store) Link(ctx context.Context, code string, sess glovoapi.Session) er
 	}
 	if !pid.valid() {
 		return refuse("pid_malformed", ErrIntegrity)
+	}
+	if s.linkConsent != nil {
+		switch err := s.linkConsent(ctx, pid); {
+		case errors.Is(err, ErrConsentRefused):
+			return refuse("consent_not_held", ErrConsentRefused)
+		case err != nil:
+			return refuse("consent_unavailable", ErrUnavailable)
+		}
 	}
 	if _, err := checkSession(sess); err != nil {
 		return refuse("session_refused", ErrSessionRefused)

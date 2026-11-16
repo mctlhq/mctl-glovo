@@ -4,7 +4,9 @@
 // secret and verifies asymmetrically (EdDSA) against mctl-api's JWKS. A token
 // is accepted only when every check holds: signature, issuer, an audience
 // that is exactly the Glovo resource, exp/nbf/iat, and a principal (the pid
-// claim) that is on an explicit allowlist. An empty allowlist admits nobody.
+// claim) that is admitted: on an explicit allowlist, or, when an Admitter is
+// configured, admitted by it (and on the allowlist too, if one is set).
+// Without an Admitter an empty allowlist admits nobody.
 package authn
 
 import (
@@ -39,7 +41,29 @@ const (
 	ReasonNotAllowed   = "principal_not_allowed"
 	ReasonJWKSDown     = "jwks_unavailable"
 	ReasonTokenTooLong = "token_too_long"
+	// ReasonGrant: RequireGrant is on and the token names neither a team
+	// grant nor a personal grant (or names both).
+	ReasonGrant = "grant_refused"
+	// ReasonNotAdmitted: the Admitter gave a definite no (no consent).
+	ReasonNotAdmitted = "not_admitted"
+	// ReasonAdmitDown: the Admitter could not decide; never a pass.
+	ReasonAdmitDown = "admission_unavailable"
 )
+
+// GrantKindPersonal is the tgk claim of a token minted under a personal
+// grant: a grant scoped to the principal alone, with no team (stn).
+const GrantKindPersonal = "personal"
+
+// ErrNotAdmitted is an Admitter's definite no. Any other Admitter error
+// means the decision could not be read and refuses with 503.
+var ErrNotAdmitted = errors.New("authn: principal not admitted")
+
+// Admitter decides, per request, whether a verified principal may proceed
+// (consentgate.Gate: an active glovo:c2 consent). nil is yes; an error
+// wrapping ErrNotAdmitted is no; any other error is a failed read.
+type Admitter interface {
+	Admit(ctx context.Context, principalID string) error
+}
 
 // maxTokenBytes bounds the work an unauthenticated caller can cause.
 const maxTokenBytes = 8 << 10
@@ -56,9 +80,9 @@ func (e *Error) Error() string { return "authn: " + e.Reason }
 
 func refuse(reason string) *Error {
 	switch reason {
-	case ReasonNotAllowed:
+	case ReasonNotAllowed, ReasonNotAdmitted:
 		return &Error{Reason: reason, Status: http.StatusForbidden}
-	case ReasonJWKSDown:
+	case ReasonJWKSDown, ReasonAdmitDown:
 		return &Error{Reason: reason, Status: http.StatusServiceUnavailable}
 	}
 	return &Error{Reason: reason, Status: http.StatusUnauthorized}
@@ -70,6 +94,13 @@ type Principal struct {
 	ID string
 	// Subject is the sub claim, for logs only.
 	Subject string
+	// GrantID is the tgr claim: the mctl-api grant the token was minted
+	// under. Read only with RequireGrant; it is a pointer, not authority.
+	GrantID string
+	// Tenant is the stn claim of a team grant; empty for a personal one.
+	Tenant string
+	// Personal is true for a personal grant (tgk=personal, no team).
+	Personal bool
 }
 
 // Config configures a Verifier.
@@ -80,10 +111,19 @@ type Config struct {
 	Resource string
 	// JWKSURL is mctl-api's key set, e.g. https://api.mctl.ai/.well-known/jwks.json.
 	JWKSURL string
-	// AllowedPrincipals is the pid allowlist. Empty refuses everyone.
+	// AllowedPrincipals is the pid allowlist. Without an Admitter it is the
+	// whole gate and empty refuses everyone. With one it is an extra
+	// restriction when set (a staged pilot), and unset leaves the decision
+	// to the Admitter alone.
 	AllowedPrincipals []string
-	HTTPClient        *http.Client
-	Now               func() time.Time
+	// Admitter, when set, must admit every principal (after the allowlist).
+	Admitter Admitter
+	// RequireGrant refuses a token that does not name exactly one grant
+	// shape: a team grant (tgr and stn, no tgk) or a personal grant (tgr,
+	// tgk=personal, no stn). Off, the grant claims are not read.
+	RequireGrant bool
+	HTTPClient   *http.Client
+	Now          func() time.Time
 }
 
 // Verifier verifies bearer tokens.
@@ -91,6 +131,8 @@ type Verifier struct {
 	issuer   string
 	resource string
 	allowed  map[string]struct{}
+	admit    Admitter
+	grant    bool
 	jwks     *jwksCache
 	now      func() time.Time
 }
@@ -114,6 +156,8 @@ func New(cfg Config) (*Verifier, error) {
 		issuer:   cfg.Issuer,
 		resource: cfg.Resource,
 		allowed:  allowed,
+		admit:    cfg.Admitter,
+		grant:    cfg.RequireGrant,
 		jwks:     newJWKSCache(cfg.JWKSURL, cfg.HTTPClient, now),
 		now:      now,
 	}, nil
@@ -146,6 +190,9 @@ type claims struct {
 	Sub string          `json:"sub"`
 	Aud json.RawMessage `json:"aud"`
 	PID string          `json:"pid"`
+	Tgr string          `json:"tgr"`
+	Stn string          `json:"stn"`
+	Tgk string          `json:"tgk"`
 	Exp *json.Number    `json:"exp"`
 	Nbf *json.Number    `json:"nbf"`
 	Iat *json.Number    `json:"iat"`
@@ -234,10 +281,33 @@ func (v *Verifier) Verify(ctx context.Context, token string) (*Principal, error)
 	if strings.TrimSpace(c.PID) == "" {
 		return nil, refuse(ReasonNoPrincipal)
 	}
-	if _, ok := v.allowed[c.PID]; !ok {
+	p := &Principal{ID: c.PID, Subject: c.Sub}
+	if v.grant {
+		switch {
+		case c.Tgr == "":
+			return nil, refuse(ReasonGrant)
+		case c.Tgk == GrantKindPersonal && c.Stn == "":
+			p.GrantID, p.Personal = c.Tgr, true
+		case c.Tgk == "" && c.Stn != "":
+			p.GrantID, p.Tenant = c.Tgr, c.Stn
+		default:
+			return nil, refuse(ReasonGrant)
+		}
+	}
+	// The allowlist binds whenever it is set; without an Admitter it is
+	// the only gate, so an empty one refuses everyone.
+	if _, ok := v.allowed[c.PID]; !ok && (v.admit == nil || len(v.allowed) > 0) {
 		return nil, refuse(ReasonNotAllowed)
 	}
-	return &Principal{ID: c.PID, Subject: c.Sub}, nil
+	if v.admit != nil {
+		switch err := v.admit.Admit(ctx, c.PID); {
+		case errors.Is(err, ErrNotAdmitted):
+			return nil, refuse(ReasonNotAdmitted)
+		case err != nil:
+			return nil, refuse(ReasonAdmitDown)
+		}
+	}
+	return p, nil
 }
 
 // exactAudience accepts aud only when it names exactly one audience equal to

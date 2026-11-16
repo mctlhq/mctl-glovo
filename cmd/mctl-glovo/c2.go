@@ -14,6 +14,7 @@ import (
 
 	"github.com/mctlhq/mctl-glovo/internal/authn"
 	"github.com/mctlhq/mctl-glovo/internal/config"
+	"github.com/mctlhq/mctl-glovo/internal/consentgate"
 	"github.com/mctlhq/mctl-glovo/internal/glovoapi"
 	"github.com/mctlhq/mctl-glovo/internal/linkflow"
 	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
@@ -38,6 +39,12 @@ type c2Config struct {
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
 // rest. Anything but "", "false" or "true" is an error, not "off": a typo
 // in the flag must stop the rollout, not silently pick a side.
+//
+// Access: with mctl-api's consent route configured (GLOVO_CONSENT_API_URL
+// and GLOVO_CONSENT_TOKEN_FILE), an active glovo:c2 consent admits a
+// principal, and GLOVO_C2_ALLOWED_PRINCIPALS is optional: set, it narrows
+// access further (a staged pilot); unset, consent alone decides. Without
+// the consent route the allowlist is the only gate and is required.
 func loadC2(getenv func(string) string) (c2Config, error) {
 	switch v := getenv("GLOVO_C2_ENABLED"); v {
 	case "", "false":
@@ -50,6 +57,10 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	if c.vaultRole == "" {
 		c.vaultRole = "mctl-glovo"
 	}
+	c.consentAPI, c.consentTokenFile = getenv("GLOVO_CONSENT_API_URL"), getenv("GLOVO_CONSENT_TOKEN_FILE")
+	if (c.consentAPI == "") != (c.consentTokenFile == "") {
+		return c2Config{}, errors.New("GLOVO_CONSENT_API_URL and GLOVO_CONSENT_TOKEN_FILE are set together or not at all")
+	}
 	for _, p := range strings.Split(getenv("GLOVO_C2_ALLOWED_PRINCIPALS"), ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			if !strings.HasPrefix(p, "prn_") {
@@ -58,8 +69,8 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 			c.allowed = append(c.allowed, p)
 		}
 	}
-	if len(c.allowed) == 0 {
-		return c2Config{}, errors.New("GLOVO_C2_ALLOWED_PRINCIPALS is required when GLOVO_C2_ENABLED=true")
+	if len(c.allowed) == 0 && c.consentAPI == "" {
+		return c2Config{}, errors.New("GLOVO_C2_ALLOWED_PRINCIPALS is required when GLOVO_C2_ENABLED=true and GLOVO_CONSENT_API_URL is unset")
 	}
 	if c.databaseURL = getenv("GLOVO_DATABASE_URL"); c.databaseURL == "" {
 		return c2Config{}, errors.New("GLOVO_DATABASE_URL is required when GLOVO_C2_ENABLED=true")
@@ -76,10 +87,6 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 		return c2Config{}, errors.New("GLOVO_EGRESS_PROXY is not a URL")
 	}
 	c.proxy = u
-	c.consentAPI, c.consentTokenFile = getenv("GLOVO_CONSENT_API_URL"), getenv("GLOVO_CONSENT_TOKEN_FILE")
-	if (c.consentAPI == "") != (c.consentTokenFile == "") {
-		return c2Config{}, errors.New("GLOVO_CONSENT_API_URL and GLOVO_CONSENT_TOKEN_FILE are set together or not at all")
-	}
 	for _, s := range strings.Split(getenv("GLOVO_LINK_TRUSTED_PROXIES"), ",") {
 		if s = strings.TrimSpace(s); s == "" {
 			continue
@@ -105,12 +112,15 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		h, err := linkflow.New(linkflow.Config{Enabled: false})
 		return h, noop, err
 	}
-	verifier, err := authn.New(authn.Config{
-		Issuer:            config.Issuer,
-		Resource:          config.Resource,
-		JWKSURL:           config.JWKSURL,
-		AllowedPrincipals: c.allowed,
-	})
+	consent, admit, err := c2Access(c)
+	if err != nil {
+		return nil, noop, err
+	}
+	gate, err := consentgate.New(consentgate.Config{Source: consent, Version: linkflow.ConsentVersion})
+	if err != nil {
+		return nil, noop, err
+	}
+	verifier, err := authn.New(verifierConfig(c, gate, admit))
 	if err != nil {
 		return nil, noop, err
 	}
@@ -141,7 +151,7 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		closeDB()
 		return nil, noop, err
 	}
-	store, err := tokenstore.New(tokenstore.Config{
+	scfg := tokenstore.Config{
 		DB:           pg,
 		Transit:      transit,
 		Kill:         kill,
@@ -151,19 +161,12 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		// then PreviewLink refuses, so the helper never uploads.
 		MaskIdentity:  nil,
 		ClientOptions: []glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()},
-	})
+	}
+	withLinkConsent(&scfg, gate)
+	store, err := tokenstore.New(scfg)
 	if err != nil {
 		closeDB()
 		return nil, noop, err
-	}
-	var consent linkflow.ConsentSource = linkflow.UnavailableConsent{}
-	if c.consentAPI != "" {
-		api, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: c.consentAPI, TokenFile: c.consentTokenFile})
-		if err != nil {
-			closeDB()
-			return nil, noop, err
-		}
-		consent = api
 	}
 	h, err := linkflow.New(linkflow.Config{
 		Enabled:        true,
@@ -178,4 +181,47 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*linkflow.Han
 		return nil, noop, err
 	}
 	return h, closeDB, nil
+}
+
+// c2Access returns the consent source and whether it admits principals at
+// the token verifier. With mctl-api's consent route configured, consent is
+// the gate (the allowlist, if set, narrows it). Without it, the source is
+// the fail-closed UnavailableConsent, the allowlist alone admits, and an
+// empty allowlist is refused here as well as in loadC2.
+func c2Access(c c2Config) (linkflow.ConsentSource, bool, error) {
+	if c.consentAPI == "" {
+		if len(c.allowed) == 0 {
+			return nil, false, errors.New("c2: neither GLOVO_CONSENT_API_URL nor GLOVO_C2_ALLOWED_PRINCIPALS is set")
+		}
+		return linkflow.UnavailableConsent{}, false, nil
+	}
+	api, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: c.consentAPI, TokenFile: c.consentTokenFile})
+	if err != nil {
+		return nil, false, err
+	}
+	return api, true, nil
+}
+
+// verifierConfig is the C2 token check: a team or personal grant, the
+// allowlist when set, and, in consent mode, an active consent through gate.
+func verifierConfig(c c2Config, gate authn.Admitter, admit bool) authn.Config {
+	vcfg := authn.Config{
+		Issuer:            config.Issuer,
+		Resource:          config.Resource,
+		JWKSURL:           config.JWKSURL,
+		AllowedPrincipals: c.allowed,
+		RequireGrant:      true,
+	}
+	if admit {
+		vcfg.Admitter = gate
+	}
+	return vcfg
+}
+
+// withLinkConsent makes /link/upload re-check the consent through gate after
+// the code is redeemed and before the session is stored. It is set in both
+// access modes: without the consent route the source never consents, so
+// no session can be stored, as no code can be issued.
+func withLinkConsent(cfg *tokenstore.Config, gate *consentgate.Gate) {
+	cfg.LinkConsent = gate.LinkConsent
 }

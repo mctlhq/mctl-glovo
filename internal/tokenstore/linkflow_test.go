@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/mctlhq/mctl-glovo/internal/authn"
+	"github.com/mctlhq/mctl-glovo/internal/consentgate"
 	"github.com/mctlhq/mctl-glovo/internal/glovoapi"
 	"github.com/mctlhq/mctl-glovo/internal/linkflow"
 	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
@@ -41,6 +42,10 @@ func (fakeVerifier) Verify(_ context.Context, tok string) (*authn.Principal, err
 		return &authn.Principal{ID: pidOther}, nil
 	case "tok-jwks-down":
 		return nil, &authn.Error{Reason: authn.ReasonJWKSDown, Status: http.StatusServiceUnavailable}
+	case "tok-not-admitted":
+		return nil, &authn.Error{Reason: authn.ReasonNotAdmitted, Status: http.StatusForbidden}
+	case "tok-admit-down":
+		return nil, &authn.Error{Reason: authn.ReasonAdmitDown, Status: http.StatusServiceUnavailable}
 	case "tok-not-allowed":
 		return nil, &authn.Error{Reason: "not_allowed", Status: http.StatusForbidden}
 	}
@@ -703,5 +708,72 @@ func TestLinkPreviewMaskUnavailable(t *testing.T) {
 	// still good: the store did not burn it.
 	if r := e.upload(code, session("m")); r.status != 200 {
 		t.Fatalf("%d %s", r.status, r.raw)
+	}
+}
+
+// The upload re-checks the consent through the gate after the code is
+// redeemed: a consent withdrawn after the code was issued stores nothing,
+// and a consent that cannot be read refuses, never links.
+func TestLinkUploadRechecksConsent(t *testing.T) {
+	setup := func(t *testing.T) (*env, string) {
+		e := newEnv(t, defaultCaps())
+		g, err := consentgate.New(consentgate.Config{Source: e.consent, Version: linkflow.ConsentVersion})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.h.LinkConsent = g.LinkConsent
+		code := e.issue("tok-owner")
+		return e, code
+	}
+	t.Run("held", func(t *testing.T) {
+		e, code := setup(t)
+		if r := e.upload(code, session("one")); r.status != 200 {
+			t.Fatalf("%d %s", r.status, r.raw)
+		}
+	})
+	t.Run("withdrawn after the code", func(t *testing.T) {
+		e, code := setup(t)
+		e.consent.mu.Lock()
+		delete(e.consent.versions, pidOwner)
+		e.consent.mu.Unlock()
+		wantRefusal(t, e.upload(code, session("one")), 403, "consent_required")
+		if _, _, ok := e.h.LinkRow(pidOwner); ok || e.validations.Load() != 0 {
+			t.Fatalf("linked or validated without consent (validations %d)", e.validations.Load())
+		}
+		// The code is burned: consenting again needs a new code.
+		e.consent.mu.Lock()
+		e.consent.versions[pidOwner] = linkflow.ConsentVersion
+		e.consent.mu.Unlock()
+		wantRefusal(t, e.upload(code, session("one")), 400, "code_refused")
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		e, code := setup(t)
+		e.consent.mu.Lock()
+		e.consent.err = errors.New("mctl-api down")
+		e.consent.mu.Unlock()
+		wantRefusal(t, e.upload(code, session("one")), 503, "unavailable")
+		if _, _, ok := e.h.LinkRow(pidOwner); ok || e.validations.Load() != 0 {
+			t.Fatal("linked on a consent read error")
+		}
+	})
+}
+
+// The verifier's consent gate answers in the link flow's own terms.
+func TestLinkCodeAdmissionRefusals(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	for tok, want := range map[string]struct {
+		status int
+		code   string
+	}{
+		"tok-not-admitted": {403, "consent_required"},
+		"tok-admit-down":   {503, "temporarily_unavailable"},
+		"tok-not-allowed":  {403, "access_denied"},
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		wantRefusal(t, e.do(req), want.status, want.code)
+	}
+	if e.h.Codes() != 0 {
+		t.Fatal("code issued")
 	}
 }

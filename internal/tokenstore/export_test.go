@@ -14,11 +14,13 @@ import (
 // models the SQL in postgres.go, and the fake Vault transit.
 type LinkHarness struct {
 	Store Store
-	t     *testing.T
-	mem   *memDB
-	kill  *KillSwitch
-	vault *fakeTransit
-	logs  *syncBuffer
+	// LinkConsent, when set, is the store's upload consent re-check.
+	LinkConsent func(context.Context, PID) error
+	t           *testing.T
+	mem         *memDB
+	kill        *KillSwitch
+	vault       *fakeTransit
+	logs        *syncBuffer
 }
 
 // NewLinkHarness builds the store. validate is the validating Glovo call;
@@ -42,6 +44,12 @@ func NewLinkHarness(t *testing.T, caps Caps, validate func(context.Context, glov
 		Logger:       slog.New(slog.NewJSONHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		ValidateLink: validate,
 		MaskIdentity: mask,
+		LinkConsent: func(ctx context.Context, pid PID) error {
+			if h.LinkConsent == nil {
+				return nil
+			}
+			return h.LinkConsent(ctx, pid)
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
