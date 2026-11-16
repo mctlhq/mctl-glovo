@@ -45,6 +45,9 @@ type c2Config struct {
 	// The kill switch and HTTP routes read them from here.
 	capacity int
 	caps     tokenstore.Caps
+	// control is the kill switch endpoint's identity (slice 5); zero value
+	// means the route is not mounted.
+	control controlConfig
 }
 
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
@@ -71,6 +74,9 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	c := c2Config{enabled: true, capacity: capacity, caps: caps, vaultRole: getenv("GLOVO_VAULT_ROLE")}
 	if c.vaultRole == "" {
 		c.vaultRole = "mctl-glovo"
+	}
+	if c.control, err = loadControl(getenv); err != nil {
+		return c2Config{}, err
 	}
 	c.consentAPI, c.consentTokenFile = getenv("GLOVO_CONSENT_API_URL"), getenv("GLOVO_CONSENT_TOKEN_FILE")
 	if (c.consentAPI == "") != (c.consentTokenFile == "") {
@@ -131,6 +137,8 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 type c2App struct {
 	link *linkflow.Handler
 	mcp  *mcpRoutes
+	// control is the kill switch flip route; nil when not configured.
+	control *controlRoutes
 	// ready are the extra readiness checks (token verification keys).
 	ready []health.Checker
 }
@@ -139,6 +147,7 @@ type c2App struct {
 func (a *c2App) Register(mux *http.ServeMux) {
 	a.link.Register(mux)
 	a.mcp.Register(mux)
+	a.control.Register(mux)
 }
 
 // Shutdown drains the MCP surface; safe with the flag off.
@@ -248,7 +257,8 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		Log:      log,
 		// Who is the keyed digest; the masked MCTL identity helper (build
 		// infra, MaskIdentity) can replace it behind the same seam.
-		Who: who,
+		Who:  who,
+		Kill: kill.Check,
 		// Admit is mctl-api's consent (and slot) decision per tool call,
 		// with a few-second positive cache (admit.go).
 		Admit: callAdmit,
@@ -270,7 +280,15 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		closeDB()
 		return nil, noop, err
 	}
-	return &c2App{link: h, mcp: routes, ready: []health.Checker{verifier.Ready}}, closeDB, nil
+	app := &c2App{link: h, mcp: routes, ready: []health.Checker{verifier.Ready}}
+	if c.control.enabled() {
+		app.control, err = buildControl(ctx, c.control, kill, log)
+		if err != nil {
+			closeDB()
+			return nil, noop, err
+		}
+	}
+	return app, closeDB, nil
 }
 
 // sweepSessions drops idle hosted clients, and every client when the kill
@@ -341,4 +359,24 @@ func withCaps(cfg *tokenstore.Config, c c2Config) error {
 	}
 	cfg.Caps = c.caps
 	return nil
+}
+
+// buildControl wires the kill switch flip route: the machine-user token
+// verifier (internal/authn, the subject allow-list) over the durable switch.
+// The first key set fetch is best effort: until it works the endpoint
+// answers 503, which mctl-api reads as "state unknown", and the service
+// itself stays ready (the flip path being down must not take MCP down).
+func buildControl(ctx context.Context, cc controlConfig, kill *tokenstore.KillSwitch, log *slog.Logger) (*controlRoutes, error) {
+	v, err := authn.NewService(authn.ServiceConfig{
+		Issuer: cc.issuer, Audience: cc.audience, JWKSURL: cc.jwksURL, Subjects: cc.subjects,
+	})
+	if err != nil {
+		return nil, err
+	}
+	startCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := v.Refresh(startCtx); err != nil {
+		log.Warn("initial control jwks fetch failed", "error", err)
+	}
+	return newControlRoutes(v, kill, log.With("component", "control"), log.With("log", "audit"))
 }

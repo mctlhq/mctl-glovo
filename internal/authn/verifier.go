@@ -23,6 +23,9 @@ import (
 // AlgEdDSA is the only accepted JWS algorithm.
 const AlgEdDSA = "EdDSA"
 
+// AlgRS256 is accepted by the ServiceVerifier only (ZITADEL signs with it).
+const AlgRS256 = "RS256"
+
 // Leeway is the clock skew tolerated on exp, nbf and iat.
 const Leeway = 30 * time.Second
 
@@ -80,7 +83,7 @@ func (e *Error) Error() string { return "authn: " + e.Reason }
 
 func refuse(reason string) *Error {
 	switch reason {
-	case ReasonNotAllowed, ReasonNotAdmitted:
+	case ReasonNotAllowed, ReasonNotAdmitted, ReasonSubjectNotAllowed:
 		return &Error{Reason: reason, Status: http.StatusForbidden}
 	case ReasonJWKSDown, ReasonAdmitDown:
 		return &Error{Reason: reason, Status: http.StatusServiceUnavailable}
@@ -158,7 +161,7 @@ func New(cfg Config) (*Verifier, error) {
 		allowed:  allowed,
 		admit:    cfg.Admitter,
 		grant:    cfg.RequireGrant,
-		jwks:     newJWKSCache(cfg.JWKSURL, cfg.HTTPClient, now),
+		jwks:     newJWKSCache(cfg.JWKSURL, cfg.HTTPClient, now, false),
 		now:      now,
 	}, nil
 }
@@ -238,7 +241,8 @@ func (v *Verifier) Verify(ctx context.Context, token string) (*Principal, error)
 	if !ok {
 		return nil, refuse(ReasonUnknownKey)
 	}
-	if !ed25519.Verify(key, []byte(parts[0]+"."+parts[1]), sig) {
+	edKey, isEd := key.(ed25519.PublicKey)
+	if !isEd || !ed25519.Verify(edKey, []byte(parts[0]+"."+parts[1]), sig) {
 		return nil, refuse(ReasonSignature)
 	}
 

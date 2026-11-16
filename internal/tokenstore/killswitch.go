@@ -18,9 +18,15 @@ type KillSwitch struct {
 	now      func() time.Time
 	maxCache time.Duration
 
-	mu        sync.Mutex
-	okUntil   time.Time
-	latched   bool
+	// setMu serialises operator flips (Set).
+	setMu sync.Mutex
+
+	mu      sync.Mutex
+	okUntil time.Time
+	latched bool
+	// gen counts flips. A read that began before a flip must not cache its
+	// "running" answer after it (check-then-act).
+	gen       uint64
 	readCalls int // tests: how often the row was read
 }
 
@@ -49,6 +55,7 @@ func (k *KillSwitch) Check(ctx context.Context) error {
 		k.mu.Unlock()
 		return nil
 	}
+	gen := k.gen
 	k.mu.Unlock()
 
 	killed, err := k.db.ReadControl(ctx)
@@ -60,12 +67,107 @@ func (k *KillSwitch) Check(ctx context.Context) error {
 		k.okUntil = time.Time{}
 		return ErrKilled
 	}
+	if k.gen != gen {
+		// A flip landed while the row was being read: this answer may be
+		// stale. Not cached, and not trusted for this call either.
+		return ErrKilled
+	}
 	k.okUntil = k.now().Add(k.maxCache)
 	return nil
 }
 
+// Set is the operator flip. It writes glovo_control, reads the row back and
+// returns the state now stored, so a caller can confirm the exact state. Any
+// error means the state is unknown to the caller, never a state. The cached
+// "running" answer is dropped, so this process sees the flip at once.
+//
+// Both flips are audited (kill_on / kill_off, actor operator). A kill stays
+// in force if its audit row cannot be written. An un-kill whose audit row
+// cannot be written is undone (killed again) and reported as an error: the
+// switch only opens with a record of who opened it. Set does not clear a
+// Trip latch: that holds until restart.
+//
+// Trip latch: it holds until the process restarts (the operator must restart
+// the pod to clear it). While latched, an un-kill still writes the row and
+// its audit record, but Set answers true: the effective state of this
+// process, not the stored one. The endpoint then answers 200 {"killed": true}
+// to a {"killed": false} request, so the caller's "confirmed state must match
+// the request" check reports state-unknown instead of a false "running".
+// Trip does not take setMu and can interleave with an un-kill: an un-kill
+// that lands after Trip's row write leaves the row open while this process
+// stays killed; other replicas then run. That is the accepted trade-off.
+func (k *KillSwitch) Set(ctx context.Context, killed bool, by string) (bool, error) {
+	if k == nil {
+		return true, ErrUnavailable
+	}
+	k.setMu.Lock()
+	defer k.setMu.Unlock()
+	dctx, cancel := detached(ctx)
+	defer cancel()
+
+	event := "kill_off"
+	if killed {
+		event = "kill_on"
+	}
+	// First invalidate: voids reads that began before the flip.
+	k.invalidate()
+	if err := k.db.SetKilled(dctx, killed, by); err != nil {
+		_ = k.db.InsertAudit(dctx, AuditEvent{Event: event, Outcome: outcomeError, Reason: "write_failed", Actor: actorOperator})
+		return true, err
+	}
+	// Second invalidate: a Check that began after the first one may have
+	// read the old row and must not cache that "running" answer now that
+	// the write has landed.
+	k.invalidate()
+	stored, err := k.db.ReadControl(dctx)
+	if err != nil {
+		if !killed {
+			// The un-kill may be committed but unconfirmed and unaudited:
+			// close it again rather than leave an unrecorded open row.
+			k.reKill(dctx, by)
+			_ = k.db.InsertAudit(dctx, AuditEvent{Event: event, Outcome: outcomeError, Reason: "readback_failed", Actor: actorOperator})
+		}
+		return true, err
+	}
+	if stored != killed {
+		return stored, unavailable("control row differs from the request")
+	}
+	aerr := k.db.InsertAudit(dctx, AuditEvent{Event: event, Outcome: outcomeOK, Reason: "operator_control", Actor: actorOperator})
+	if aerr != nil && !killed {
+		// Undo: a failed audit must not leave the switch open.
+		k.reKill(dctx, by)
+		return true, aerr
+	}
+	if k.isLatched() {
+		// Effective state of this process, whatever the row now says.
+		return true, nil
+	}
+	return stored, nil
+}
+
+// reKill is the best-effort undo of an un-kill.
+func (k *KillSwitch) reKill(ctx context.Context, by string) {
+	_ = k.db.SetKilled(ctx, true, by)
+	k.invalidate()
+}
+
+func (k *KillSwitch) isLatched() bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.latched
+}
+
+// invalidate drops the cached "running" answer and voids in-flight reads.
+func (k *KillSwitch) invalidate() {
+	k.mu.Lock()
+	k.gen++
+	k.okUntil = time.Time{}
+	k.mu.Unlock()
+}
+
 // Trip latches the switch in this process and writes the control row.
-// The latch holds even when the write fails.
+// The latch holds even when the write fails. It does not take setMu; see
+// Set for how it interleaves with an un-kill.
 func (k *KillSwitch) Trip(ctx context.Context, by string) error {
 	k.mu.Lock()
 	k.latched = true

@@ -2,12 +2,15 @@ package authn
 
 import (
 	"context"
+	"crypto"
 	"crypto/ed25519"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"sync"
 	"time"
@@ -37,6 +40,8 @@ var ErrJWKSUnavailable = errors.New("authn: jwks unavailable")
 type jwk struct {
 	Kty string `json:"kty"`
 	Crv string `json:"crv"`
+	N   string `json:"n"`
+	E   string `json:"e"`
 	Kid string `json:"kid"`
 	X   string `json:"x"`
 	D   string `json:"d"`
@@ -48,12 +53,15 @@ type jwksCache struct {
 	url    string
 	client *http.Client
 	now    func() time.Time
+	// rsa admits RS256 public keys next to Ed25519 ones. Off for the mctl-api
+	// verifier (EdDSA only); the service verifier turns it on.
+	rsa bool
 
 	// flight serializes fetches so concurrent callers share one.
 	flight sync.Mutex
 
 	mu          sync.Mutex
-	keys        map[string]ed25519.PublicKey
+	keys        map[string]crypto.PublicKey
 	loaded      bool
 	fetchedAt   time.Time
 	lastAttempt time.Time
@@ -61,11 +69,11 @@ type jwksCache struct {
 	lastOK bool
 }
 
-func newJWKSCache(url string, client *http.Client, now func() time.Time) *jwksCache {
+func newJWKSCache(url string, client *http.Client, now func() time.Time, allowRSA bool) *jwksCache {
 	if client == nil {
 		client = &http.Client{Timeout: jwksFetchTimeout}
 	}
-	return &jwksCache{url: url, client: client, now: now}
+	return &jwksCache{url: url, client: client, now: now, rsa: allowRSA}
 }
 
 // usable reports whether the cached set may still verify tokens.
@@ -107,7 +115,7 @@ func (c *jwksCache) fetch(ctx context.Context) error {
 	if len(body) > jwksMaxBytes {
 		return errors.New("fetch jwks: response too large")
 	}
-	keys, err := parseJWKS(body)
+	keys, err := parseJWKS(body, c.rsa)
 	if err != nil {
 		return err
 	}
@@ -120,34 +128,50 @@ func (c *jwksCache) fetch(ctx context.Context) error {
 	return nil
 }
 
-// parseJWKS keeps only Ed25519 public signing keys. A set that is not valid
-// JSON, or that carries no usable key, is a failed read, not an empty set.
-func parseJWKS(body []byte) (map[string]ed25519.PublicKey, error) {
+// parseJWKS keeps only public signing keys: Ed25519 and, with allowRSA,
+// RSA of at least 2048 bits. A set that is not valid JSON, or that carries no
+// usable key, is a failed read, not an empty set.
+func parseJWKS(body []byte, allowRSA bool) (map[string]crypto.PublicKey, error) {
 	var set struct {
 		Keys []jwk `json:"keys"`
 	}
 	if err := json.Unmarshal(body, &set); err != nil {
 		return nil, errors.New("fetch jwks: malformed")
 	}
-	keys := make(map[string]ed25519.PublicKey, len(set.Keys))
-	for _, k := range set.Keys {
-		if k.Kty != "OKP" || k.Crv != "Ed25519" || k.Kid == "" || k.D != "" {
+	keys := make(map[string]crypto.PublicKey, len(set.Keys))
+	for i := range set.Keys {
+		k := &set.Keys[i]
+		if k.Kid == "" || k.D != "" || (k.Use != "" && k.Use != "sig") {
 			continue
 		}
-		if k.Alg != "" && k.Alg != AlgEdDSA {
-			continue
+		switch {
+		case k.Kty == "OKP" && k.Crv == "Ed25519":
+			if k.Alg != "" && k.Alg != AlgEdDSA {
+				continue
+			}
+			x, err := base64.RawURLEncoding.DecodeString(k.X)
+			if err != nil || len(x) != ed25519.PublicKeySize {
+				continue
+			}
+			keys[k.Kid] = ed25519.PublicKey(x)
+		case allowRSA && k.Kty == "RSA":
+			if k.Alg != "" && k.Alg != AlgRS256 {
+				continue
+			}
+			n, err1 := base64.RawURLEncoding.DecodeString(k.N)
+			e, err2 := base64.RawURLEncoding.DecodeString(k.E)
+			if err1 != nil || err2 != nil || len(n) < 256 || len(e) == 0 || len(e) > 4 {
+				continue
+			}
+			exp := new(big.Int).SetBytes(e)
+			if !exp.IsInt64() || exp.Int64() < 3 {
+				continue
+			}
+			keys[k.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: int(exp.Int64())}
 		}
-		if k.Use != "" && k.Use != "sig" {
-			continue
-		}
-		x, err := base64.RawURLEncoding.DecodeString(k.X)
-		if err != nil || len(x) != ed25519.PublicKeySize {
-			continue
-		}
-		keys[k.Kid] = ed25519.PublicKey(x)
 	}
 	if len(keys) == 0 {
-		return nil, errors.New("fetch jwks: no usable Ed25519 key")
+		return nil, errors.New("fetch jwks: no usable signing key")
 	}
 	return keys, nil
 }
@@ -166,7 +190,7 @@ func (c *jwksCache) refreshThrottled(ctx context.Context) (attempted bool, err e
 	return true, c.fetch(ctx)
 }
 
-func (c *jwksCache) lookup(kid string) (ed25519.PublicKey, bool) {
+func (c *jwksCache) lookup(kid string) (crypto.PublicKey, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	k, ok := c.keys[kid]
@@ -180,7 +204,7 @@ func (c *jwksCache) lookup(kid string) (ed25519.PublicKey, bool) {
 //   - An unknown kid triggers one refetch. If that refetch could not run or
 //     failed, the answer is ErrJWKSUnavailable; only a successful fetch that
 //     still lacks the kid makes the kid unknown (ok == false, err == nil).
-func (c *jwksCache) key(ctx context.Context, kid string) (ed25519.PublicKey, bool, error) {
+func (c *jwksCache) key(ctx context.Context, kid string) (crypto.PublicKey, bool, error) {
 	c.mu.Lock()
 	stale := !c.loaded || c.now().Sub(c.fetchedAt) > jwksTTL
 	c.mu.Unlock()

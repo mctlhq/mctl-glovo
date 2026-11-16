@@ -70,6 +70,19 @@ func newHMACWho(key []byte) (auditWho, error) {
 // not be read is a refusal, never a pass.
 type callAdmitter func(ctx context.Context, pid string) error
 
+// killedText is the fixed refusal while the kill switch is on or unreadable.
+// It equals the hosted tool layer's text for tokenstore.ErrKilled.
+const killedText = "Glovo account access is switched off."
+
+// killCheckTimeout bounds the control row read of one call. A timeout is an
+// unreadable row, which is killed.
+const killCheckTimeout = 5 * time.Second
+
+// killGate returns nil only when the kill switch is off and was read
+// (tokenstore.KillSwitch.Check: a short-lived cache of "running", a failed
+// read means killed).
+type killGate func(ctx context.Context) error
+
 // mcpDeps are the inputs of the hosted MCP surface.
 type mcpDeps struct {
 	Verifier gateway.Verifier
@@ -80,7 +93,9 @@ type mcpDeps struct {
 	Log   *slog.Logger
 	// Who is required: an audit line must never carry a raw pid, so there
 	// is no unkeyed default.
-	Who     auditWho
+	Who auditWho
+	// Kill is required: no tool call may run without the switch being read.
+	Kill    killGate
 	Admit   callAdmitter
 	Version string
 	// CallTimeout bounds one tool call (default hostedCallTimeout) and
@@ -88,6 +103,9 @@ type mcpDeps struct {
 	// Tests shorten them.
 	CallTimeout     time.Duration
 	BodyReadTimeout time.Duration
+	// KillTimeout bounds the kill switch read of one call (default
+	// killCheckTimeout); a read that times out is a killed answer.
+	KillTimeout time.Duration
 }
 
 // mcpRoutes is the hosted MCP surface. A nil *mcpRoutes is the flag-off
@@ -99,11 +117,14 @@ type mcpRoutes struct {
 }
 
 func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
-	if d.Verifier == nil || d.Clients == nil || d.Audit == nil || d.Who == nil {
-		return nil, errors.New("mcp: verifier, clients, audit logger and audit identity are required")
+	if d.Verifier == nil || d.Clients == nil || d.Audit == nil || d.Who == nil || d.Kill == nil {
+		return nil, errors.New("mcp: verifier, clients, audit logger, audit identity and kill switch are required")
 	}
 	if d.CallTimeout <= 0 {
 		d.CallTimeout = hostedCallTimeout
+	}
+	if d.KillTimeout <= 0 {
+		d.KillTimeout = killCheckTimeout
 	}
 	if d.BodyReadTimeout <= 0 {
 		d.BodyReadTimeout = hostedBodyReadTimeout
@@ -124,7 +145,7 @@ func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
 		server.WithToolCapabilities(true),
 		server.WithInstructions(hostedInstructions),
 		server.WithRecovery(),
-		server.WithToolHandlerMiddleware(auditMiddleware(d.Audit, d.Who, d.Admit, d.CallTimeout)),
+		server.WithToolHandlerMiddleware(auditMiddleware(d.Audit, d.Who, d.Kill, d.KillTimeout, d.Admit, d.CallTimeout)),
 	)
 	backend.Install(srv)
 	streamable := gateway.NewStreamable(srv, log.With("component", "mcp"))
@@ -199,8 +220,8 @@ func (c *clearOnDone) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// auditMiddleware refuses a call with no usable verified principal (and one
-// the admitter refuses) before any lookup, and writes one audit line per
+// auditMiddleware refuses a call with no usable verified principal, one while
+// the kill switch is on or unreadable, and one the admitter refuses, before any lookup, and writes one audit line per
 // call: who, tool, outcome (ok, refused or error) and duration. Arguments
 // and results are never logged: they carry personal data.
 //
@@ -208,7 +229,7 @@ func (c *clearOnDone) Read(p []byte) (int, error) {
 // could not run (unavailable, timeout) or the tool returned an isError
 // result; the result text, which for a hosted refusal is a fixed sentence,
 // is deliberately not parsed here.
-func auditMiddleware(audit *slog.Logger, who auditWho, admit callAdmitter, callTimeout time.Duration) server.ToolHandlerMiddleware {
+func auditMiddleware(audit *slog.Logger, who auditWho, kill killGate, killTimeout time.Duration, admit callAdmitter, callTimeout time.Duration) server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (res *mcp.CallToolResult, err error) {
 			start := time.Now()
@@ -230,6 +251,16 @@ func auditMiddleware(audit *slog.Logger, who auditWho, admit callAdmitter, callT
 			if pid == (tokenstore.PID{}) {
 				outcome = "refused"
 				return nil, errors.New("unauthenticated")
+			}
+			// The kill switch comes before the admitter (a mctl-api call) and
+			// the backend (a session lookup): a killed service answers a
+			// fixed text and touches nothing of any user's.
+			kctx, kcancel := context.WithTimeout(ctx, killTimeout)
+			kerr := kill(kctx)
+			kcancel()
+			if kerr != nil {
+				outcome = "refused"
+				return mcp.NewToolResultError(killedText), nil
 			}
 			if admit != nil {
 				if aerr := admit(ctx, pid.String()); aerr != nil {
