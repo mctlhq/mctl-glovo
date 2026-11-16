@@ -69,7 +69,7 @@ test("head metadata for an invitation-only preview", async () => {
     const body = await (await get("/?lang=" + lang)).text();
     for (const want of [
       '<meta name="robots" content="noindex">',
-      '<link rel="canonical" href="https://glovo.mctl.ai/">',
+      `<link rel="canonical" href="https://glovo.mctl.ai/?lang=${lang}">`,
       '<link rel="alternate" hreflang="x-default" href="https://glovo.mctl.ai/">',
       '<link rel="alternate" hreflang="ru" href="https://glovo.mctl.ai/?lang=ru">',
       '<meta property="og:type" content="website">',

@@ -71,10 +71,10 @@ func TestLandingHeadMetadata(t *testing.T) {
 		tx := landingTexts[l]
 		want := []string{
 			`<meta name="robots" content="noindex">`,
-			`<link rel="canonical" href="` + origin + `">`,
+			`<link rel="canonical" href="` + origin + `?lang=` + l + `">`,
 			`<link rel="alternate" hreflang="x-default" href="` + origin + `">`,
 			`<meta property="og:type" content="website">`,
-			`<meta property="og:url" content="` + origin + `">`,
+			`<meta property="og:url" content="` + origin + `?lang=` + l + `">`,
 			`<meta property="og:locale" content="` + tx.Locale + `">`,
 			`<meta name="twitter:card" content="summary">`,
 			`<meta name="theme-color" media="(prefers-color-scheme: dark)" content="` + landingThemeDark + `">`,
@@ -88,7 +88,7 @@ func TestLandingHeadMetadata(t *testing.T) {
 				t.Errorf("%s: head lacks %q", l, w)
 			}
 		}
-		// Canonical is the bare URL in every language, never a ?lang= one.
+		// Self-canonical: the canonical of a variant must be one of its own hreflang alternates.
 		if n := strings.Count(page, `rel="canonical"`); n != 1 {
 			t.Errorf("%s: %d canonical links", l, n)
 		}
@@ -191,5 +191,43 @@ func TestLandingCSPHashMatchesServedStyle(t *testing.T) {
 		if csp != want {
 			t.Fatalf("%s: CSP\n got %q\nwant %q", l, csp, want)
 		}
+	}
+}
+
+func cssRule(css, selector string) string {
+	i := strings.Index(css, selector+"{")
+	if i < 0 {
+		return ""
+	}
+	rest := css[i+len(selector)+1:]
+	return rest[:strings.Index(rest, "}")]
+}
+
+// The focused skip link must stack above the sticky header, which
+// site.css puts at --mctl-z-index-nav. A literal z-index would silently lose
+// to a token change, so the link must use a token that is strictly higher.
+func TestLandingSkipLinkStacksAboveHeader(t *testing.T) {
+	tokens := landingAsset("mctl.css")
+	z := func(name string) int {
+		m := regexp.MustCompile(`--mctl-z-index-` + name + `: (\d+);`).FindStringSubmatch(tokens)
+		if m == nil {
+			t.Fatalf("no z-index token %s", name)
+		}
+		n := 0
+		for _, c := range m[1] {
+			n = n*10 + int(c-'0')
+		}
+		return n
+	}
+	hdr := regexp.MustCompile(`\.mctl-site-header \{[^}]*z-index: var\(--mctl-z-index-([a-z]+)\)`).FindStringSubmatch(landingAsset("site.css"))
+	if hdr == nil {
+		t.Fatal("site.css header z-index is no longer a token: re-check the skip link")
+	}
+	skip := regexp.MustCompile(`z-index:var\(--mctl-z-index-([a-z]+)\)`).FindStringSubmatch(cssRule(landingAsset("landing.css"), ".skip-link"))
+	if skip == nil {
+		t.Fatal(".skip-link must take its z-index from a --mctl-z-index-* token")
+	}
+	if z(skip[1]) <= z(hdr[1]) {
+		t.Fatalf("skip link z-index %s (%d) must exceed header %s (%d)", skip[1], z(skip[1]), hdr[1], z(hdr[1]))
 	}
 }

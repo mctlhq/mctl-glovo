@@ -11,6 +11,7 @@ on:
       - 'internal/gateway/landing*.go'
       - 'cmd/landing-gen/**'
       - 'cmd/landing-css-sync/**'
+      - 'internal/gateway/landingassets/**'
       - '.github/workflows/landing-worker.yml'
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - 'internal/gateway/landing*.go'
       - 'cmd/landing-gen/**'
       - 'cmd/landing-css-sync/**'
+      - 'internal/gateway/landingassets/**'
       - '.github/workflows/landing-worker.yml'
   workflow_dispatch:
 

@@ -4,7 +4,7 @@
 html{-webkit-text-size-adjust:100%}
 body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--surface-bg);color:var(--surface-fg);font-family:var(--font-display);font-size:var(--text-body-size);line-height:1.55}
 main{flex:1 0 auto;--mctl-site-narrow-width:720px;--mctl-site-hero-text-width:760px}
-.skip-link{position:absolute;left:var(--site-gutter);top:0;z-index:10;transform:translateY(-120%);padding:10px 14px;border-radius:var(--mctl-radius-md);background:var(--surface-bg);color:var(--surface-fg);border:1px solid var(--surface-line-strong);text-decoration:none}
+.skip-link{position:absolute;left:var(--site-gutter);top:0;z-index:var(--mctl-z-index-dropdown);transform:translateY(-120%);padding:10px 14px;border-radius:var(--mctl-radius-md);background:var(--surface-bg);color:var(--surface-fg);border:1px solid var(--surface-line-strong);text-decoration:none}
 .skip-link:focus{transform:none;outline:var(--focus-ring-width) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}
 a{color:inherit;text-decoration-color:var(--link-underline);text-underline-offset:3px}
 a:focus-visible,pre:focus-visible{outline:var(--focus-ring-width) solid var(--focus-ring);outline-offset:var(--focus-ring-offset)}

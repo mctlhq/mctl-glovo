@@ -41,7 +41,22 @@ func fetch(ctx context.Context, url string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s returned %d", url, resp.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	return readLimited(resp.Body, maxSheet, url)
+}
+
+const maxSheet = 4 << 20
+
+// readLimited reads at most max bytes and fails when the body is longer, so a
+// truncated sheet is never vendored or compared as if it were whole.
+func readLimited(r io.Reader, max int64, name string) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > max {
+		return nil, fmt.Errorf("%s exceeds %d bytes", name, max)
+	}
+	return b, nil
 }
 
 func wanted(ctx context.Context, sheet string) ([]byte, error) {

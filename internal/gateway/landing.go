@@ -158,14 +158,14 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="` + landingThemeDark + `">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="` + landingThemeLight + `">
-<link rel="canonical" href="{{.Canonical}}">
+<link rel="canonical" href="{{.SelfURL}}">
 {{range .Langs}}<link rel="alternate" hreflang="{{.Code}}" href="{{.Alt}}">
 {{end}}<link rel="alternate" hreflang="x-default" href="{{.Canonical}}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="MCTL">
 <meta property="og:title" content="{{.T.Title}}">
 <meta property="og:description" content="{{.T.Lead}}">
-<meta property="og:url" content="{{.Canonical}}">
+<meta property="og:url" content="{{.SelfURL}}">
 <meta property="og:locale" content="{{.T.Locale}}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{{.T.Title}}">
@@ -248,6 +248,10 @@ const (
 // each language link.
 var landingLangNames = map[string]string{"en": "English", "es": "Español", "ru": "Русский"}
 
+// Canonical is per language: each variant names its own ?lang= URL, which the
+// hreflang set also lists, and x-default is the bare URL. A bare-URL canonical
+// on every variant would contradict the alternates.
+
 // landingOrigin is the page's bare URL derived from the MCP endpoint
 // ("https://host/mcp" -> "https://host/").
 func landingOrigin(endpoint string) string {
@@ -313,8 +317,9 @@ func RenderLanding(lang, endpoint string) ([]byte, error) {
 		CSS       template.CSS
 		Endpoint  string
 		Canonical string
+		SelfURL   string
 		Langs     []landingLang
-	}{landingTexts[lang], template.CSS(landingCSS), endpoint, origin, langs}) //nolint:gosec // G203: landingCSS is a compile-time constant, never input
+	}{landingTexts[lang], template.CSS(landingCSS), endpoint, origin, origin + "?lang=" + lang, langs}) //nolint:gosec // G203: landingCSS is a compile-time constant, never input
 	return buf.Bytes(), err
 }
 
