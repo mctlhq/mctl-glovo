@@ -229,6 +229,7 @@ func TestHostedLookupFailuresRefuseAndNeverReachGlovo(t *testing.T) {
 		{tokenstore.ErrKilled, nil, "switched off"},
 		{tokenstore.ErrRateLimited, nil, "rate limit"},
 		{tokenstore.ErrBusy, nil, "busy"},
+		{tokenstore.ErrSessionRefused, nil, "Link your account again"},
 		{tokenstore.ErrUnavailable, childmcp.ErrUnavailable, ""},
 		{tokenstore.ErrIntegrity, childmcp.ErrUnavailable, ""},
 		{errors.New("postgres: password authentication failed for user x"), childmcp.ErrUnavailable, ""},
@@ -360,7 +361,7 @@ func TestHostedHandlerErrorsAreMappedLikeLookupErrors(t *testing.T) {
 		{tokenstore.ErrRateLimited, nil, "rate limit"},
 		{tokenstore.ErrNeedsRelink, nil, "Link your account again"},
 		{tokenstore.ErrBusy, nil, "busy"},
-		{tokenstore.ErrSessionRefused, nil, "link your account again"},
+		{tokenstore.ErrSessionRefused, nil, "Link your account again"},
 		{fmt.Errorf("wrapped: %w", tokenstore.ErrRateLimited), nil, "rate limit"},
 	}
 	for _, c := range cases {

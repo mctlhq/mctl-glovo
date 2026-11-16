@@ -45,6 +45,10 @@ func hostedState(err error) (*mcp.CallToolResult, bool) {
 		text = "Your Glovo account is not linked. Link it at " + linkHint + "."
 	case errors.Is(err, tokenstore.ErrNeedsRelink):
 		text = "Your Glovo session expired. Link your account again at " + linkHint + "."
+	case errors.Is(err, tokenstore.ErrSessionRefused):
+		// The refresh coordinator can return this mid-call: Glovo refused
+		// the session, so only a new link helps.
+		text = "Glovo refused your session. Link your account again at " + linkHint + "."
 	case errors.Is(err, tokenstore.ErrSuspended):
 		text = "Your Glovo link is suspended."
 	case errors.Is(err, tokenstore.ErrKilled):
@@ -53,10 +57,6 @@ func hostedState(err error) (*mcp.CallToolResult, bool) {
 		text = "Glovo request rate limit reached. Try again later."
 	case errors.Is(err, tokenstore.ErrBusy):
 		text = "Your Glovo link is busy. Retry in a moment."
-	case errors.Is(err, tokenstore.ErrSessionRefused):
-		// The refresh coordinator can return this mid-call: Glovo refused
-		// the stored session. A fixed text, never the upstream one.
-		text = "Glovo did not accept your linked session. Try again later; if it keeps happening, link your account again at " + linkHint + "."
 	case errors.Is(err, glovoapi.ErrHostedNoFile):
 		text = "Setting the location is not available for hosted accounts yet."
 	default:
