@@ -172,7 +172,7 @@ func (l *Lease) writeSession(ctx context.Context, apply func(glovoapi.Session) (
 		}
 		if err != nil {
 			rejected = err
-			return cur, false, nil
+			return cur, false, nil //nolint:nilerr // intentional: the validation error is held in rejected and answered as ErrLocationRefused, so it must not reach the refresh failure accounting
 		}
 		return n, true, nil
 	})

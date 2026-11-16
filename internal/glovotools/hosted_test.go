@@ -527,7 +527,7 @@ func TestHostedSetLocationStoreFailures(t *testing.T) {
 	}{
 		{"refused", tokenstore.ErrLocationRefused, "not accepted"},
 		{"killed", tokenstore.ErrKilled, "switched off"},
-		{"session refused", tokenstore.ErrSessionRefused, "did not accept"},
+		{"session refused", tokenstore.ErrSessionRefused, "refused your session"},
 		{"unavailable", tokenstore.ErrUnavailable, ""},
 		{"integrity", tokenstore.ErrIntegrity, ""},
 	}

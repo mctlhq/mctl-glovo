@@ -57,10 +57,6 @@ func hostedState(err error) (*mcp.CallToolResult, bool) {
 		text = "Glovo request rate limit reached. Try again later."
 	case errors.Is(err, tokenstore.ErrBusy):
 		text = "Your Glovo link is busy. Retry in a moment."
-	case errors.Is(err, tokenstore.ErrSessionRefused):
-		// A refreshed session failed validation mid-call (the refresh
-		// coordinator returns it unwrapped). Fixed text, no detail.
-		text = "Glovo did not accept the session refresh. Try again later; if it keeps failing, link your account again at " + linkHint + "."
 	case errors.Is(err, tokenstore.ErrLocationRefused):
 		text = "That location was not accepted."
 	case errors.Is(err, glovoapi.ErrHostedNoFile):
