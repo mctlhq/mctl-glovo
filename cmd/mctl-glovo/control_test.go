@@ -613,3 +613,71 @@ func TestC2AppMountsControlOnlyWhenConfigured(t *testing.T) {
 		}
 	}
 }
+
+// rowDB is a control row whose read-back can disagree with what was written
+// (another writer got in), behind the real KillSwitch.
+type rowDB struct {
+	tokenstore.DB
+	mu     sync.Mutex
+	killed bool
+	// readBack, when non-nil, is what ReadControl answers regardless of the row.
+	readBack *bool
+}
+
+func (d *rowDB) SetKilled(_ context.Context, killed bool, _ string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.killed = killed
+	return nil
+}
+
+func (d *rowDB) ReadControl(context.Context) (bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.readBack != nil {
+		return *d.readBack, nil
+	}
+	return d.killed, nil
+}
+
+func (d *rowDB) InsertAudit(context.Context, tokenstore.AuditEvent) error { return nil }
+
+// The handler over the real switch answers the state READ BACK from the
+// row. When the stored state differs from the request, the answer is
+// state_unknown (503), never the request echoed as a 200.
+func TestControlReadBackDiffersFromRequestIsStateUnknown(t *testing.T) {
+	stored := true
+	d := &rowDB{killed: true, readBack: &stored}
+	ks, err := tokenstore.NewKillSwitch(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newControlEnv(t, fakeServiceVerifier{}, ks)
+	rec := e.do("PUT", allowedCred, "application/json", `{"killed":false}`, nil)
+	if rec.Code != http.StatusServiceUnavailable || strings.Contains(rec.Body.String(), `"killed"`) {
+		t.Fatalf("mismatch answered as a state: %d %q", rec.Code, rec.Body.String())
+	}
+	// The agreeing case is a 200 carrying the stored value.
+	d.readBack = nil
+	rec = e.do("PUT", allowedCred, "application/json", `{"killed":false}`, nil)
+	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"killed":false}` {
+		t.Fatalf("%d %q", rec.Code, rec.Body.String())
+	}
+}
+
+// While this process is Trip-latched, an un-kill request is answered with
+// the effective state: 200 {"killed": true}, so the caller sees a mismatch
+// with its request (state unknown), never a false "running".
+func TestControlUnkillWhileLatchedAnswersKilled(t *testing.T) {
+	d := &rowDB{killed: true}
+	ks, _ := tokenstore.NewKillSwitch(d)
+	_ = ks.Trip(context.Background(), "t")
+	e := newControlEnv(t, fakeServiceVerifier{}, ks)
+	rec := e.do("PUT", allowedCred, "application/json", `{"killed":false}`, nil)
+	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"killed":true}` {
+		t.Fatalf("%d %q", rec.Code, rec.Body.String())
+	}
+	if err := ks.Check(context.Background()); !errors.Is(err, tokenstore.ErrKilled) {
+		t.Fatalf("latch cleared: %v", err)
+	}
+}

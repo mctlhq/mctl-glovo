@@ -19,22 +19,39 @@ type flipDB struct {
 	holdedOnce bool
 	entered    chan struct{}
 	lastBy     string
+	// beforeWrite runs inside SetKilled(true|false), before the write.
+	beforeWrite func()
+	// readAfterWrite makes ReadControl fail once a write has landed.
+	failReadAfterWrite bool
+	written            bool
+	// staleRead is the value the held first ReadControl returns instead of
+	// the row (a read that saw the row before the write).
+	staleRead *bool
 }
 
 func (f *flipDB) SetKilled(ctx context.Context, killed bool, by string) error {
 	f.mu.Lock()
 	fail := f.failSet
 	f.lastBy = by
+	hook := f.beforeWrite
+	f.beforeWrite = nil // one-shot
 	f.mu.Unlock()
 	if fail {
 		return errInjected
 	}
-	return f.DB.SetKilled(ctx, killed, by)
+	if hook != nil {
+		hook()
+	}
+	err := f.DB.SetKilled(ctx, killed, by)
+	f.mu.Lock()
+	f.written = true
+	f.mu.Unlock()
+	return err
 }
 
 func (f *flipDB) ReadControl(ctx context.Context) (bool, error) {
 	f.mu.Lock()
-	fail := f.failRead
+	fail := f.failRead || (f.failReadAfterWrite && f.written)
 	hold := f.holdFirst != nil && !f.holdedOnce
 	if hold {
 		f.holdedOnce = true
@@ -46,6 +63,9 @@ func (f *flipDB) ReadControl(ctx context.Context) (bool, error) {
 	v, err := f.DB.ReadControl(ctx)
 	if f.flipRead {
 		v = !v
+	}
+	if hold && f.staleRead != nil {
+		v = *f.staleRead
 	}
 	if hold {
 		close(f.entered)
@@ -267,5 +287,79 @@ func TestPostgresKillSwitchSetAuditRows(t *testing.T) {
 	}
 	if stored, err := k.Set(ctx, false, "control-api"); err == nil || !stored {
 		t.Fatalf("flip with no control row: %v %v", stored, err)
+	}
+}
+
+// A Check that starts after the first invalidate but reads the OLD row, and
+// returns only after the write landed, must not cache "running" under the
+// new generation (guards the second invalidate in Set).
+func TestKillSwitchReadStartedMidFlipDoesNotCacheOldRunning(t *testing.T) {
+	m := newMemDB()
+	if err := m.SetKilled(context.Background(), false, "t"); err != nil {
+		t.Fatal(err)
+	}
+	k, f := newFlip(t, m)
+	old := false // the old row: running
+	f.staleRead = &old
+	f.holdFirst = make(chan struct{})
+	f.entered = make(chan struct{})
+	res := make(chan error, 1)
+	f.beforeWrite = func() {
+		// Inside Set, after the first invalidate, before the write.
+		go func() { res <- k.Check(context.Background()) }()
+		<-f.entered // the Check has read the old "running" row
+	}
+	if stored, err := k.Set(context.Background(), true, "x"); err != nil || !stored {
+		t.Fatalf("kill: %v %v", stored, err)
+	}
+	close(f.holdFirst) // the Check returns after the write landed
+	<-res
+	if err := k.Check(context.Background()); !errors.Is(err, ErrKilled) {
+		t.Fatalf("old running answer cached across a kill: %v", err)
+	}
+}
+
+// If the un-kill commits but the read-back fails, the row is closed again
+// and an error row is audited, never left open unrecorded.
+func TestKillSwitchUnkillReadBackFailureReKills(t *testing.T) {
+	m := newMemDB()
+	m.killed = true // the store ships killed
+	k, f := newFlip(t, m)
+	f.failReadAfterWrite = true
+	if stored, err := k.Set(context.Background(), false, "x"); err == nil || !stored {
+		t.Fatalf("unkill with failed read-back: %v %v", stored, err)
+	}
+	f.failReadAfterWrite = false
+	if killed, err := m.ReadControl(context.Background()); err != nil || !killed {
+		t.Fatalf("row left open: %v %v", killed, err)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.audit) != 1 || m.audit[0].Event != "kill_off" || m.audit[0].Outcome != outcomeError {
+		t.Fatalf("audit: %+v", m.audit)
+	}
+}
+
+// While Trip-latched, an un-kill still writes the row and its audit record,
+// but Set answers the effective state (killed), never the stored "open".
+func TestKillSwitchUnkillWhileLatchedAnswersKilled(t *testing.T) {
+	m := newMemDB()
+	k, _ := newFlip(t, m)
+	_ = k.Trip(context.Background(), "t")
+	stored, err := k.Set(context.Background(), false, "x")
+	if err != nil || !stored {
+		t.Fatalf("unkill while latched: %v %v", stored, err)
+	}
+	if killed, _ := m.ReadControl(context.Background()); killed {
+		t.Fatal("the un-kill row write was skipped")
+	}
+	m.mu.Lock()
+	n := len(m.audit)
+	m.mu.Unlock()
+	if n != 1 {
+		t.Fatalf("audit rows: %d", n)
+	}
+	if err := k.Check(context.Background()); !errors.Is(err, ErrKilled) {
+		t.Fatalf("latch cleared by an un-kill: %v", err)
 	}
 }
