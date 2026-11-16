@@ -179,15 +179,8 @@ func readBody(w http.ResponseWriter, r *http.Request, want ...string) (map[strin
 		}
 		return nil, &refMalformed
 	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	var obj map[string]json.RawMessage
-	if err := dec.Decode(&obj); err != nil || obj == nil {
-		return nil, &refMalformed
-	}
-	if _, err := dec.Token(); err != io.EOF {
-		return nil, &refMalformed
-	}
-	if len(obj) != len(want) {
+	obj, ok := decodeObject(raw)
+	if !ok || len(obj) != len(want) {
 		return nil, &refMalformed
 	}
 	for _, k := range want {
@@ -196,6 +189,42 @@ func readBody(w http.ResponseWriter, r *http.Request, want ...string) (map[strin
 		}
 	}
 	return obj, nil
+}
+
+// decodeObject reads one JSON object whose top-level keys are all
+// distinct, followed by nothing. A repeated key is refused rather than
+// resolved: encoding/json would keep the last value silently.
+func decodeObject(raw []byte) (map[string]json.RawMessage, bool) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return nil, false
+	}
+	obj := map[string]json.RawMessage{}
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return nil, false
+		}
+		k, ok := t.(string)
+		if !ok {
+			return nil, false
+		}
+		if _, dup := obj[k]; dup {
+			return nil, false
+		}
+		var v json.RawMessage
+		if err := dec.Decode(&v); err != nil {
+			return nil, false
+		}
+		obj[k] = v
+	}
+	if t, err := dec.Token(); err != nil || t != json.Delim('}') {
+		return nil, false
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, false
+	}
+	return obj, true
 }
 
 func stringField(obj map[string]json.RawMessage, k string) (string, bool) {
@@ -214,8 +243,10 @@ func checkSchema(obj map[string]json.RawMessage, want string) bool {
 // --- client IP -----------------------------------------------------------
 
 // clientIP is the peer address, or, when the peer is a trusted proxy, the
-// right-most X-Forwarded-For entry that is not one. "" when nothing
-// parses; the store's rate limit refuses "".
+// right-most X-Forwarded-For entry that is not one. It is "" when an entry
+// does not parse, and when a trusted peer names no untrusted hop: falling
+// back to a proxy's own address would put every client behind it in one
+// rate-limit bucket. The store's rate limit refuses "".
 func (h *Handler) clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -242,9 +273,8 @@ func (h *Handler) clientIP(r *http.Request) string {
 		if !h.trusted(hop) {
 			return hop.String()
 		}
-		ip = hop
 	}
-	return ip.String()
+	return ""
 }
 
 func (h *Handler) trusted(ip netip.Addr) bool {

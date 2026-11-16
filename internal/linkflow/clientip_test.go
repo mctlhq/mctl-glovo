@@ -19,7 +19,9 @@ func TestClientIP(t *testing.T) {
 		{"trusted chain skipped", "10.1.2.3:1", []string{"198.51.100.1, 10.9.9.9"}, "198.51.100.1"},
 		{"two headers", "10.1.2.3:1", []string{"1.1.1.1", "198.51.100.2"}, "198.51.100.2"},
 		{"garbage hop fails closed", "10.1.2.3:1", []string{"not-an-ip"}, ""},
-		{"no XFF from trusted peer", "10.1.2.3:1", nil, "10.1.2.3"},
+		{"no XFF from trusted peer", "10.1.2.3:1", nil, ""},
+		{"only trusted hops", "10.1.2.3:1", []string{"10.9.9.9, 10.8.8.8"}, ""},
+		{"empty XFF from trusted peer", "10.1.2.3:1", []string{""}, ""},
 		{"mapped v4", "[::ffff:203.0.113.9]:1", nil, "203.0.113.9"},
 		{"bad remote", "nonsense", nil, ""},
 	} {

@@ -47,6 +47,8 @@ const (
 	maxAnswer     = 4 << 10
 )
 
+const usage = "usage: glovo-link [-server https://glovo.mctl.ai] [-session PATH | -session -]\nThe link code is read from stdin, never from arguments."
+
 // Fixed texts. stdout only ever carries msgLinked or one refusal.
 const (
 	msgLinked        = "linked"
@@ -95,10 +97,17 @@ func newHTTPClient(roots *tls.Config) *http.Client {
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer, hc *http.Client, home string) int {
 	fs := flag.NewFlagSet("glovo-link", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	// The flag package's own messages echo the offending argument, and a
+	// code may start with "-": nothing it writes is shown.
+	fs.SetOutput(io.Discard)
 	server := fs.String("server", defaultServer, "link server origin (https only)")
 	sessionPath := fs.String("session", "", "Glovo session file, or - for stdin (default ~/.glovo/session.json)")
 	if err := fs.Parse(args); err != nil {
+		_, _ = fmt.Fprintln(stderr, usage)
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		_, _ = fmt.Fprintln(stdout, msgArgs)
 		return 2
 	}
 	if fs.NArg() > 0 {
