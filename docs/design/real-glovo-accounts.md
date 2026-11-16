@@ -144,6 +144,20 @@ How the two fit together:
   - a kill switch that stops all outbound Glovo calls;
   - an alert when Glovo starts answering 403/429.
 
+### Decision update (owner, 2026-11-16): scale and parked gates
+
+- **Target scale is a small friends cohort of 10-20 people**, not a public
+  launch. `GLOVO_C2_CAPACITY` defaults to 10 and can be raised to 20 by
+  env; going past that is a new decision.
+- **The written legal read (R1 terms, R4 GDPR) and the formal security
+  review of the token store are parked**, not blockers for the code work
+  or for the C2-3 gate at this scale. Revisit both before any growth
+  beyond about 20 users. The risks themselves are unchanged and stay
+  accepted by the owner.
+- **Every technical safeguard stays**: per-pid isolation tests, the
+  recorded consent, per-pid and global caps, the kill switch, the encrypted
+  token store, and no checkout, payment or order placement.
+
 ### Phases
 
 | Phase | What | Gate |
