@@ -188,6 +188,22 @@ func uploadBody(code string, sess map[string]any) string {
 	return string(b)
 }
 
+func mustJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+// A repeated key is refused on preview too, before the rate limit.
+func TestLinkPreviewRefusesDuplicateKeys(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	code := e.issue("tok-owner")
+	body := `{"schema":"` + linkflow.PreviewSchema + `","code":"wrong","code":"` + code + `"}`
+	wantRefusal(t, e.do(jsonReq("/link/preview", body)), 400, "malformed_request")
+}
+
 func (e *env) preview(code string) resp { return e.do(jsonReq("/link/preview", previewBody(code))) }
 
 func (e *env) upload(code string, sess map[string]any) resp {
@@ -447,6 +463,9 @@ func TestLinkUploadBodyChecksComeFirst(t *testing.T) {
 		{"code not a string", `{"schema":"` + linkflow.UploadSchema + `","code":1,"session":{"a":"b"}}`, "application/json", 400, "malformed_request"},
 		{"session not an object", `{"schema":"` + linkflow.UploadSchema + `","code":"` + code + `","session":"s"}`, "application/json", 400, "malformed_request"},
 		{"array", `[]`, "application/json", 400, "malformed_request"},
+		{"duplicate code key", `{"schema":"` + linkflow.UploadSchema + `","code":"` + code + `","code":"` + code + `","session":` + mustJSON(session("dup")) + `}`, "application/json", 400, "malformed_request"},
+		{"duplicate schema key", `{"schema":"x","schema":"` + linkflow.UploadSchema + `","code":"` + code + `","session":` + mustJSON(session("dup")) + `}`, "application/json", 400, "malformed_request"},
+		{"unclosed object", `{"schema":"` + linkflow.UploadSchema + `","code":"` + code + `","session":` + mustJSON(session("open")), "application/json", 400, "malformed_request"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

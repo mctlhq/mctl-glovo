@@ -158,6 +158,33 @@ func TestCodeNeverFromArgv(t *testing.T) {
 	}
 }
 
+// A code that starts with "-" parses as a flag. The flag package's own
+// error text would echo it; none of it may reach stdout or stderr.
+func TestDashCodeNeverEchoed(t *testing.T) {
+	f := newFakeServer(t)
+	p := writeSession(t, sessionJSON, 0o600)
+	dash := "-" + testCode[1:]
+	for _, args := range [][]string{{dash}, {"-session", p, dash}, {dash + "=x"}, {"-" + dash}} {
+		r := runHelper(t, f, args, testCode+"\ny\n")
+		if r.code != 2 || r.stdout != msgArgs+"\n" {
+			t.Fatalf("args %v: %d %q", args, r.code, r.stdout)
+		}
+		if strings.Contains(r.stdout+r.stderr, dash[1:]) {
+			t.Fatalf("args %v: the code reached the output: %q", args, r.stderr)
+		}
+		if r.stderr != usage+"\n" {
+			t.Fatalf("args %v: stderr %q, want the fixed usage", args, r.stderr)
+		}
+	}
+	if pv, up := f.counts(); pv != 0 || up != 0 {
+		t.Fatalf("network calls: %d previews, %d uploads", pv, up)
+	}
+	var out, errb bytes.Buffer
+	if code := run([]string{"-h"}, strings.NewReader(""), &out, &errb, f.client(), t.TempDir()); code != 0 || errb.String() != usage+"\n" || out.Len() != 0 {
+		t.Fatalf("-h: %d %q %q", code, out.String(), errb.String())
+	}
+}
+
 // Nor from the environment: with an empty stdin there is no code.
 func TestCodeNeverFromEnv(t *testing.T) {
 	f := newFakeServer(t)
