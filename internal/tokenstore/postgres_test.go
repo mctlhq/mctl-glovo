@@ -5,16 +5,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"os"
 	"testing"
 	"time"
 )
 
-// These run only against a real Postgres (TOKENSTORE_TEST_PG_DSN). CI has
-// none, so in CI the SQL is exercised only through memDB's model of it.
+// These run only against a real Postgres (TOKENSTORE_TEST_PG_DSN). CI runs
+// a postgres:17 service and sets TOKENSTORE_TEST_PG_REQUIRED, so there they
+// cannot skip.
 func pgOnly(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := os.Getenv(pgDSNEnv)
+	dsn := pgDSN(t)
 	if dsn == "" {
 		t.Skip(pgDSNEnv + " not set")
 	}

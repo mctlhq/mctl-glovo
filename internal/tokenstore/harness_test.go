@@ -14,11 +14,28 @@ import (
 	"github.com/mctlhq/mctl-glovo/internal/glovoapi"
 )
 
-// pgDSNEnv names a Postgres the integration runs may use. CI has no
-// Postgres, so there the suite runs against memDB only; set it locally
-// (any database the user may CREATE SCHEMA in) to run every forEachDB test
-// against the real SQL as well.
+// pgDSNEnv names a Postgres the integration runs use: any database the
+// user may CREATE SCHEMA in. With it, every forEachDB test runs against the
+// real SQL as well as memDB, and the Postgres-only tests run. Without it
+// they skip, which is fine locally.
 const pgDSNEnv = "TOKENSTORE_TEST_PG_DSN"
+
+// pgRequiredEnv, when set (CI sets it), makes a missing DSN a failure
+// rather than a skip. CI must never pass because it could not reach the
+// database: "could not observe" is not "observed clean". An unreachable
+// database with the DSN set already fails in openPostgres.
+const pgRequiredEnv = "TOKENSTORE_TEST_PG_REQUIRED"
+
+// pgDSN returns the DSN, failing the test when Postgres is required but no
+// DSN is configured.
+func pgDSN(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv(pgDSNEnv)
+	if dsn == "" && os.Getenv(pgRequiredEnv) != "" {
+		t.Fatalf("%s is set but %s is empty: the Postgres tests cannot run", pgRequiredEnv, pgDSNEnv)
+	}
+	return dsn
+}
 
 type backend struct {
 	name string
@@ -35,7 +52,7 @@ func backends(t *testing.T) []backend {
 		}
 		return m, m, swap
 	}}}
-	if dsn := os.Getenv(pgDSNEnv); dsn != "" {
+	if dsn := pgDSN(t); dsn != "" {
 		out = append(out, backend{name: "postgres", open: func(t *testing.T) (DB, *memDB, func(a, b string)) {
 			db := openPostgres(t, dsn)
 			p, err := NewPostgres(context.Background(), db)
@@ -63,7 +80,8 @@ func openPostgres(t *testing.T, dsn string) *sql.DB {
 		t.Fatal(err)
 	}
 	if _, err := admin.Exec(`CREATE SCHEMA ` + schema); err != nil {
-		t.Fatal(err)
+		// Unreachable or refused: a failure, never a skip.
+		t.Fatalf("postgres from %s unusable: %v", pgDSNEnv, err)
 	}
 	t.Cleanup(func() {
 		_, _ = admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`)

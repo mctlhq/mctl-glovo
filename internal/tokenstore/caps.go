@@ -52,6 +52,10 @@ type window struct {
 	limit  int
 	period time.Duration
 	hits   map[string][]time.Time
+	// nextSweep is when sweepLocked next walks every key. Pruning per
+	// request only reaches the key being asked about, so a key seen once
+	// would otherwise stay in the map forever.
+	nextSweep time.Time
 }
 
 func newWindow(limit int, period time.Duration) *window {
@@ -67,8 +71,25 @@ func (w *window) pruneLocked(key string, now time.Time) bool {
 	for i < len(h) && !h[i].After(cut) {
 		i++
 	}
-	w.hits[key] = h[i:]
-	return len(w.hits[key]) < w.limit
+	if h = h[i:]; len(h) == 0 {
+		// No live hits: drop the key rather than keep an empty entry.
+		delete(w.hits, key)
+		return w.limit > 0
+	}
+	w.hits[key] = h
+	return len(h) < w.limit
+}
+
+// sweepLocked prunes every key at most once per period, which bounds the
+// map by the keys seen within the last two periods. w.mu must be held.
+func (w *window) sweepLocked(now time.Time) {
+	if now.Before(w.nextSweep) {
+		return
+	}
+	for key := range w.hits {
+		w.pruneLocked(key, now)
+	}
+	w.nextSweep = now.Add(w.period)
 }
 
 // capHit names one window and the key counted in it.
@@ -92,6 +113,9 @@ func allowAll(now time.Time, hits ...capHit) int {
 			h.w.mu.Unlock()
 		}
 	}()
+	for _, h := range hits {
+		h.w.sweepLocked(now)
+	}
 	for i, h := range hits {
 		if !h.w.pruneLocked(h.key, now) {
 			return i

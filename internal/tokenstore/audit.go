@@ -43,9 +43,6 @@ func requestID(ctx context.Context) string {
 	return id
 }
 
-// audit writes the row and the log line. The log line carries the link id
-// but not the pid: after an erasure (Q8) the pid must not survive in the
-// audit trail, and Loki lines cannot be rewritten.
 // cleanupTimeout bounds the work that must finish even when the caller's
 // context is already done: audit rows, lease releases, safety writes and
 // the persisting of a refresh Glovo has already accepted.
@@ -57,6 +54,9 @@ func detached(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
 }
 
+// audit writes the row and the log line. The log line carries the link id
+// but not the pid: after an erasure (Q8) the pid must not survive in the
+// audit trail, and Loki lines cannot be rewritten.
 func (s *store) audit(ctx context.Context, ev AuditEvent) error {
 	ev.RequestID = requestID(ctx)
 	if ev.Actor == "" {
