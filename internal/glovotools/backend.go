@@ -28,9 +28,11 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/mctlhq/mctl-glovo/internal/authn"
 	"github.com/mctlhq/mctl-glovo/internal/childmcp"
 	"github.com/mctlhq/mctl-glovo/internal/glovoapi"
 	"github.com/mctlhq/mctl-glovo/internal/glovologic"
+	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
 )
 
 //go:embed tooldefs.json
@@ -71,6 +73,24 @@ type Config struct {
 	Sleep glovologic.Sleep
 	// ExtraBlocked are exact tool names refused on top of childmcp.Blocked.
 	ExtraBlocked []string
+	// Clients switches the backend to hosted mode (C2-2): there is no
+	// session file, and every call runs on the client Clients returns for
+	// the pid of the verified principal in the call's context. Exactly one
+	// of SessionPath and Clients must be set. In hosted mode ClientOptions
+	// must be empty (the source builds the clients) and the history cache is
+	// off: its file is shared by whoever uses the directory, which is the
+	// wrong shape for a multi-user process.
+	Clients ClientSource
+}
+
+// ClientSource resolves the hosted Glovo client of one pid.
+// tokenstore.Sessions implements it.
+//
+// The pid is a tokenstore.PID, whose only constructor from outside that
+// package is PIDFrom over a verified principal: a tool argument cannot
+// name another user's session.
+type ClientSource interface {
+	Client(ctx context.Context, pid tokenstore.PID) (*glovoapi.Client, error)
 }
 
 type handler func(ctx context.Context, c *glovoapi.Client, a args) (any, error)
@@ -107,12 +127,22 @@ type Backend struct {
 // by the validator, if a served name is not a known glovo-skill tool or is
 // blocked, or if a tool has no handler.
 func New(cfg Config) (*Backend, error) {
-	if cfg.SessionPath == "" {
-		return nil, errors.New("glovotools: SessionPath is required")
-	}
-	c, err := glovoapi.New(cfg.SessionPath, cfg.ClientOptions...)
-	if err != nil {
-		return nil, err
+	var c *glovoapi.Client
+	switch {
+	case cfg.Clients != nil && cfg.SessionPath != "":
+		return nil, errors.New("glovotools: SessionPath and Clients are mutually exclusive")
+	case cfg.Clients != nil:
+		if len(cfg.ClientOptions) > 0 {
+			return nil, errors.New("glovotools: ClientOptions do not apply in hosted mode")
+		}
+	case cfg.SessionPath == "":
+		return nil, errors.New("glovotools: SessionPath or Clients is required")
+	default:
+		var err error
+		c, err = glovoapi.New(cfg.SessionPath, cfg.ClientOptions...)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var defs []toolDef
 	if err := json.Unmarshal(toolDefsJSON, &defs); err != nil {
@@ -216,6 +246,17 @@ func (b *Backend) Call(ctx context.Context, name string, rawArgs map[string]any)
 	b.mu.Unlock()
 	defer b.inflight.Done()
 
+	// Hosted mode: the caller is the verified principal, nobody else. This
+	// runs before argument validation, so an unauthenticated call learns
+	// nothing about the tools.
+	var pid tokenstore.PID
+	if b.cfg.Clients != nil {
+		pid = tokenstore.PIDFrom(authn.FromContext(ctx))
+		if pid == (tokenstore.PID{}) {
+			return nil, errUnauthenticated
+		}
+	}
+
 	argv := map[string]any{}
 	for k, v := range rawArgs {
 		argv[k] = v
@@ -231,11 +272,33 @@ func (b *Backend) Call(ctx context.Context, name string, rawArgs map[string]any)
 	// A file that cannot be read leaves the client signed out; the tool then
 	// fails with the upstream auth message, and glovo_auth_status reports
 	// session_error.
-	_ = b.client.Reload()
-	data, err := t.handler(ctx, b.client, args(argv))
+	client := b.client
+	if b.cfg.Clients != nil {
+		var err error
+		client, err = b.cfg.Clients.Client(ctx, pid)
+		if err != nil {
+			return hostedRefusal(ctx, err)
+		}
+		if client == nil {
+			return nil, childmcp.ErrUnavailable
+		}
+	} else {
+		_ = b.client.Reload()
+	}
+	data, err := t.handler(ctx, client, args(argv))
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, errors.Join(cerr, err)
+		}
+		if b.cfg.Clients != nil {
+			// Store sentinels also surface from inside the handler (request
+			// gate, refresh coordinator): same answers as at lookup time.
+			if res, ok := hostedState(err); ok {
+				return res, nil
+			}
+			if isStoreFailure(err) {
+				return nil, childmcp.ErrUnavailable
+			}
 		}
 		return mcp.NewToolResultError(errorText(err)), nil
 	}
@@ -265,7 +328,11 @@ func (b *Backend) Ready(context.Context) error {
 
 // Reload re-reads the session file now. Every call re-reads it anyway; this
 // is what the reload marker triggers.
-func (b *Backend) Reload() { _ = b.client.Reload() }
+func (b *Backend) Reload() {
+	if b.client != nil {
+		_ = b.client.Reload()
+	}
+}
 
 // Drain refuses new calls and waits for the ones in flight.
 func (b *Backend) Drain(ctx context.Context) error {
@@ -283,5 +350,8 @@ func (b *Backend) Drain(ctx context.Context) error {
 }
 
 func (b *Backend) historyCache() glovologic.HistoryCache {
+	if b.cfg.Clients != nil {
+		return glovologic.HistoryCache{Now: b.cfg.Now} // empty Dir: cache off
+	}
 	return glovologic.HistoryCache{Dir: filepath.Dir(b.cfg.SessionPath), Now: b.cfg.Now}
 }
