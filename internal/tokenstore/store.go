@@ -375,6 +375,8 @@ type pendingWrite struct {
 	linkID, writeID string
 	base            int64
 	session         glovoapi.Session
+	// keepRefreshState marks a write that is not a refresh (location).
+	keepRefreshState bool
 }
 
 // updateFn returns the next session and whether it differs from cur.
@@ -467,12 +469,15 @@ func publicRefreshErr(err error, counted bool) error {
 // in Postgres, and a pendingWrite when Glovo rotated the session but the
 // write could not be confirmed.
 func (s *store) update(ctx context.Context, pid PID, linkID string, actor string, fn updateFn) (glovoapi.Session, int64, *pendingWrite, error) {
-	return s.updateWith(ctx, pid, linkID, actor, "rotated", fn)
+	return s.updateWith(ctx, pid, linkID, actor, "rotated", false, fn)
 }
 
 // updateWith is update with the audit reason of a successful write: a
-// location change must not be recorded as a token rotation.
-func (s *store) updateWith(ctx context.Context, pid PID, linkID string, actor string, okReason string, fn updateFn) (glovoapi.Session, int64, *pendingWrite, error) {
+// location change must not be recorded as a token rotation. nonRefresh marks
+// such a write: it leaves refresh_failures and last_refresh_at alone, and
+// when its commit is unconfirmed it releases the row lease, because nothing
+// retries it (a refresh keeps the lease pinned for persistPending).
+func (s *store) updateWith(ctx context.Context, pid PID, linkID string, actor string, okReason string, nonRefresh bool, fn updateFn) (glovoapi.Session, int64, *pendingWrite, error) {
 	if !pid.valid() {
 		return nil, 0, nil, ErrInvalidPID
 	}
@@ -526,7 +531,7 @@ func (s *store) updateWith(ctx context.Context, pid PID, linkID string, actor st
 		return cur, row.Version, nil, nil
 	}
 
-	p := &pendingWrite{linkID: row.LinkID, writeID: newID("glw_"), base: row.Version, session: next}
+	p := &pendingWrite{linkID: row.LinkID, writeID: newID("glw_"), base: row.Version, session: next, keepRefreshState: nonRefresh}
 	v, err := s.commit(ctx, pid, p)
 	switch {
 	case err == nil:
@@ -545,6 +550,9 @@ func (s *store) updateWith(ctx context.Context, pid PID, linkID string, actor st
 	default:
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "persist_retry", Outcome: outcomeError, Reason: "unpersisted", Actor: actor})
 		s.log.LogAttrs(ctx, slog.LevelError, "tokenstore", slog.String("alert", "GlovoSessionUnpersisted"), slog.String("link_id", row.LinkID))
+		if nonRefresh {
+			release(false, "")
+		}
 		return next, row.Version, p, nil
 	}
 }
@@ -560,7 +568,7 @@ func (s *store) commit(ctx context.Context, pid PID, p *pendingWrite) (int64, er
 	if err != nil {
 		return 0, err
 	}
-	w := LeaseCommit{PID: pid.id, LinkID: p.linkID, BaseVersion: p.base, Ciphertext: ct, KeyVersion: kv, WriteID: p.writeID}
+	w := LeaseCommit{PID: pid.id, LinkID: p.linkID, BaseVersion: p.base, Ciphertext: ct, KeyVersion: kv, WriteID: p.writeID, KeepRefreshState: p.keepRefreshState}
 	var last error
 	for attempt := 0; attempt < s.commitRetries; attempt++ {
 		if attempt > 0 {

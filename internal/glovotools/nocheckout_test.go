@@ -105,9 +105,6 @@ func TestForbiddenWordsCatchCheckoutNames(t *testing.T) {
 				found = found || w == f
 			}
 		}
-		if strings.Contains(n, "payment") {
-			found = true
-		}
 		if !hit || !found {
 			t.Errorf("%s: Blocked=%v forbiddenWords=%v", n, hit, found)
 		}

@@ -122,6 +122,9 @@ func (l *Lease) coordinate(ctx context.Context, held glovoapi.Session, exchange 
 		// Rotating again before the last rotation is stored would spend
 		// the only copy of the newest refresh token.
 		if err := l.persistPending(ctx); err != nil {
+			if errors.Is(err, errPendingConflict) {
+				return nil, ErrSuperseded
+			}
 			return nil, err
 		}
 	}
@@ -152,6 +155,9 @@ func (l *Lease) coordinate(ctx context.Context, held glovoapi.Session, exchange 
 func (l *Lease) writeSession(ctx context.Context, apply func(glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {
 	if l.Unpersisted() {
 		if err := l.persistPending(ctx); err != nil {
+			if errors.Is(err, errPendingConflict) {
+				return nil, ErrSuperseded
+			}
 			return nil, err
 		}
 	}
@@ -159,7 +165,7 @@ func (l *Lease) writeSession(ctx context.Context, apply func(glovoapi.Session) (
 	// failed refresh: it must not reach update's failure accounting, which
 	// counts toward needs_relink. It is held aside and the row is left as is.
 	var rejected error
-	next, ver, p, err := l.store.updateWith(ctx, l.pid, l.LinkID(), actorUser, "location_set", func(_ context.Context, cur glovoapi.Session) (glovoapi.Session, bool, error) {
+	next, ver, p, err := l.store.updateWith(ctx, l.pid, l.LinkID(), actorUser, "location_set", true, func(_ context.Context, cur glovoapi.Session) (glovoapi.Session, bool, error) {
 		n, err := apply(cur)
 		if err == nil {
 			_, err = checkSession(n)
