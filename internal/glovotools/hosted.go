@@ -45,6 +45,10 @@ func hostedState(err error) (*mcp.CallToolResult, bool) {
 		text = "Your Glovo account is not linked. Link it at " + linkHint + "."
 	case errors.Is(err, tokenstore.ErrNeedsRelink):
 		text = "Your Glovo session expired. Link your account again at " + linkHint + "."
+	case errors.Is(err, tokenstore.ErrSessionRefused):
+		// The refresh coordinator can return this mid-call: Glovo refused
+		// the session, so only a new link helps.
+		text = "Glovo refused your session. Link your account again at " + linkHint + "."
 	case errors.Is(err, tokenstore.ErrSuspended):
 		text = "Your Glovo link is suspended."
 	case errors.Is(err, tokenstore.ErrKilled):
@@ -67,10 +71,5 @@ func isStoreFailure(err error) bool {
 	return errors.Is(err, tokenstore.ErrUnavailable) ||
 		errors.Is(err, tokenstore.ErrIntegrity) ||
 		errors.Is(err, tokenstore.ErrSuperseded) ||
-		errors.Is(err, tokenstore.ErrInvalidPID) ||
-		// A refresh whose result fails validation comes back from the
-		// refresh coordinator mid-call. It is no user state (the user cannot
-		// fix it by relinking), so it is unavailable, never a tool error
-		// that would echo the sentinel text.
-		errors.Is(err, tokenstore.ErrSessionRefused)
+		errors.Is(err, tokenstore.ErrInvalidPID)
 }

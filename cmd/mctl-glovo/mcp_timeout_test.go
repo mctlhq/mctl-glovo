@@ -59,7 +59,7 @@ func TestMCPSlowBodyIsCut(t *testing.T) {
 	e := newMCPEnvWith(t, nil, func(d *mcpDeps) { d.BodyReadTimeout = 150 * time.Millisecond },
 		startProdServer(time.Minute, time.Minute))
 	pr, pw := io.Pipe()
-	defer pw.Close()
+	defer func() { _ = pw.Close() }()
 	req, _ := http.NewRequest(http.MethodPost, e.ts.URL+"/mcp", pr)
 	req.Header.Set("Authorization", "Bearer tok-a")
 	req.Header.Set("Content-Type", "application/json")
@@ -133,7 +133,8 @@ func TestHMACWho(t *testing.T) {
 	}
 	a, _ := newHMACWho([]byte(strings.Repeat("a", 32)))
 	b, _ := newHMACWho([]byte(strings.Repeat("b", 32)))
-	if a("prn_X") != a("prn_X") {
+	first, second := a("prn_X"), a("prn_X")
+	if first != second {
 		t.Fatal("not stable")
 	}
 	if a("prn_X") == a("prn_Y") || a("prn_X") == b("prn_X") {
