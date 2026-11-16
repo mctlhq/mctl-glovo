@@ -355,5 +355,5 @@ func (g *Gateway) handleLanding(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	_, _ = w.Write(page)
+	_, _ = w.Write(page) //nolint:gosec // G705: page is html/template output; lang is one of landingLangs (pickLang validates it)
 }

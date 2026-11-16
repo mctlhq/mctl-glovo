@@ -200,7 +200,8 @@ func cssRule(css, selector string) string {
 		return ""
 	}
 	rest := css[i+len(selector)+1:]
-	return rest[:strings.Index(rest, "}")]
+	body, _, _ := strings.Cut(rest, "}")
+	return body
 }
 
 // The focused skip link must stack above the sticky header, which
