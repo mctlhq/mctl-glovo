@@ -41,6 +41,9 @@ var toolDefsJSON []byte
 //go:embed shopping-guide.md
 var shoppingGuide string
 
+//go:embed shopping-guide-readonly.md
+var shoppingGuideReadOnly string
+
 // LoginRefusal is the glovo_login result in the native backend. Signing in
 // needs a browser on the owner's machine, which a gateway call must never
 // start.
@@ -99,6 +102,9 @@ var BasketWriteTools = []string{"glovo_add_to_basket", "glovo_set_quantity", "gl
 // a read-only hosted backend.
 const BasketWritesRefusal = "Basket changes are not enabled in this deployment. Basket tools are read-only here."
 
+// IsBasketWriteTool reports whether name is one of BasketWriteTools.
+func IsBasketWriteTool(name string) bool { return isBasketWriteTool(name) }
+
 func isBasketWriteTool(name string) bool {
 	for _, n := range BasketWriteTools {
 		if n == name {
@@ -110,6 +116,20 @@ func isBasketWriteTool(name string) bool {
 
 // readOnly reports a hosted backend that does not serve basket writes.
 func (b *Backend) readOnly() bool { return b.cfg.Clients != nil && !b.cfg.BasketWrites }
+
+// ReadOnlyNextStep is the next_step of a reorder plan on a read-only hosted
+// backend: it must not name a tool that is not served.
+const ReadOnlyNextStep = "Inspect each selected candidate with glovo_get_product and reselect required options. This service cannot change your basket: add the items in the Glovo app. This plan never places an order."
+
+// readOnlyDescriptions replace the upstream descriptions that point at
+// basket tools, on a read-only hosted backend. Everything else is untouched.
+var readOnlyDescriptions = map[string]string{
+	"glovo_get_shopping_guide":      "Return the Glovo shopping playbook for these read-only tools.",
+	"glovo_login":                   "Not available here: link your Glovo account at https://glovo.mctl.ai/link.",
+	"glovo_get_store_order_options": "Read delivery minimums, surcharges, restrictions, public store information, and similar stores. No basket changes, no checkout or order placement.",
+	"glovo_preview_reorder":         "Read one past order and report its lines and whether Glovo allows a reorder. This never mutates the basket or places an order.",
+	"glovo_plan_reorder":            "Resolve past order lines against authenticated Easy Reorder and current store search results. Read-only: this service cannot change a basket.",
+}
 
 // ClientSource resolves the hosted Glovo client of one pid.
 // tokenstore.Sessions implements it.
@@ -209,6 +229,9 @@ func New(cfg Config) (*Backend, error) {
 			} else {
 				return nil, fmt.Errorf("glovotools: no handler for %q", d.Name)
 			}
+		}
+		if desc, ok := readOnlyDescriptions[d.Name]; ok && b.readOnly() {
+			d.Description = desc
 		}
 		t := &tool{def: d, schema: s, handler: h}
 		b.tools = append(b.tools, t)

@@ -372,6 +372,7 @@ type intent struct {
 	knownLikedOnly, includeGoogle, includeGoogleReviews                  bool
 	noveltyTolerance                                                     float64
 	maxChoices                                                           int
+	readOnly                                                             bool
 }
 
 func capStores(list []*candidateStore, n int) []*candidateStore {
@@ -639,7 +640,11 @@ func reasonFor(s *candidateStore, product Object, in intent) []string {
 	}
 	reasons = append(reasons, "Glovo currently exposes "+jsString(product["name"])+" at "+price+".")
 	if n, _ := product["required_option_groups"].(int); n != 0 {
-		reasons = append(reasons, strconv.Itoa(n)+" required option group(s) must be selected before a basket add.")
+		tail := " required option group(s) must be selected before a basket add."
+		if in.readOnly {
+			tail = " required option group(s) must be selected in the Glovo app before ordering."
+		}
+		reasons = append(reasons, strconv.Itoa(n)+tail)
 	}
 	if in.itemMode == "different" {
 		reasons = append(reasons, "The resolver excluded current Easy Reorder names where that authenticated carousel was available.")
@@ -766,6 +771,9 @@ type SessionState struct {
 // SuggestOptions configure getSuggestions. With neither GoogleProvider nor
 // GoogleAPIKey, Google evidence is reported as not configured.
 type SuggestOptions struct {
+	// ReadOnly words the reasons for a deployment that serves no basket
+	// tool: it does not tell the user to "add to the basket".
+	ReadOnly       bool
 	Cache          HistoryCache
 	GoogleAPIKey   string
 	GoogleProvider GoogleProvider
@@ -842,6 +850,7 @@ func GetSuggestions(ctx context.Context, src SuggestionSource, sess SessionState
 	if err != nil {
 		return nil, err
 	}
+	in.readOnly = o.ReadOnly
 	if !sess.SignedIn {
 		return nil, errors.New("suggestions require an authenticated Glovo session for order history")
 	}

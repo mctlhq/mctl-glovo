@@ -90,7 +90,7 @@ var ErrBasketWritesDisabled = errors.New("glovoapi: basket writes are disabled f
 func WithBasketWrites() Option { return func(c *Client) { c.basketWrites = true } }
 
 // basketPathRe matches a baskets resource path, query excluded.
-var basketPathRe = regexp.MustCompile(`(^|/)baskets(/|$)`)
+var basketPathRe = regexp.MustCompile(`(?i)(^|/)baskets(/|$)`)
 
 // checkBasketWrite refuses a non-GET request to a baskets path on a hosted
 // client without WithBasketWrites. The path is matched after path.Clean so
@@ -103,6 +103,14 @@ func (c *Client) checkBasketWrite(method, p string) error {
 	raw := strings.SplitN(p, "?", 2)[0]
 	if basketPathRe.MatchString(raw) || basketPathRe.MatchString(path.Clean(raw)) {
 		return ErrBasketWritesDisabled
+	}
+	// By data: a request that matches a basket entry of the allowlist is a
+	// basket mutation whatever its path looks like.
+	cleaned := path.Clean(raw)
+	for _, a := range mutationAllowlist {
+		if a.basket && a.method == method && (a.path.MatchString(raw) || a.path.MatchString(cleaned)) {
+			return ErrBasketWritesDisabled
+		}
 	}
 	return nil
 }

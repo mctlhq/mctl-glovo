@@ -92,7 +92,7 @@ func checkPinnedToolSet(t *testing.T, e *hostedEnv, wantNames []string) {
 	}
 	// The MCP surface (ServerTools) is the same set as Names.
 	var served []string
-	for _, st := range e.b.ServerTools() {
+	for _, st := range e.b.ServerTools() { //nolint:gocritic // test loop, copy is irrelevant
 		served = append(served, st.Tool.Name)
 	}
 	sort.Strings(served)

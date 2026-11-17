@@ -110,7 +110,11 @@ type mcpDeps struct {
 	// Glovo request. See glovotools.Config.BasketWrites; enabling it is not
 	// an approval.
 	BasketWrites bool
-	Version      string
+	// BasketApprover is the approval step in front of every basket write.
+	// BasketWrites without it is a startup error, and the write tools never
+	// run without it being asked first (approvalMiddleware).
+	BasketApprover basketApprover
+	Version        string
 	// CallTimeout bounds one tool call (default hostedCallTimeout) and
 	// BodyReadTimeout one POST body read (default hostedBodyReadTimeout).
 	// Tests shorten them.
@@ -150,6 +154,9 @@ func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
 	if version == "" {
 		version = "dev"
 	}
+	if d.BasketWrites && d.BasketApprover == nil {
+		return nil, errors.New("mcp routes: basket writes need an approval gate (BasketApprover); none is configured")
+	}
 	backend, err := glovotools.New(glovotools.Config{Clients: d.Clients, BasketWrites: d.BasketWrites})
 	if err != nil {
 		return nil, err
@@ -163,6 +170,7 @@ func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
 		server.WithInstructions(instructions),
 		server.WithRecovery(),
 		server.WithToolHandlerMiddleware(auditMiddleware(d.Audit, d.Who, d.Kill, d.KillTimeout, d.Admit, d.CallTimeout)),
+		server.WithToolHandlerMiddleware(approvalMiddleware(d.BasketApprover)),
 	)
 	backend.Install(srv)
 	streamable := gateway.NewStreamable(srv, log.With("component", "mcp"))
@@ -246,6 +254,29 @@ func (c *clearOnDone) Read(p []byte) (int, error) {
 // could not run (unavailable, timeout) or the tool returned an isError
 // result; the result text, which for a hosted refusal is a fixed sentence,
 // is deliberately not parsed here.
+// basketApprover decides whether one basket write by one principal may run.
+// An error refuses it. There is no implementation yet: it is the seam of the
+// approval step (mctl-api#1011/#1012).
+type basketApprover func(ctx context.Context, pid, tool string, args map[string]any) error
+
+// approvalMiddleware asks the approver before every basket write tool. It
+// sits inside the audit middleware, so the kill switch and the admitter have
+// run. Fail closed: no approver, or an approver error, refuses. Reads pass.
+func approvalMiddleware(approve basketApprover) server.ToolHandlerMiddleware {
+	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if glovotools.IsBasketWriteTool(req.Params.Name) {
+				pid := tokenstore.PIDFrom(authn.FromContext(ctx))
+				approved := approve != nil && approve(ctx, pid.String(), req.Params.Name, req.GetArguments()) == nil
+				if !approved {
+					return mcp.NewToolResultError(glovotools.BasketWritesRefusal), nil
+				}
+			}
+			return next(ctx, req)
+		}
+	}
+}
+
 func auditMiddleware(audit *slog.Logger, who auditWho, kill killGate, killTimeout time.Duration, admit callAdmitter, callTimeout time.Duration) server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (res *mcp.CallToolResult, err error) {

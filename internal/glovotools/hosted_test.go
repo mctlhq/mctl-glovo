@@ -97,11 +97,6 @@ func (s *fakeSource) askedPIDs() []string {
 	return append([]string(nil), s.asked...)
 }
 
-func hostedClient(t *testing.T, base, owner string) *glovoapi.Client {
-	t.Helper()
-	return hostedClientGate(t, base, owner, func(context.Context) error { return nil })
-}
-
 func hostedClientGate(t *testing.T, base, owner string, gate func(context.Context) error, extra ...glovoapi.Option) *glovoapi.Client {
 	t.Helper()
 	noRefresh := func(context.Context, glovoapi.Session, func(context.Context, glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {

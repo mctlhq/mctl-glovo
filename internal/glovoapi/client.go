@@ -621,16 +621,21 @@ func decodeBody(resp *http.Response) (io.ReadCloser, error) {
 // mutationAllowlist is every non-GET request this client may send. Anything
 // else, in particular any order, checkout or payment endpoint, is refused
 // before it reaches the network.
+//
+// basket marks the entries that change a basket. A hosted client without
+// WithBasketWrites refuses exactly these (checkBasketWrite), by data and not
+// only by path shape.
 var mutationAllowlist = []struct {
 	method string
 	path   *regexp.Regexp
+	basket bool
 }{
-	{http.MethodPost, regexp.MustCompile(`^/oauth/refresh$`)},
-	{http.MethodPost, regexp.MustCompile(`^/v1/web/store_wall/(category/[^/?]+|search)(\?|$)`)},
-	{http.MethodPost, regexp.MustCompile(`^/v4/stores/[^/?]+/addresses/[^/?]+/products/[^/?]+/view(\?|$)`)},
-	{http.MethodPost, regexp.MustCompile(`^/v1/authenticated/customers/[^/?]+/baskets$`)},
-	{http.MethodPut, regexp.MustCompile(`^/v1/authenticated/customers/[^/?]+/baskets/[^/?]+/products$`)},
-	{http.MethodPatch, regexp.MustCompile(`^/v1/authenticated/customers/[^/?]+/baskets/[^/?]+/products/quantity$`)},
+	{http.MethodPost, regexp.MustCompile(`^/oauth/refresh$`), false},
+	{http.MethodPost, regexp.MustCompile(`^/v1/web/store_wall/(category/[^/?]+|search)(\?|$)`), false},
+	{http.MethodPost, regexp.MustCompile(`^/v4/stores/[^/?]+/addresses/[^/?]+/products/[^/?]+/view(\?|$)`), false},
+	{http.MethodPost, regexp.MustCompile(`^/v1/authenticated/customers/[^/?]+/baskets$`), true},
+	{http.MethodPut, regexp.MustCompile(`^/v1/authenticated/customers/[^/?]+/baskets/[^/?]+/products$`), true},
+	{http.MethodPatch, regexp.MustCompile(`^/v1/authenticated/customers/[^/?]+/baskets/[^/?]+/products/quantity$`), true},
 }
 
 // ErrUnsafePath is returned for a request path with an empty, "." or ".."

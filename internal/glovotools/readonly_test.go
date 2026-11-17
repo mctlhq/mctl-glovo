@@ -1,6 +1,8 @@
 package glovotools
 
 import (
+	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -19,7 +21,7 @@ var basketWriteArgs = map[string]map[string]any{
 
 func listed(e *hostedEnv) map[string]bool {
 	m := map[string]bool{}
-	for _, st := range e.b.ServerTools() {
+	for _, st := range e.b.ServerTools() { //nolint:gocritic // test loop, copy is irrelevant
 		m[st.Tool.Name] = true
 	}
 	return m
@@ -190,4 +192,62 @@ func resultTextOf(r *mcp.CallToolResult) string {
 		}
 	}
 	return sb.String()
+}
+
+// What a read-only deployment says about itself must not point at a tool it
+// does not serve: not the tool list's titles, descriptions and schemas, not
+// the shopping guide, not a reorder plan's next step.
+var unavailableHints = regexp.MustCompile(`(?i)glovo_add_to_basket|glovo_set_quantity|glovo_remove_from_basket|basket tools|before (changing|preparing|mutating) a basket|rebuilt into a basket|to add an item|mutate the (real )?basket`)
+
+func TestReadOnlyServedTextPointsAtNoUnavailableTool(t *testing.T) {
+	e := newHostedEnv(t)
+	for _, st := range e.b.ServerTools() { //nolint:gocritic // test loop, copy is irrelevant
+		raw, err := json.Marshal(st.Tool)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m := unavailableHints.FindString(string(raw)); m != "" {
+			t.Errorf("tool %s advertises %q in read-only mode", st.Tool.Name, m)
+		}
+	}
+	res, err := e.b.Call(pidCtx("prn_A"), "glovo_get_shopping_guide", map[string]any{})
+	if err != nil || res == nil || res.IsError {
+		t.Fatalf("shopping guide: %v %v", res, err)
+	}
+	if m := unavailableHints.FindString(resultTextOf(res)); m != "" {
+		t.Errorf("the read-only shopping guide says %q", m)
+	}
+	plan, err := e.b.Call(pidCtx("prn_A"), "glovo_plan_reorder", map[string]any{"order_id": "9003"})
+	if err != nil || plan == nil || plan.IsError {
+		t.Fatalf("plan: %v %v", plan, err)
+	}
+	var p struct {
+		NextStep string `json:"next_step"`
+	}
+	if err := json.Unmarshal([]byte(resultTextOf(plan)), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.NextStep != ReadOnlyNextStep {
+		t.Errorf("next_step = %q", p.NextStep)
+	}
+	if m := unavailableHints.FindString(p.NextStep); m != "" {
+		t.Errorf("next_step says %q", m)
+	}
+}
+
+// With the capability on the upstream text is what is served: the read-only
+// wording is a mode, not a rewrite of the product.
+func TestWritesOnKeepsTheUpstreamText(t *testing.T) {
+	e := newHostedEnvWith(t, true)
+	res, err := e.b.Call(pidCtx("prn_A"), "glovo_get_shopping_guide", map[string]any{})
+	if err != nil || res == nil || res.IsError {
+		t.Fatalf("%v %v", res, err)
+	}
+	if got := resultTextOf(res); got != shoppingGuide {
+		t.Errorf("guide differs from the upstream text with writes on")
+	}
+	plan, err := e.b.Call(pidCtx("prn_A"), "glovo_plan_reorder", map[string]any{"order_id": "9003"})
+	if err != nil || plan == nil || !strings.Contains(resultTextOf(plan), "glovo_add_to_basket") {
+		t.Errorf("plan with writes on lost the upstream next_step: %v %v", plan, err)
+	}
 }

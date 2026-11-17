@@ -1,7 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+
+	"github.com/mark3labs/mcp-go/mcp"
+
 	"encoding/json"
+	"github.com/mctlhq/mctl-glovo/internal/glovoapi"
+	"github.com/mctlhq/mctl-glovo/internal/linkflow"
 	"regexp"
 	"strings"
 	"testing"
@@ -22,7 +31,11 @@ func (e *mcpEnv) toolsList(t *testing.T, tok, session string) []string {
 			} `json:"tools"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal([]byte(body[strings.Index(body, "{"):]), &env); err != nil {
+	start := strings.Index(body, "{")
+	if start < 0 {
+		t.Fatalf("tools/list: no JSON in %q", body)
+	}
+	if err := json.Unmarshal([]byte(body[start:]), &env); err != nil {
 		t.Fatalf("tools/list: %v: %q", err, body)
 	}
 	var out []string
@@ -118,7 +131,10 @@ func TestMCPSurfaceIsToolsOnly(t *testing.T) {
 // clients do not, so the call is refused by that second layer, still before
 // any basket write reaches the network.
 func TestMCPSwitchOnListsToolsButClientLayerStillRefuses(t *testing.T) {
-	e := newMCPEnvWith(t, nil, func(d *mcpDeps) { d.BasketWrites = true }, nil)
+	e := newMCPEnvWith(t, nil, func(d *mcpDeps) {
+		d.BasketWrites = true
+		d.BasketApprover = func(context.Context, string, string, map[string]any) error { return nil }
+	}, nil)
 	session := e.open(t, "tok-a")
 	have := map[string]bool{}
 	for _, n := range e.toolsList(t, "tok-a", session) {
@@ -142,29 +158,158 @@ func TestMCPSwitchOnListsToolsButClientLayerStillRefuses(t *testing.T) {
 	}
 }
 
-func TestLoadBasketWrites(t *testing.T) {
+// GLOVO_C2_BASKET_WRITES exists only to be refused: no value turns writes on.
+// "true" and every spelling that is not "false" stop startup (with C2 on), and an unset or "false" value leaves the config read-only.
+func TestLoadBasketWritesIsNeverOn(t *testing.T) {
 	for _, tc := range []struct {
 		v       string
-		want    bool
 		wantErr bool
-	}{{"", false, false}, {"false", false, false}, {"true", true, false}, {"TRUE", false, true}, {"1", false, true}, {"yes", false, true}} {
+	}{
+		{"", false}, {"false", false},
+		{"true", true}, {"TRUE", true}, {"True", true}, {" true", true}, {"true ", true}, {"\ttrue", true},
+		{"1", true}, {"yes", true}, {"on", true}, {"enabled", true}, {"FALSE", true}, {" false", true}, {"0", true}, {"maybe", true},
+	} {
 		got, err := loadBasketWrites(env(map[string]string{"GLOVO_C2_BASKET_WRITES": tc.v}))
-		if (err != nil) != tc.wantErr || got != tc.want {
-			t.Errorf("%q: got %v, %v", tc.v, got, err)
+		if got {
+			t.Errorf("%q: loadBasketWrites returned on", tc.v)
+		}
+		if (err != nil) != tc.wantErr {
+			t.Errorf("%q: err = %v, wantErr %v", tc.v, err, tc.wantErr)
+		}
+		// Through the whole C2 config. With C2 off nothing else is read and
+		// no hosted route exists, so the value is moot there.
+		m := fullEnv()
+		m["GLOVO_C2_BASKET_WRITES"] = tc.v
+		c, err := loadC2(env(m))
+		if c.basketWrites || c.basketApprover != nil {
+			t.Errorf("%q: the C2 config enables writes", tc.v)
+		}
+		if (err != nil) != tc.wantErr {
+			t.Errorf("%q: loadC2 err = %v, wantErr %v", tc.v, err, tc.wantErr)
+		}
+		m["GLOVO_C2_ENABLED"] = "false"
+		if c, err := loadC2(env(m)); err != nil || c.enabled || c.basketWrites {
+			t.Errorf("%q with C2 off: %+v %v", tc.v, c, err)
 		}
 	}
-	// Default of the whole C2 config: off.
+	if err := func() error {
+		_, e := loadBasketWrites(env(map[string]string{"GLOVO_C2_BASKET_WRITES": "true"}))
+		return e
+	}(); !errors.Is(err, errBasketWritesNoGate) {
+		t.Errorf("true: err = %v, want errBasketWritesNoGate", err)
+	}
+	// Default of the whole C2 config: off, nothing to approve with.
 	c, err := loadC2(env(fullEnv()))
-	if err != nil || c.basketWrites {
+	if err != nil || c.basketWrites || c.basketApprover != nil {
 		t.Fatalf("default C2 config: basketWrites=%v err=%v", c.basketWrites, err)
 	}
-	m := fullEnv()
-	m["GLOVO_C2_BASKET_WRITES"] = "true"
-	if c, err := loadC2(env(m)); err != nil || !c.basketWrites {
-		t.Fatalf("explicit on: basketWrites=%v err=%v", c.basketWrites, err)
+}
+
+// The code seam: write tools are served only with an approver. The
+// environment cannot supply one, so there is no flag-only path to writes.
+func TestBasketWritesNeedAnApprover(t *testing.T) {
+	fake := newFakeGlovo(t)
+	src := &fakeSource{clients: map[string]*glovoapi.Client{"prn_A": hostedClient(t, fake.srv.URL, "A")}}
+	base := mcpDeps{
+		Who: testWho, Verifier: tokenVerifier{"tok-a": {ID: "prn_A"}}, Clients: src,
+		Audit: slog.New(slog.NewJSONHandler(io.Discard, nil)), Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Kill: func(context.Context) error { return nil },
 	}
-	m["GLOVO_C2_BASKET_WRITES"] = "maybe"
-	if _, err := loadC2(env(m)); err == nil {
-		t.Fatal("a typo in GLOVO_C2_BASKET_WRITES must stop startup")
+	on := base
+	on.BasketWrites = true
+	if _, err := newMCPRoutes(on); err == nil || !strings.Contains(err.Error(), "approval") {
+		t.Fatalf("writes without an approver: err = %v", err)
+	}
+	on.BasketApprover = func(context.Context, string, string, map[string]any) error { return nil }
+	r, err := newMCPRoutes(on)
+	if err != nil {
+		t.Fatalf("writes with an approver: %v", err)
+	}
+	_ = r.Shutdown(context.Background())
+}
+
+// approvalMiddleware: reads pass, a write tool needs the approver to say yes,
+// and no approver or an error is a refusal that never calls the handler.
+func TestApprovalMiddleware(t *testing.T) {
+	ok := func(context.Context, string, string, map[string]any) error { return nil }
+	no := func(context.Context, string, string, map[string]any) error { return errors.New("no") }
+	call := func(approve basketApprover, tool string) (reached bool, res *mcp.CallToolResult) {
+		h := approvalMiddleware(approve)(func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			reached = true
+			return mcp.NewToolResultText("ran"), nil
+		})
+		req := mcp.CallToolRequest{}
+		req.Params.Name = tool
+		res, _ = h(context.Background(), req)
+		return reached, res
+	}
+	for _, w := range writeTools {
+		if reached, res := call(nil, w); reached || res == nil || !res.IsError {
+			t.Errorf("%s with no approver: reached=%v res=%v", w, reached, res)
+		}
+		if reached, res := call(no, w); reached || res == nil || !res.IsError {
+			t.Errorf("%s with a refusing approver: reached=%v res=%v", w, reached, res)
+		}
+		if reached, res := call(ok, w); !reached || res == nil || res.IsError {
+			t.Errorf("%s with an approving approver: reached=%v res=%v", w, reached, res)
+		}
+	}
+	for _, rd := range []string{"glovo_get_basket", "glovo_analyze_order_history"} {
+		if reached, _ := call(nil, rd); !reached {
+			t.Errorf("read tool %s blocked by the approval middleware", rd)
+		}
+	}
+}
+
+// The consent text may only claim what tools/list serves. With no basket
+// write tool listed, every sentence that names a basket must deny changing it,
+// no sentence may promise building, adding, ordering or paying, and each
+// capability the text names must be backed by a served tool.
+func TestConsentTextMatchesTheServedTools(t *testing.T) {
+	e := newMCPEnv(t, nil)
+	session := e.open(t, "tok-a")
+	have := map[string]bool{}
+	for _, n := range e.toolsList(t, "tok-a", session) {
+		have[n] = true
+	}
+	for _, w := range writeTools {
+		if have[w] {
+			t.Fatalf("%s is listed by default; this test is about the read-only list", w)
+		}
+	}
+	// capability phrase -> a tool that must be served for the text to say it
+	backing := map[string]string{
+		"order history":   "glovo_get_purchase_history",
+		"basket":          "glovo_get_basket",
+		"saved locations": "glovo_get_saved_locations",
+		"reorder":         "glovo_plan_reorder",
+		"analyse":         "glovo_analyze_order_history",
+	}
+	negation := regexp.MustCompile(`(?i)\b(never|not|no)\b`)
+	promise := regexp.MustCompile(`(?i)\b(build|builds|building|add|adds|create|creates|prepare|prepares|put|puts|place|places|buy|buys|pay|pays|checkout|check out)\b`)
+	text := strings.Join(linkflow.ConsentText, "\n")
+	lower := strings.ToLower(text)
+	for _, sentence := range strings.Split(text, ". ") {
+		low := strings.ToLower(sentence)
+		if strings.Contains(low, "basket") && !negation.MatchString(sentence) && !strings.Contains(low, "read") {
+			t.Errorf("a sentence names the basket without saying it is only read or never changed: %q", sentence)
+		}
+		if promise.MatchString(sentence) && !negation.MatchString(sentence) {
+			t.Errorf("a sentence promises a capability the tool list does not serve: %q", sentence)
+		}
+	}
+	for phrase, tool := range backing {
+		if strings.Contains(lower, phrase) && !have[tool] {
+			t.Errorf("the consent text names %q, but %s is not served", phrase, tool)
+		}
+	}
+	// The other way: what the text says it never does has no tool either.
+	for n := range have {
+		if strings.Contains(n, "checkout") || strings.Contains(n, "pay") || strings.Contains(n, "place_order") {
+			t.Errorf("tool %s contradicts the consent text", n)
+		}
+	}
+	if !strings.Contains(lower, "never used to change your basket") {
+		t.Errorf("the consent text no longer says the basket is not changed")
 	}
 }
