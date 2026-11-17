@@ -48,6 +48,30 @@ type c2Config struct {
 	// control is the kill switch endpoint's identity (slice 5); zero value
 	// means the route is not mounted.
 	control controlConfig
+	// basketWrites is GLOVO_C2_BASKET_WRITES: serve the basket mutation
+	// tools. Off by default (read-only C2). It is a capability switch, not
+	// an approval: see loadBasketWrites.
+	basketWrites bool
+}
+
+// loadBasketWrites reads GLOVO_C2_BASKET_WRITES. "", "false" is off (the
+// default: no add, set-quantity or remove tool is listed, a call by name is
+// refused before any Glovo request, and every hosted Glovo client refuses
+// basket mutations). "true" turns the capability on, at both layers.
+// Anything else is an error, not "off": a typo must stop the rollout.
+//
+// Turning it on does not replace or skip any approval. Writes re-enter C2
+// through this one switch once an approval step (mctl-api#1011/#1012) in
+// front of it is implemented and verified; this variable is not one.
+func loadBasketWrites(getenv func(string) string) (bool, error) {
+	switch v := getenv("GLOVO_C2_BASKET_WRITES"); v {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("GLOVO_C2_BASKET_WRITES: %q is not true or false", v)
+	}
 }
 
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
@@ -76,6 +100,9 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 		c.vaultRole = "mctl-glovo"
 	}
 	if c.control, err = loadControl(getenv); err != nil {
+		return c2Config{}, err
+	}
+	if c.basketWrites, err = loadBasketWrites(getenv); err != nil {
 		return c2Config{}, err
 	}
 	c.consentAPI, c.consentTokenFile = getenv("GLOVO_CONSENT_API_URL"), getenv("GLOVO_CONSENT_TOKEN_FILE")
@@ -215,6 +242,11 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		MaskIdentity:  nil,
 		ClientOptions: []glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()},
 	}
+	if c.basketWrites {
+		// The second layer: hosted clients refuse basket mutations unless
+		// built with this option (glovoapi.WithBasketWrites).
+		scfg.ClientOptions = append(scfg.ClientOptions, glovoapi.WithBasketWrites())
+	}
 	withLinkConsent(&scfg, gate)
 	if err := withCaps(&scfg, c); err != nil {
 		closeDB()
@@ -261,7 +293,8 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		Kill: kill.Check,
 		// Admit is mctl-api's consent (and slot) decision per tool call,
 		// with a few-second positive cache (admit.go).
-		Admit: callAdmit,
+		Admit:        callAdmit,
+		BasketWrites: c.basketWrites,
 	})
 	if err != nil {
 		closeDB()

@@ -81,7 +81,35 @@ type Config struct {
 	// off: its file is shared by whoever uses the directory, which is the
 	// wrong shape for a multi-user process.
 	Clients ClientSource
+	// BasketWrites serves the basket mutation tools (BasketWriteTools) in
+	// hosted mode. The zero value is off: a hosted backend is read-only, the
+	// three tools are not registered and a call by name is refused before
+	// any Glovo request. It has no effect on a session-file backend
+	// (glovo-home), which always serves them. Turning it on is not an
+	// approval: it only stops this layer refusing, and a future approval
+	// step (mctl-api#1011/#1012) is a separate gate in front of it.
+	BasketWrites bool
 }
+
+// BasketWriteTools are the tools that change a real Glovo basket. A hosted
+// backend serves them only with Config.BasketWrites.
+var BasketWriteTools = []string{"glovo_add_to_basket", "glovo_set_quantity", "glovo_remove_from_basket"}
+
+// BasketWritesRefusal is the answer to a basket write tool called by name on
+// a read-only hosted backend.
+const BasketWritesRefusal = "Basket changes are not enabled in this deployment. Basket tools are read-only here."
+
+func isBasketWriteTool(name string) bool {
+	for _, n := range BasketWriteTools {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// readOnly reports a hosted backend that does not serve basket writes.
+func (b *Backend) readOnly() bool { return b.cfg.Clients != nil && !b.cfg.BasketWrites }
 
 // ClientSource resolves the hosted Glovo client of one pid.
 // tokenstore.Sessions implements it.
@@ -157,6 +185,11 @@ func New(cfg Config) (*Backend, error) {
 		extra[n] = true
 	}
 	b := &Backend{cfg: cfg, client: c, byName: map[string]*tool{}}
+	if b.readOnly() {
+		for _, n := range BasketWriteTools {
+			extra[n] = true
+		}
+	}
 	hs := handlers(b)
 	for _, d := range defs {
 		if childmcp.Blocked(d.Name) || !known[d.Name] {
@@ -233,6 +266,13 @@ func (b *Backend) Install(srv *server.MCPServer) { srv.SetTools(b.ServerTools().
 // an error return means the call itself could not run (unknown tool,
 // draining, cancelled or timed out).
 func (b *Backend) Call(ctx context.Context, name string, rawArgs map[string]any) (*mcp.CallToolResult, error) {
+	// A read-only hosted backend refuses a basket write by name first, before
+	// the tool lookup, the argument check and the client lookup, so that no
+	// Glovo request and no token store read can follow. Registration is the
+	// first line (the tool is not listed); this is the second.
+	if b.readOnly() && isBasketWriteTool(name) {
+		return mcp.NewToolResultError(BasketWritesRefusal), nil
+	}
 	t, ok := b.byName[name]
 	if !ok {
 		return nil, fmt.Errorf("tool %q not found", name)

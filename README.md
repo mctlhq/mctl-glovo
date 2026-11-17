@@ -39,6 +39,31 @@ startup error. On, it needs `GLOVO_DATABASE_URL`, `GLOVO_VAULT_ADDR`
 optionally `GLOVO_VAULT_ROLE` (default `mctl-glovo`) and
 `GLOVO_LINK_TRUSTED_PROXIES` (CIDRs whose `X-Forwarded-For` is believed).
 
+### Read-only by default
+Hosted C2 does not change a Glovo basket unless `GLOVO_C2_BASKET_WRITES=true`
+(unset or `false` is off; any other value is a startup error). Off, the
+default:
+
+- `glovo_add_to_basket`, `glovo_set_quantity` and `glovo_remove_from_basket`
+  are not in `tools/list`, and a `tools/call` for one by name is refused
+  before the tool lookup, the argument check, the token store and any
+  request to Glovo;
+- every hosted Glovo client refuses a basket mutation (POST, PUT, PATCH or
+  DELETE on a `baskets` path) before the network, so a second way of
+  building a client or calling a handler cannot write a basket either;
+- reading stays as it is: `glovo_get_basket`, purchase history, order items,
+  order stats, `glovo_analyze_order_history`, reorder previews and plans.
+
+No checkout, payment or order tool exists in either mode, and the client's
+mutation allowlist has no such endpoint.
+
+`GLOVO_C2_BASKET_WRITES=true` only lifts these refusals, at both layers
+(`glovotools.Config.BasketWrites` and `glovoapi.WithBasketWrites`). It is a
+capability switch, not an approval: it does not replace, skip or imitate
+the approval step that must sit in front of basket writes (mctl-api#1011
+and #1012), and mctl-glovo keeps no approval ledger of its own. It must not
+be set in a deployment until that step is implemented and verified.
+
 ### Who may use C2
 Every token must be an mctl-api token for this resource that names exactly
 one grant: a team grant (`tgr` + `stn`) or a personal grant (`tgr` +

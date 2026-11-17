@@ -110,6 +110,9 @@ type Client struct {
 	coordinator RefreshCoordinator
 	writer      SessionWriter
 	gate        func(context.Context) error
+	// basketWrites lets a hosted client send basket mutations (PUT, PATCH,
+	// POST on a baskets path). Off by default: see WithBasketWrites.
+	basketWrites bool
 
 	refreshMu sync.Mutex // serialises refreshes
 	mu        sync.Mutex // guards session
@@ -351,6 +354,9 @@ func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
 		return fmt.Errorf("%w: %v", ErrRedirectRefused, err)
 	}
 	if err := checkMutation(req.Method, p); err != nil {
+		return fmt.Errorf("%w: %v", ErrRedirectRefused, err)
+	}
+	if err := c.checkBasketWrite(req.Method, p); err != nil {
 		return fmt.Errorf("%w: %v", ErrRedirectRefused, err)
 	}
 	return nil
@@ -702,6 +708,9 @@ func (c *Client) send(ctx context.Context, method, path string, body any, auth b
 		return 0, nil, "", err
 	}
 	if err := checkMutation(method, path); err != nil {
+		return 0, nil, "", err
+	}
+	if err := c.checkBasketWrite(method, path); err != nil {
 		return 0, nil, "", err
 	}
 	if c.gate != nil {

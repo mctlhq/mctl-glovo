@@ -29,6 +29,14 @@ const hostedInstructions = `Use Glovo read-only tools before mutating the real b
 Do not checkout or pay. Basket tools only prepare the user's real Glovo basket for later human review.
 If a tool says your Glovo account is not linked or expired, link it again at https://glovo.mctl.ai/link.`
 
+// hostedReadOnlyInstructions are served while basket writes are off, the
+// default: there is no tool that changes a basket, so the text must not
+// promise one.
+const hostedReadOnlyInstructions = `These Glovo tools are read-only: browse stores and menus, read the basket, the order history and reorder plans.
+
+This service does not change your basket, check out or pay.
+If a tool says your Glovo account is not linked or expired, link it again at https://glovo.mctl.ai/link.`
+
 // hostedCallTimeout bounds one tool call. The HTTP server has no write
 // timeout on the MCP routes (see noDeadline), so this is the bound.
 const hostedCallTimeout = 3 * time.Minute
@@ -95,9 +103,14 @@ type mcpDeps struct {
 	// is no unkeyed default.
 	Who auditWho
 	// Kill is required: no tool call may run without the switch being read.
-	Kill    killGate
-	Admit   callAdmitter
-	Version string
+	Kill  killGate
+	Admit callAdmitter
+	// BasketWrites serves the basket mutation tools. The zero value is off:
+	// the tools are not listed and a call by name is refused before any
+	// Glovo request. See glovotools.Config.BasketWrites; enabling it is not
+	// an approval.
+	BasketWrites bool
+	Version      string
 	// CallTimeout bounds one tool call (default hostedCallTimeout) and
 	// BodyReadTimeout one POST body read (default hostedBodyReadTimeout).
 	// Tests shorten them.
@@ -137,13 +150,17 @@ func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
 	if version == "" {
 		version = "dev"
 	}
-	backend, err := glovotools.New(glovotools.Config{Clients: d.Clients})
+	backend, err := glovotools.New(glovotools.Config{Clients: d.Clients, BasketWrites: d.BasketWrites})
 	if err != nil {
 		return nil, err
 	}
+	instructions := hostedReadOnlyInstructions
+	if d.BasketWrites {
+		instructions = hostedInstructions
+	}
 	srv := server.NewMCPServer("mctl-glovo", version,
 		server.WithToolCapabilities(true),
-		server.WithInstructions(hostedInstructions),
+		server.WithInstructions(instructions),
 		server.WithRecovery(),
 		server.WithToolHandlerMiddleware(auditMiddleware(d.Audit, d.Who, d.Kill, d.KillTimeout, d.Admit, d.CallTimeout)),
 	)

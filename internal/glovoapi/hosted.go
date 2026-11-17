@@ -3,6 +3,10 @@ package glovoapi
 import (
 	"context"
 	"errors"
+	"net/http"
+	"path"
+	"regexp"
+	"strings"
 )
 
 // RefreshCoordinator persists a token refresh for a hosted client, one whose
@@ -72,6 +76,35 @@ func WithRequestGate(gate func(context.Context) error) Option {
 		}
 		c.gate = gate
 	}
+}
+
+// ErrBasketWritesDisabled is returned for a basket mutation on a hosted
+// client built without WithBasketWrites. The request is refused before the
+// request gate, the kill switch bookkeeping and the network.
+var ErrBasketWritesDisabled = errors.New("glovoapi: basket writes are disabled for this hosted client")
+
+// WithBasketWrites lets a hosted client send basket mutations. Without it a
+// hosted client is read-only for baskets: the default, so that a new way of
+// building a hosted client cannot write a real basket by omission. Enabling
+// it removes only this client-side refusal; it is not an approval.
+func WithBasketWrites() Option { return func(c *Client) { c.basketWrites = true } }
+
+// basketPathRe matches a baskets resource path, query excluded.
+var basketPathRe = regexp.MustCompile(`(^|/)baskets(/|$)`)
+
+// checkBasketWrite refuses a non-GET request to a baskets path on a hosted
+// client without WithBasketWrites. The path is matched after path.Clean so
+// that a dot segment cannot hide it; a request that is not a basket path is
+// left to checkMutation.
+func (c *Client) checkBasketWrite(method, p string) error {
+	if !c.hosted() || c.basketWrites || method == http.MethodGet {
+		return nil
+	}
+	raw := strings.SplitN(p, "?", 2)[0]
+	if basketPathRe.MatchString(raw) || basketPathRe.MatchString(path.Clean(raw)) {
+		return ErrBasketWritesDisabled
+	}
+	return nil
 }
 
 // hosted reports whether the client's session lives outside a file.
