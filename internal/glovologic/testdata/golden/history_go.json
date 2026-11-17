@@ -1,0 +1,298 @@
+{
+ "analyze": {
+  "analyzed_orders": 6,
+  "card_statistics": {
+   "card_only_orders": 4,
+   "detailed_orders": 6,
+   "orders": 10,
+   "parseable_visible_totals": 8,
+   "stores": 4,
+   "top_stores": [
+    {
+     "orders": 4,
+     "parseable_visible_totals": 3,
+     "store": "Market Uno",
+     "visible_total_amount": 11.2
+    },
+    {
+     "orders": 3,
+     "parseable_visible_totals": 2,
+     "store": "Market Dos",
+     "visible_total_amount": 11.99
+    },
+    {
+     "orders": 2,
+     "parseable_visible_totals": 2,
+     "store": "Fruteria Cuatro",
+     "visible_total_amount": 2
+    },
+    {
+     "orders": 1,
+     "parseable_visible_totals": 1,
+     "store": "Panaderia Tres",
+     "visible_total_amount": 2.4
+    }
+   ],
+   "visible_total_amount": 27.59
+  },
+  "coverage": {
+   "analysis_complete": false,
+   "cursor_pages": 1,
+   "detail_attempts": 8,
+   "detail_errors": 1,
+   "detail_limit": 10,
+   "detail_rate_limited": true,
+   "detailed_orders": 6,
+   "discovered_orders": 10,
+   "eligible_not_analyzed": 3,
+   "eligible_orders": 9,
+   "excluded_cancelled_or_failed": 1,
+   "history_complete": true,
+   "stopped_reason": "no_next_cursor",
+   "strategy": "order-id-cursor"
+  },
+  "distinct_products": 5,
+  "limitation": "Product statistics cover the 6 most recent of 9 eligible discovered orders (the first in provider order, assumed newest first); 3 eligible orders were not analysed (detail limit, read errors or rate limit). Cancelled or failed orders excluded from the counts: 1. Detail reads were rate-limited and stopped early. Card-only orders are excluded from item analysis; dishes are matched by normalised name, not by product id.",
+  "most_ordered": {
+   "orders": 3,
+   "product": "Whole Milk 1L",
+   "quantity": 5,
+   "tie_break": "product_name",
+   "unresolved_tie": false
+  },
+  "top_products": [
+   {
+    "average_interval_days": 9.7,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-20T08:30:00.000Z",
+    "median_interval_days": 9.7,
+    "orders": 3,
+    "parseable_visible_line_amounts": 2,
+    "product": "Whole Milk 1L",
+    "quantity": 5,
+    "top_customizations": [
+     {
+      "name": "Cold",
+      "orders": 2
+     },
+     {
+      "name": "Warm",
+      "orders": 1
+     }
+    ],
+    "visible_line_amount": 4.5
+   },
+   {
+    "average_interval_days": 33.4,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-02-03T09:00:00.250Z",
+    "median_interval_days": 33.4,
+    "orders": 2,
+    "parseable_visible_line_amounts": 2,
+    "product": "Pan de Molde",
+    "quantity": 4,
+    "top_customizations": [],
+    "visible_line_amount": 3.6
+   },
+   {
+    "average_interval_days": 7,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-08T00:00:00.000Z",
+    "median_interval_days": 7,
+    "orders": 2,
+    "parseable_visible_line_amounts": 1,
+    "product": "Café Molido",
+    "quantity": 3.5,
+    "top_customizations": [],
+    "visible_line_amount": 2.5
+   },
+   {
+    "average_interval_days": null,
+    "first_order_at": "2026-02-02T02:40:00.000Z",
+    "last_order_at": "2026-02-02T02:40:00.000Z",
+    "median_interval_days": null,
+    "orders": 2,
+    "parseable_visible_line_amounts": 0,
+    "product": "Zumo Naranja",
+    "quantity": 2,
+    "top_customizations": [],
+    "visible_line_amount": 0
+   },
+   {
+    "average_interval_days": null,
+    "first_order_at": null,
+    "last_order_at": null,
+    "median_interval_days": null,
+    "orders": 1,
+    "parseable_visible_line_amounts": 0,
+    "product": "Null Fields",
+    "quantity": 1,
+    "top_customizations": [],
+    "visible_line_amount": 0
+   }
+  ],
+  "uncertainty": [
+   {
+    "code": "details_not_attempted",
+    "count": 1,
+    "note": "Eligible orders whose detail was not requested (detail limit or an earlier rate limit)."
+   },
+   {
+    "code": "detail_rate_limited",
+    "count": 1,
+    "note": "The provider rate-limited the detail reads; enrichment stopped early."
+   },
+   {
+    "code": "detail_errors",
+    "count": 1,
+    "note": "Order details that could not be read and are missing from the counts."
+   },
+   {
+    "code": "status_unknown",
+    "count": 5,
+    "note": "Orders with no status on card or detail; a cancelled order among them cannot be told apart."
+   },
+   {
+    "code": "product_name_variants_merged",
+    "count": 4,
+    "note": "Products whose lines carry more than one spelling, merged by name normalisation (renamed items are not tracked by id)."
+   },
+   {
+    "code": "lines_without_name",
+    "count": 2,
+    "note": "Order lines without a product name, left out of the product counts."
+   }
+  ]
+ },
+ "analyze_limit_2": {
+  "analyzed_orders": 2,
+  "card_statistics": {
+   "card_only_orders": 8,
+   "detailed_orders": 2,
+   "orders": 10,
+   "parseable_visible_totals": 8,
+   "stores": 4,
+   "top_stores": [
+    {
+     "orders": 4,
+     "parseable_visible_totals": 3,
+     "store": "Market Uno",
+     "visible_total_amount": 11.2
+    },
+    {
+     "orders": 3,
+     "parseable_visible_totals": 2,
+     "store": "Market Dos",
+     "visible_total_amount": 11.99
+    },
+    {
+     "orders": 2,
+     "parseable_visible_totals": 2,
+     "store": "Fruteria Cuatro",
+     "visible_total_amount": 2
+    },
+    {
+     "orders": 1,
+     "parseable_visible_totals": 1,
+     "store": "Panaderia Tres",
+     "visible_total_amount": 2.4
+    }
+   ],
+   "visible_total_amount": 27.59
+  },
+  "coverage": {
+   "analysis_complete": false,
+   "cursor_pages": 1,
+   "detail_attempts": 2,
+   "detail_errors": 0,
+   "detail_limit": 2,
+   "detail_rate_limited": false,
+   "detailed_orders": 2,
+   "discovered_orders": 10,
+   "eligible_not_analyzed": 7,
+   "eligible_orders": 9,
+   "excluded_cancelled_or_failed": 1,
+   "history_complete": true,
+   "stopped_reason": "no_next_cursor",
+   "strategy": "order-id-cursor"
+  },
+  "distinct_products": 3,
+  "limitation": "Product statistics cover the 2 most recent of 9 eligible discovered orders (the first in provider order, assumed newest first); 7 eligible orders were not analysed (detail limit, read errors or rate limit). Cancelled or failed orders excluded from the counts: 1. Card-only orders are excluded from item analysis; dishes are matched by normalised name, not by product id.",
+  "most_ordered": {
+   "orders": 2,
+   "product": "Café Molido",
+   "quantity": 3.5,
+   "tie_break": "product_name",
+   "tied_on_orders": [
+    "Café Molido",
+    "Whole Milk 1L"
+   ],
+   "unresolved_tie": false
+  },
+  "top_products": [
+   {
+    "average_interval_days": 7,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-08T00:00:00.000Z",
+    "median_interval_days": 7,
+    "orders": 2,
+    "parseable_visible_line_amounts": 1,
+    "product": "Café Molido",
+    "quantity": 3.5,
+    "top_customizations": [],
+    "visible_line_amount": 2.5
+   },
+   {
+    "average_interval_days": 7,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-08T00:00:00.000Z",
+    "median_interval_days": 7,
+    "orders": 2,
+    "parseable_visible_line_amounts": 2,
+    "product": "Whole Milk 1L",
+    "quantity": 3,
+    "top_customizations": [
+     {
+      "name": "Cold",
+      "orders": 2
+     }
+    ],
+    "visible_line_amount": 4.5
+   },
+   {
+    "average_interval_days": null,
+    "first_order_at": "2026-01-01T00:00:00.000Z",
+    "last_order_at": "2026-01-01T00:00:00.000Z",
+    "median_interval_days": null,
+    "orders": 1,
+    "parseable_visible_line_amounts": 1,
+    "product": "Pan de Molde",
+    "quantity": 1,
+    "top_customizations": [],
+    "visible_line_amount": 1.2
+   }
+  ],
+  "uncertainty": [
+   {
+    "code": "details_not_attempted",
+    "count": 7,
+    "note": "Eligible orders whose detail was not requested (detail limit or an earlier rate limit)."
+   },
+   {
+    "code": "status_unknown",
+    "count": 1,
+    "note": "Orders with no status on card or detail; a cancelled order among them cannot be told apart."
+   },
+   {
+    "code": "product_name_variants_merged",
+    "count": 2,
+    "note": "Products whose lines carry more than one spelling, merged by name normalisation (renamed items are not tracked by id)."
+   },
+   {
+    "code": "lines_without_name",
+    "count": 2,
+    "note": "Order lines without a product name, left out of the product counts."
+   }
+  ]
+ }
+}

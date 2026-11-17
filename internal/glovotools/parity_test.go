@@ -369,11 +369,14 @@ func resultText(r *mcp.CallToolResult) string {
 	return tc.Text
 }
 
-func canonical(t *testing.T, text string, stripCoverage bool) any {
+func canonical(t *testing.T, tool, text string, stripCoverage bool) any {
 	t.Helper()
 	var v any
 	if err := json.Unmarshal([]byte(text), &v); err != nil {
 		t.Fatalf("result is not JSON: %v\n%s", err, text)
+	}
+	if tool == "glovo_analyze_order_history" {
+		stripAnalyzeDivergence(v)
 	}
 	if stripCoverage {
 		if cov, ok := v.(map[string]any)["coverage"].(map[string]any); ok {
@@ -382,6 +385,33 @@ func canonical(t *testing.T, text string, stripCoverage bool) any {
 		}
 	}
 	return v
+}
+
+// stripAnalyzeDivergence removes what glovo_analyze_order_history now does
+// differently from upstream (mctl-glovo#45): the additive most_ordered,
+// uncertainty and coverage fields, the dynamic limitation text, and the
+// card_statistics detail counters that upstream leaves at zero. Everything
+// else, including the product counts, is still compared. The Go behaviour is
+// pinned directly in glovologic (order_intelligence_test.go, history_go.json).
+// No case here has a cancelled order, so the counts are not affected by the
+// cancelled-order exclusion.
+func stripAnalyzeDivergence(v any) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return
+	}
+	delete(m, "most_ordered")
+	delete(m, "uncertainty")
+	delete(m, "limitation")
+	if cs, ok := m["card_statistics"].(map[string]any); ok {
+		delete(cs, "detailed_orders")
+		delete(cs, "card_only_orders")
+	}
+	if cov, ok := m["coverage"].(map[string]any); ok {
+		for _, k := range []string{"eligible_orders", "excluded_cancelled_or_failed", "eligible_not_analyzed", "history_complete", "analysis_complete"} {
+			delete(cov, k)
+		}
+	}
 }
 
 func pretty(v any) string {
@@ -429,7 +459,7 @@ func checkResult(t *testing.T, c caseSpec, got, want *mcp.CallToolResult) {
 			t.Errorf("shopping guide differs")
 		}
 	default:
-		g, w := canonical(t, gotText, c.StripGoCoverage), canonical(t, wantText, c.StripGoCoverage)
+		g, w := canonical(t, c.Tool, gotText, c.StripGoCoverage), canonical(t, c.Tool, wantText, c.StripGoCoverage)
 		if !reflect.DeepEqual(g, w) {
 			t.Errorf("result:\n got %s\nwant %s", pretty(g), pretty(w))
 		}

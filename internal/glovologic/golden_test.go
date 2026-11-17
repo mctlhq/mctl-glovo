@@ -224,6 +224,12 @@ func (s *historySource) OrderDetail(_ context.Context, id string) (json.RawMessa
 func TestGoldenHistory(t *testing.T) {
 	f := fixture(t, "history.json")
 	want := golden(t, "history.json")
+	// analyze and analyze_limit_2 are the Go behaviour: cancelled orders are
+	// excluded from the counts, card_statistics.detailed_orders counts the
+	// details read, and the output carries additive coverage, uncertainty and
+	// most_ordered fields (mctl-glovo#45). history.json is the upstream
+	// output and still pins analysis_all.
+	wantGo := golden(t, "history_go.json")
 
 	var details []any
 	for _, id := range []string{"101", "102", "103", "104", "105", "106", "107"} {
@@ -241,7 +247,7 @@ func TestGoldenHistory(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		assertEqual(t, name, plain(t, got), want[name])
+		assertEqual(t, name, plain(t, got), wantGo[name])
 	}
 }
 
