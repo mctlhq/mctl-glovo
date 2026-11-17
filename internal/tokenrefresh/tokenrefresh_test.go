@@ -211,6 +211,7 @@ func TestAssertionClaimsAndSignature(t *testing.T) {
 			t.Errorf("content type %q", ct)
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		_ = r.ParseForm()
 		form = r.PostForm
 		_, _ = w.Write([]byte(`{"access_token":"t.o.k","token_type":"Bearer","expires_in":100}`))
@@ -284,11 +285,19 @@ func TestRenewDelayClampAndJitter(t *testing.T) {
 	if d := r.renewDelay(48 * time.Hour); d != maxRenew {
 		t.Fatalf("ceiling: %v", d)
 	}
-	if d := r.renewDelay(2 * time.Second); d != 2*time.Second && d != minRenew {
-		t.Fatalf("floor/lifetime: %v", d)
+	// ttl <= minRenew: the floor is min(minRenew, ttl/2), so renewal is still
+	// at half the lifetime, strictly before expiry.
+	if d := r.renewDelay(2 * time.Second); d != time.Second {
+		t.Fatalf("short lifetime: %v, want half (1s)", d)
 	}
-	if d := r.renewDelay(4 * time.Second); d > 4*time.Second {
-		t.Fatalf("delay beyond lifetime: %v", d)
+	if d := r.renewDelay(minRenew); d != minRenew/2 {
+		t.Fatalf("lifetime == minRenew: %v, want half", d)
+	}
+	if d := r.renewDelay(4 * time.Second); d != 2*time.Second {
+		t.Fatalf("4s lifetime: %v", d)
+	}
+	if d := r.renewDelay(20 * time.Second); d != 10*time.Second {
+		t.Fatalf("20s lifetime: %v", d)
 	}
 	r.jitter = func() float64 { return 0.999 }
 	d := r.renewDelay(1000 * time.Second)
@@ -309,7 +318,7 @@ func TestFailureKeepsTokenUntilExpiryThenClears(t *testing.T) {
 		}
 		if failing {
 			// while failing and before expiry the old token must still be on disk
-			if elapsed := e.clock.Now(); elapsed.Before(e.startPlus(100)) {
+			if elapsed := e.clock.Now(); elapsed.Before(e.startPlus(100 - 5)) {
 				if got, ok := e.token(); !ok || got != "good" {
 					t.Errorf("token dropped before expiry: %q %v", got, ok)
 				}
@@ -327,9 +336,9 @@ func TestFailureKeepsTokenUntilExpiryThenClears(t *testing.T) {
 	if _, err := os.Stat(e.readyF); err == nil {
 		t.Fatal("ready file still present")
 	}
-	// cleared exactly at expiry, not at a later retry boundary
-	if end := e.clock.Now(); !end.Equal(e.startPlus(100)) {
-		t.Fatalf("cleared at %v, want expiry %v", end.Sub(e.start), 100*time.Second)
+	// cleared exactly at expiry (lifetime minus the 5s skew), not at a later retry boundary
+	if end := e.clock.Now(); !end.Equal(e.startPlus(95)) {
+		t.Fatalf("cleared at %v, want expiry %v", end.Sub(e.start), 95*time.Second)
 	}
 }
 
@@ -453,24 +462,177 @@ func TestRedirectRefused(t *testing.T) {
 	}
 }
 
+// captureStd redirects os.Stdout and os.Stderr into one pipe for the duration
+// of fn and returns what was written.
+func captureStd(t *testing.T, fn func()) string {
+	t.Helper()
+	rd, wr, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldOut, oldErr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = wr, wr
+	done := make(chan string, 1)
+	go func() {
+		var b bytes.Buffer
+		_, _ = b.ReadFrom(rd)
+		done <- b.String()
+	}()
+	func() {
+		defer func() { os.Stdout, os.Stderr = oldOut, oldErr }()
+		fn()
+	}()
+	_ = wr.Close()
+	return <-done
+}
+
+// TestErrorsAndLogsNeverLeakSecrets runs a successful refresh, a failing
+// refresh (500 with a secret body) and an expiry, and asserts that neither
+// the access token, the signed assertions, the response body nor key
+// material reach logs, errors, stdout or stderr.
 func TestErrorsAndLogsNeverLeakSecrets(t *testing.T) {
 	e := newEnv(t)
 	const bodySecret = "SECRET-BODY-TOKEN-xyz"
-	e.handler.Store(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	const accessSecret = "ACCESS-SECRET-tok.abc123.def456"
+	var mu sync.Mutex
+	var assertions []string
+	var calls int
+	e.handler.Store(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		_ = r.ParseForm()
+		mu.Lock()
+		assertions = append(assertions, r.PostForm.Get("assertion"))
+		calls++
+		n := calls
+		mu.Unlock()
+		if n == 1 { // success
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": accessSecret, "token_type": "Bearer", "expires_in": 100})
+			return
+		}
 		w.WriteHeader(500)
 		_, _ = w.Write([]byte(bodySecret))
 	}))
 	r := e.refresher(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	e.stopAfter(cancel, 2)
-	_ = r.Run(ctx)
-	_, _, err := r.fetch(context.Background())
-	out := e.logBuf.String() + err.Error()
-	asr, _ := r.assertion(time.Now())
-	for _, s := range []string{bodySecret, "PRIVATE KEY", base64.StdEncoding.EncodeToString(testRSA.D.Bytes())[:16], asr} {
-		if strings.Contains(out, s) {
+	var runErr error
+	stdout := captureStd(t, func() {
+		runErr = r.Run(context.Background()) // success, failed renewals, expiry
+	})
+	if !errors.Is(runErr, ErrExpired) {
+		t.Fatalf("Run = %v, want ErrExpired", runErr)
+	}
+	// direct failure and bad-response errors too
+	_, _, _, ferr := r.fetch(context.Background())
+	if ferr == nil {
+		t.Fatal("fetch should fail against the 500 handler")
+	}
+	mu.Lock()
+	if len(assertions) < 2 || assertions[0] == "" {
+		mu.Unlock()
+		t.Fatalf("test did not capture assertions: %d", len(assertions))
+	}
+	forbidden := append([]string(nil), assertions...)
+	mu.Unlock()
+	for _, a := range forbidden { // also each assertion's signature segment
+		if parts := strings.Split(a, "."); len(parts) == 3 {
+			forbidden = append(forbidden, parts[2][:24])
+		}
+	}
+	pemText := string(pkcs1PEM(testRSA))
+	forbidden = append(forbidden, bodySecret, accessSecret, "PRIVATE KEY", "BEGIN", testKey, testUser,
+		base64.StdEncoding.EncodeToString(testRSA.D.Bytes())[:16],
+		base64.RawURLEncoding.EncodeToString(testRSA.D.Bytes())[:16],
+		base64.StdEncoding.EncodeToString(testRSA.N.Bytes())[:16])
+	for _, ln := range strings.Split(pemText, "\n") {
+		if len(ln) >= 20 && !strings.HasPrefix(ln, "-----") {
+			forbidden = append(forbidden, ln[:20])
+			break
+		}
+	}
+	out := e.logBuf.String() + stdout + ferr.Error() + runErr.Error()
+	if !strings.Contains(e.logBuf.String(), "token refreshed") {
+		t.Fatal("success path was not logged; the test would prove nothing")
+	}
+	for _, s := range forbidden {
+		if s != "" && strings.Contains(out, s) {
 			t.Fatalf("output leaks %q", s)
 		}
+	}
+}
+
+// TestDefaultTransportIgnoresProxyEnvironment proves the assertion goes
+// straight to the issuer even when proxy variables are set.
+func TestDefaultTransportIgnoresProxyEnvironment(t *testing.T) {
+	var proxied atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		proxied.Add(1)
+		w.WriteHeader(502)
+	}))
+	t.Cleanup(proxy.Close)
+	for _, k := range []string{"HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy", "ALL_PROXY", "NO_PROXY", "no_proxy"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("HTTP_PROXY", proxy.URL)
+	t.Setenv("HTTPS_PROXY", proxy.URL)
+	e := newEnv(t)
+	e.respond(200, "direct-token", 100)
+	// production default transport: no Options.Client
+	r := e.refresher(t)
+	tr, ok := r.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("default transport is %T", r.client.Transport)
+	}
+	if tr.Proxy != nil {
+		t.Fatal("default transport must not use a proxy")
+	}
+	// Go exempts loopback from env proxies, so the structural check above is
+	// the one that catches a ProxyFromEnvironment regression; this confirms
+	// the request still reaches the issuer directly.
+	tok, _, _, err := r.fetch(context.Background())
+	if err != nil || tok != "direct-token" {
+		t.Fatalf("fetch = %q, %v", tok, err)
+	}
+	if proxied.Load() != 0 {
+		t.Fatal("request went through the proxy")
+	}
+}
+
+// TestExpiryCountsFromBeforeTheRequest: a slow response must not extend the
+// token's life on disk.
+func TestExpiryCountsFromBeforeTheRequest(t *testing.T) {
+	e := newEnv(t)
+	e.start = e.clock.Now()
+	var calls atomic.Int32
+	e.handler.Store(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			e.clock.mu.Lock()
+			e.clock.now = e.clock.now.Add(30 * time.Second) // slow response
+			e.clock.mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "slow", "token_type": "Bearer", "expires_in": 100})
+			return
+		}
+		w.WriteHeader(500)
+	}))
+	r := e.refresher(t)
+	if err := r.Run(context.Background()); !errors.Is(err, ErrExpired) {
+		t.Fatalf("Run = %v", err)
+	}
+	// expiry = request start + 100s - 5s skew, NOT receipt (+30s) + 100s
+	if end := e.clock.Now(); !end.Equal(e.startPlus(95)) {
+		t.Fatalf("cleared at +%v, want +95s", end.Sub(e.start))
+	}
+}
+
+func TestShortLifetimeRenewsBeforeExpiry(t *testing.T) {
+	e := newEnv(t)
+	e.respond(200, "short", 4)
+	r := e.refresher(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	e.stopAfter(cancel, 2)
+	if err := r.Run(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run = %v (token must be renewed, not expire)", err)
+	}
+	if e.requests.Load() < 2 {
+		t.Fatalf("requests = %d, want a renewal before expiry", e.requests.Load())
 	}
 }
 

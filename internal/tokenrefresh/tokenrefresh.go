@@ -54,8 +54,17 @@ const (
 	assertionTTL   = 5 * time.Minute
 	attemptTimeout = 15 * time.Second
 
+	// minRenew is the floor of the renewal delay. For a lifetime shorter than
+	// twice this the floor drops to half the lifetime (see renewDelay), so a
+	// short-lived token is still renewed at half of its life, never at or
+	// after its expiry.
 	minRenew = 5 * time.Second
-	maxRenew = 6 * time.Hour
+	// expirySkew is subtracted from the lifetime (capped at a quarter of it):
+	// the lifetime is counted from the moment BEFORE the request was sent, and
+	// the token file is cleared this much early, so it never outlives the
+	// issuer's real expiry (clock granularity, response latency, rounding).
+	expirySkew = 5 * time.Second
+	maxRenew   = 6 * time.Hour
 
 	backoffStart = time.Second
 	backoffMax   = 5 * time.Minute
@@ -314,49 +323,50 @@ type tokenResponse struct {
 
 // fetch performs one exchange. The returned error never contains the
 // response body.
-func (r *Refresher) fetch(ctx context.Context) (token string, ttl time.Duration, err error) {
-	asr, err := r.assertion(r.clock.Now())
+func (r *Refresher) fetch(ctx context.Context) (token string, ttl time.Duration, started time.Time, err error) {
+	started = r.clock.Now() // taken before the request: expiry counts from here
+	asr, err := r.assertion(started)
 	if err != nil {
-		return "", 0, err
+		return "", 0, time.Time{}, err
 	}
 	form := url.Values{"grant_type": {grantType}, "assertion": {asr}, "scope": {r.cfg.Scope}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.tokURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", 0, errors.New("tokenrefresh: bad request")
+		return "", 0, time.Time{}, errors.New("tokenrefresh: bad request")
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	resp, err := r.client.Do(req) //nolint:gosec // issuer is validated https (or test loopback)
 	if err != nil {
 		// url.Error carries the URL (public) but never the request body.
-		return "", 0, fmt.Errorf("tokenrefresh: token request failed: %w", unwrapURL(err))
+		return "", 0, time.Time{}, fmt.Errorf("tokenrefresh: token request failed: %w", unwrapURL(err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("tokenrefresh: token endpoint answered %d", resp.StatusCode)
+		return "", 0, time.Time{}, fmt.Errorf("tokenrefresh: token endpoint answered %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
 	if err != nil {
-		return "", 0, errors.New("tokenrefresh: token response unreadable")
+		return "", 0, time.Time{}, errors.New("tokenrefresh: token response unreadable")
 	}
 	if len(body) > maxResponse {
-		return "", 0, errors.New("tokenrefresh: token response too large")
+		return "", 0, time.Time{}, errors.New("tokenrefresh: token response too large")
 	}
 	var tr tokenResponse
 	if json.Unmarshal(body, &tr) != nil {
-		return "", 0, errors.New("tokenrefresh: token response is not valid JSON")
+		return "", 0, time.Time{}, errors.New("tokenrefresh: token response is not valid JSON")
 	}
 	if tr.TokenType != "" && !strings.EqualFold(tr.TokenType, "bearer") {
-		return "", 0, errors.New("tokenrefresh: unexpected token type")
+		return "", 0, time.Time{}, errors.New("tokenrefresh: unexpected token type")
 	}
 	if tr.AccessToken == "" || len(tr.AccessToken) > maxTokenBytes || !tokenPattern.MatchString(tr.AccessToken) {
-		return "", 0, errors.New("tokenrefresh: token response carries no usable access token")
+		return "", 0, time.Time{}, errors.New("tokenrefresh: token response carries no usable access token")
 	}
 	var secs float64
 	if json.Unmarshal(tr.ExpiresIn, &secs) != nil || math.IsNaN(secs) || secs < 1 || secs > 7*24*3600 {
-		return "", 0, errors.New("tokenrefresh: token response carries no usable expires_in")
+		return "", 0, time.Time{}, errors.New("tokenrefresh: token response carries no usable expires_in")
 	}
-	return tr.AccessToken, time.Duration(secs * float64(time.Second)), nil
+	return tr.AccessToken, time.Duration(secs * float64(time.Second)), started, nil
 }
 
 func unwrapURL(err error) error {
@@ -425,14 +435,18 @@ func (r *Refresher) setReady(ready bool) {
 
 // renewDelay is half of the lifetime, jittered downwards by up to 10% (never
 // later than half), clamped to [minRenew, maxRenew] and never beyond the
-// lifetime itself.
+// lifetime itself. The floor is min(minRenew, ttl/2).
 func (r *Refresher) renewDelay(ttl time.Duration) time.Duration {
 	d := time.Duration(float64(ttl/2) * (1 - 0.1*r.jitter()))
 	if d > maxRenew {
 		d = maxRenew
 	}
-	if d < minRenew {
-		d = minRenew
+	floor := minRenew
+	if ttl/2 < floor {
+		floor = ttl / 2 // short lifetime: still renew at half, not at expiry
+	}
+	if d < floor {
+		d = floor
 	}
 	if d > ttl {
 		d = ttl
@@ -489,7 +503,7 @@ func (r *Refresher) Run(ctx context.Context) error {
 			// The attempt must not outlive the token it is replacing.
 			actx, cancel = context.WithDeadline(ctx, expiry)
 		}
-		token, ttl, err := r.fetch(actx)
+		token, ttl, started, err := r.fetch(actx)
 		cancel()
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -507,10 +521,13 @@ func (r *Refresher) Run(ctx context.Context) error {
 			continue
 		}
 		failures = 0
-		now = r.clock.Now()
-		expiry = now.Add(ttl)
+		skew := expirySkew
+		if skew > ttl/4 {
+			skew = ttl / 4
+		}
+		expiry = started.Add(ttl - skew)
 		delay := r.renewDelay(ttl)
-		nextTry = now.Add(delay)
+		nextTry = started.Add(delay)
 		r.setReady(true)
 		r.log.Info("token refreshed", "expires_in_seconds", int64(ttl/time.Second), "next_refresh_in_seconds", int64(delay/time.Second))
 	}
