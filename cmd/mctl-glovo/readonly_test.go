@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -311,5 +312,84 @@ func TestConsentTextMatchesTheServedTools(t *testing.T) {
 	}
 	if !strings.Contains(lower, "never used to change your basket") {
 		t.Errorf("the consent text no longer says the basket is not changed")
+	}
+}
+
+// The client layer follows the config: none by default, so a hosted client is
+// read-only for baskets; the option appears only with the code seam set.
+func TestBasketWriteOptionsFollowTheConfig(t *testing.T) {
+	c, err := loadC2(env(fullEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := basketWriteOptions(c); len(got) != 0 {
+		t.Fatalf("default C2 config yields %d basket write option(s)", len(got))
+	}
+	if got := basketWriteOptions(c2Config{basketWrites: true}); len(got) != 1 {
+		t.Fatalf("basketWrites seam yields %d option(s), want 1", len(got))
+	}
+}
+
+// End to end: with the capability on at both layers and an approver that
+// says no, a write tool call is refused by the approval step and nothing
+// reaches Glovo, not even the basket read the call would start with. With a
+// yes it goes through. Dropping the approval middleware turns the first half
+// red.
+func TestApproverSitsInFrontOfEveryWriteToolCall(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		approve error
+	}{{"refused", errors.New("no")}, {"approved", nil}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var asked []string
+			var fake *fakeGlovo
+			src := &fakeSource{clients: map[string]*glovoapi.Client{}}
+			e := newMCPEnvWith(t, nil, func(d *mcpDeps) {
+				d.BasketWrites = true
+				d.BasketApprover = func(_ context.Context, pid, tool string, _ map[string]any) error {
+					asked = append(asked, pid+" "+tool)
+					return tc.approve
+				}
+				fake = newFakeGlovo(t)
+				c, err := glovoapi.New("",
+					glovoapi.WithBaseURL(fake.srv.URL),
+					glovoapi.WithSession(glovoapi.Session{
+						"accessToken": marker("A"), "refreshToken": "refresh-A", "customerId": float64(1),
+						"location": map[string]any{"cityCode": "TST", "latitude": "1", "longitude": "2", "countryCode": "XX"},
+					}),
+					glovoapi.WithRefreshCoordinator(func(context.Context, glovoapi.Session, func(context.Context, glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {
+						return nil, errors.New("unexpected refresh")
+					}),
+					glovoapi.WithRequestGate(func(context.Context) error { return nil }),
+					glovoapi.WithClock(func() time.Time { return time.Unix(1_800_000_000, 0) }),
+					glovoapi.WithBasketWrites(),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				src.clients["prn_A"] = c
+				d.Clients = src
+			}, nil)
+			session := e.open(t, "tok-a")
+			_, res, body := e.call(t, "tok-a", session, "glovo_remove_from_basket", map[string]any{"store_id": "1", "basket_product_id": "bp"})
+			if len(asked) != 1 || !strings.HasSuffix(asked[0], " glovo_remove_from_basket") {
+				t.Fatalf("approver asked %v", asked)
+			}
+			if tc.approve != nil {
+				if res == nil || !res.IsError || resultText(res) != glovotools.BasketWritesRefusal {
+					t.Fatalf("not refused by the approval step: %s", body)
+				}
+				if n := len(fake.seen()); n != 0 {
+					t.Fatalf("%d request(s) reached Glovo after a refusal", n)
+				}
+				return
+			}
+			if res != nil && resultText(res) == glovotools.BasketWritesRefusal {
+				t.Fatalf("approved call was refused: %s", body)
+			}
+			if n := len(fake.seen()); n == 0 {
+				t.Fatal("approved call never reached the provider layer")
+			}
+		})
 	}
 }

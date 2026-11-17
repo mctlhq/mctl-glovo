@@ -90,6 +90,17 @@ func loadBasketWrites(getenv func(string) string) (bool, error) {
 	}
 }
 
+// basketWriteOptions is the client layer of the capability: hosted clients
+// refuse basket mutations unless built with glovoapi.WithBasketWrites, so
+// the default config yields none. newMCPRoutes refuses basket writes without
+// an approver.
+func basketWriteOptions(c c2Config) []glovoapi.Option {
+	if !c.basketWrites {
+		return nil
+	}
+	return []glovoapi.Option{glovoapi.WithBasketWrites()}
+}
+
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
 // rest. Anything but "", "false" or "true" is an error, not "off": a typo
 // in the flag must stop the rollout, not silently pick a side.
@@ -256,13 +267,7 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		// MaskIdentity needs mctl-api's identity lookup (C2-1c). Until
 		// then PreviewLink refuses, so the helper never uploads.
 		MaskIdentity:  nil,
-		ClientOptions: []glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()},
-	}
-	if c.basketWrites {
-		// The second layer: hosted clients refuse basket mutations unless
-		// built with this option (glovoapi.WithBasketWrites). newMCPRoutes
-		// refuses the combination without an approver.
-		scfg.ClientOptions = append(scfg.ClientOptions, glovoapi.WithBasketWrites())
+		ClientOptions: append([]glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()}, basketWriteOptions(c)...),
 	}
 	withLinkConsent(&scfg, gate)
 	if err := withCaps(&scfg, c); err != nil {
