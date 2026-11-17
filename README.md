@@ -40,29 +40,41 @@ optionally `GLOVO_VAULT_ROLE` (default `mctl-glovo`) and
 `GLOVO_LINK_TRUSTED_PROXIES` (CIDRs whose `X-Forwarded-For` is believed).
 
 ### Read-only by default
-Hosted C2 does not change a Glovo basket unless `GLOVO_C2_BASKET_WRITES=true`
-(unset or `false` is off; any other value is a startup error). Off, the
-default:
+Hosted C2 does not change a Glovo basket. There is no switch for it:
 
 - `glovo_add_to_basket`, `glovo_set_quantity` and `glovo_remove_from_basket`
   are not in `tools/list`, and a `tools/call` for one by name is refused
   before the tool lookup, the argument check, the token store and any
   request to Glovo;
-- every hosted Glovo client refuses a basket mutation (POST, PUT, PATCH or
-  DELETE on a `baskets` path) before the network, so a second way of
-  building a client or calling a handler cannot write a basket either;
+- every hosted Glovo client refuses a basket mutation (POST, PUT, PATCH,
+  DELETE or any other non-GET method on a `baskets` path) before the network,
+  also on a 301/302/303/307/308 redirect hop, on HTTP/1.1 and HTTP/2, and on
+  a retry; a redirect off the API origin is refused too;
 - reading stays as it is: `glovo_get_basket`, purchase history, order items,
-  order stats, `glovo_analyze_order_history`, reorder previews and plans.
+  order stats, `glovo_analyze_order_history`, reorder previews and plans;
+- the text the tools serve (descriptions, the shopping guide, a reorder
+  plan's `next_step`, the MCP instructions) points at no tool that is not
+  listed, and the consent text (`c2-link-v2`) claims only reading.
 
-No checkout, payment or order tool exists in either mode, and the client's
-mutation allowlist has no such endpoint.
+No checkout, payment or order tool exists, and the client's mutation
+allowlist has no such endpoint.
 
-`GLOVO_C2_BASKET_WRITES=true` only lifts these refusals, at both layers
-(`glovotools.Config.BasketWrites` and `glovoapi.WithBasketWrites`). It is a
-capability switch, not an approval: it does not replace, skip or imitate
-the approval step that must sit in front of basket writes (mctl-api#1011
-and #1012), and mctl-glovo keeps no approval ledger of its own. It must not
-be set in a deployment until that step is implemented and verified.
+`GLOVO_C2_BASKET_WRITES` is only there to be refused: unset or `false` is
+the one working value, and `true` (like any other spelling, `TRUE`, ` true`,
+`1`, `yes`) stops the process at startup. Until an approval gate exists
+(mctl-api#1011 and #1012), an environment variable must not be able to open
+basket writes on the user-facing hosted C2. The seam for that future change
+is in code: `c2Config.basketWrites` and `c2Config.basketApprover`, which no
+loader sets, and `mcpDeps.BasketApprover`, without which `newMCPRoutes`
+refuses to serve the write tools; every write tool call then asks the
+approver first (`approvalMiddleware`). The enabling change adds the approval
+step and sets those fields in the same reviewed change.
+
+The session-file backend of `glovo-home` (the owner's own machine) is not
+covered: it serves the three tools, and `cmd/glovo-home` is a separate
+owner-only service. Whether a pilot participant can reach it is a question of
+its principal allowlist and of what the `glovo.mctl.ai` route points at; see
+the note on mctl-glovo#49.
 
 ### Who may use C2
 Every token must be an mctl-api token for this resource that names exactly
