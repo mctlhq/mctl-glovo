@@ -57,10 +57,10 @@ type DB interface {
 	InsertLinkCode(ctx context.Context, hash []byte, pid, consentVersion string, expires time.Time) error
 	// PeekLinkCode returns the pid of a live code without burning it, or
 	// errNoRow.
-	PeekLinkCode(ctx context.Context, hash []byte) (string, error)
+	PeekLinkCode(ctx context.Context, hash []byte, pid string) (string, error)
 	// RedeemLinkCode burns a live code atomically and returns its pid and
 	// consent version, or errNoRow.
-	RedeemLinkCode(ctx context.Context, hash []byte) (pid, consentVersion string, err error)
+	RedeemLinkCode(ctx context.Context, hash []byte, pid string) (rowPID, consentVersion string, err error)
 	// UpsertLink stores a new link for pid, replacing any previous one,
 	// with a fresh version from the sequence, and returns that version.
 	UpsertLink(ctx context.Context, w LinkWrite) (int64, error)

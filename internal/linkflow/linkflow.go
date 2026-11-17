@@ -43,7 +43,9 @@ const (
 const linkTimeout = 30 * time.Second
 
 // Verifier is the token check, authn.Verifier in production: exact aud,
-// exact iss, EdDSA against mctl-api's JWKS.
+// exact iss, EdDSA against mctl-api's JWKS. The link routes use two: Verifier
+// (the MCP audience) mints a code, LinkVerifier (the dedicated link audience,
+// with a fresh-login requirement) previews and uploads.
 type Verifier interface {
 	Verify(ctx context.Context, token string) (*authn.Principal, error)
 }
@@ -56,6 +58,12 @@ type Config struct {
 	Store    tokenstore.Store
 	Verifier Verifier
 	Consent  ConsentSource
+	// LinkVerifier checks the token on /link/preview and /link/upload: the
+	// link audience and a fresh MCTL login (auth_time). Nil leaves those two
+	// routes answering 503 and nothing else changes: no code can be
+	// previewed or redeemed without it, so a missing link audience fails
+	// closed and never falls back to the MCP verifier.
+	LinkVerifier Verifier
 	// TrustedProxies are the hops (ingress, tunnel) whose X-Forwarded-For
 	// is believed. Empty: the client IP is the peer address.
 	TrustedProxies []netip.Prefix
@@ -126,6 +134,8 @@ var (
 	refUnauthorized    = refusal{http.StatusUnauthorized, "invalid_token", "the access token is not valid for this resource"}
 	refForbidden       = refusal{http.StatusForbidden, "access_denied", "this account is not allowed to link"}
 	refAuthUnavailable = refusal{http.StatusServiceUnavailable, "temporarily_unavailable", "cannot verify tokens right now; try again later"}
+	refFreshLogin      = refusal{http.StatusUnauthorized, "fresh_login_required", "sign in to MCTL again to continue linking"}
+	refLinkLoginOff    = refusal{http.StatusServiceUnavailable, "unavailable", "linking is unavailable right now; request a new code and try again later"}
 )
 
 func (h *Handler) refuse(w http.ResponseWriter, route string, ref refusal) {
@@ -292,6 +302,20 @@ func (h *Handler) trusted(ip netip.Addr) bool {
 
 // principal verifies the bearer token exactly as the MCP gateway does.
 func (h *Handler) principal(r *http.Request) (tokenstore.PID, *refusal) {
+	return h.verified(r, h.cfg.Verifier)
+}
+
+// linkPrincipal verifies the token of a preview or an upload: the link
+// audience and a fresh login. Without a link verifier it refuses; it never
+// falls back to the MCP verifier.
+func (h *Handler) linkPrincipal(r *http.Request) (tokenstore.PID, *refusal) {
+	if h.cfg.LinkVerifier == nil {
+		return tokenstore.PID{}, &refLinkLoginOff
+	}
+	return h.verified(r, h.cfg.LinkVerifier)
+}
+
+func (h *Handler) verified(r *http.Request, v Verifier) (tokenstore.PID, *refusal) {
 	if r.URL.Query().Has("access_token") {
 		return tokenstore.PID{}, &refUnauthorized
 	}
@@ -299,7 +323,7 @@ func (h *Handler) principal(r *http.Request) (tokenstore.PID, *refusal) {
 	if len(a) < 8 || !strings.EqualFold(a[:7], "bearer ") || strings.TrimSpace(a[7:]) == "" {
 		return tokenstore.PID{}, &refUnauthorized
 	}
-	p, err := h.cfg.Verifier.Verify(r.Context(), strings.TrimSpace(a[7:]))
+	p, err := v.Verify(r.Context(), strings.TrimSpace(a[7:]))
 	if err != nil {
 		var ae *authn.Error
 		if !errors.As(err, &ae) {
@@ -308,6 +332,11 @@ func (h *Handler) principal(r *http.Request) (tokenstore.PID, *refusal) {
 		switch ae.Status {
 		case http.StatusServiceUnavailable:
 			return tokenstore.PID{}, &refAuthUnavailable
+		case http.StatusUnauthorized:
+			if ae.Reason == authn.ReasonFreshLogin {
+				return tokenstore.PID{}, &refFreshLogin
+			}
+			return tokenstore.PID{}, &refUnauthorized
 		case http.StatusForbidden:
 			if ae.Reason == authn.ReasonNotAdmitted {
 				return tokenstore.PID{}, &refNoConsent
@@ -395,6 +424,11 @@ func (h *Handler) handleCode(w http.ResponseWriter, r *http.Request) {
 // without burning it.
 func (h *Handler) handlePreview(w http.ResponseWriter, r *http.Request) {
 	const route = "preview"
+	pid, ref := h.linkPrincipal(r)
+	if ref != nil {
+		h.refuse(w, route, *ref)
+		return
+	}
 	obj, ref := readBody(w, r, "schema", "code")
 	if ref != nil {
 		h.refuse(w, route, *ref)
@@ -409,7 +443,17 @@ func (h *Handler) handlePreview(w http.ResponseWriter, r *http.Request) {
 		h.refuse(w, route, refRateLimited)
 		return
 	}
-	masked, err := h.cfg.Store.PreviewLink(r.Context(), code)
+	// The identity of a principal is shown only while its consent holds now.
+	version, err := h.cfg.Consent.RecordedConsent(r.Context(), pid)
+	switch {
+	case errors.Is(err, ErrNoConsent), err == nil && version != ConsentVersion:
+		h.refuse(w, route, refNoConsent)
+		return
+	case err != nil:
+		h.refuse(w, route, refUnavailable)
+		return
+	}
+	masked, err := h.cfg.Store.PreviewLink(r.Context(), pid, code)
 	if err != nil {
 		h.refuse(w, route, storeRefusal(err))
 		return
@@ -423,6 +467,11 @@ func (h *Handler) handlePreview(w http.ResponseWriter, r *http.Request) {
 // the session's shape, makes the validating Glovo call, and stores.
 func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	const route = "upload"
+	pid, ref := h.linkPrincipal(r)
+	if ref != nil {
+		h.refuse(w, route, *ref)
+		return
+	}
 	obj, ref := readBody(w, r, "schema", "code", "session")
 	if ref != nil {
 		h.refuse(w, route, *ref)
@@ -446,7 +495,7 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), linkTimeout)
 	defer cancel()
-	if err := h.cfg.Store.Link(ctx, code, glovoapi.Session(sess)); err != nil {
+	if err := h.cfg.Store.Link(ctx, pid, code, glovoapi.Session(sess)); err != nil {
 		h.refuse(w, route, storeRefusal(err))
 		return
 	}

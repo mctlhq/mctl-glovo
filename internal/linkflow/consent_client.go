@@ -143,7 +143,17 @@ type consentAnswer struct {
 	PrincipalID    string `json:"principal_id"`
 	State          string `json:"state"`
 	ConsentVersion string `json:"consent_version"`
+	MaskedIdentity string `json:"masked_identity"`
 }
+
+// maskedPattern is the only label shape the preview will show: a provider
+// prefix from a closed set, exactly one letter or digit, and "***". mctl-api
+// builds it; this check means a faulty or compromised answer can never put
+// more of an identity on a screen.
+var maskedPattern = regexp.MustCompile(`^(?:github|google|mctl):[\p{L}\p{N}]\*\*\*$`)
+
+// maskedQuery asks mctl-api for the label with the consent state.
+const maskedQuery = "?include=masked_identity"
 
 func unavailable(reason string) error {
 	return fmt.Errorf("%w: %s", ErrConsentUnavailable, reason)
@@ -151,45 +161,75 @@ func unavailable(reason string) error {
 
 // RecordedConsent implements ConsentSource.
 func (c *APIConsent) RecordedConsent(ctx context.Context, pid tokenstore.PID) (string, error) {
-	id := pid.String()
-	if id == "" {
-		return "", unavailable("no principal")
-	}
-	token, err := readToken(c.tokenFile)
+	a, err := c.read(ctx, pid, "")
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+ConsentReadPath+url.PathEscape(id), nil) //nolint:gosec // origin is operator config validated (https, or http for a cluster-internal host); pid is a validated prn_ id
+	if a.State == "none" {
+		return "", ErrNoConsent
+	}
+	return a.ConsentVersion, nil
+}
+
+// MaskedIdentity returns the masked label mctl-api derives for pid, for the
+// link preview. It needs an active consent and a label of exactly the
+// expected shape; anything else, a "none" state
+// included, is ErrConsentUnavailable, so the preview refuses rather than
+// show a blank or an unexpected value.
+func (c *APIConsent) MaskedIdentity(ctx context.Context, pid tokenstore.PID) (string, error) {
+	a, err := c.read(ctx, pid, maskedQuery)
 	if err != nil {
-		return "", unavailable("request")
+		return "", err
+	}
+	if a.State != "active" || !maskedPattern.MatchString(a.MaskedIdentity) {
+		return "", unavailable("identity label unavailable")
+	}
+	return a.MaskedIdentity, nil
+}
+
+// read asks mctl-api for pid's consent record. query is "" or maskedQuery.
+// It returns an answer only for exactly this principal, in state "none" with
+// no version, or "active" with one; anything else is unavailable.
+func (c *APIConsent) read(ctx context.Context, pid tokenstore.PID, query string) (consentAnswer, error) {
+	id := pid.String()
+	if id == "" {
+		return consentAnswer{}, unavailable("no principal")
+	}
+	token, err := readToken(c.tokenFile)
+	if err != nil {
+		return consentAnswer{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+ConsentReadPath+url.PathEscape(id)+query, nil) //nolint:gosec // origin is operator config validated (https, or http for a cluster-internal host); pid is a validated prn_ id
+	if err != nil {
+		return consentAnswer{}, unavailable("request")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.client.Do(req) //nolint:gosec // see the request above
 	if err != nil {
-		return "", unavailable("request failed")
+		return consentAnswer{}, unavailable("request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", unavailable(fmt.Sprintf("status %d", resp.StatusCode))
+		return consentAnswer{}, unavailable(fmt.Sprintf("status %d", resp.StatusCode))
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxConsentBody+1))
 	if err != nil || len(body) > maxConsentBody {
-		return "", unavailable("body unreadable")
+		return consentAnswer{}, unavailable("body unreadable")
 	}
 	var a consentAnswer
 	if err := json.Unmarshal(body, &a); err != nil {
-		return "", unavailable("body malformed")
+		return consentAnswer{}, unavailable("body malformed")
 	}
 	switch {
 	case a.PrincipalID != id:
-		return "", unavailable("answer for another principal")
-	case a.State == "none" && a.ConsentVersion == "":
-		return "", ErrNoConsent
+		return consentAnswer{}, unavailable("answer for another principal")
+	case a.State == "none" && a.ConsentVersion == "" && a.MaskedIdentity == "":
+		return a, nil
 	case a.State == "active" && a.ConsentVersion != "":
-		return a.ConsentVersion, nil
+		return a, nil
 	}
-	return "", unavailable("unknown state")
+	return consentAnswer{}, unavailable("unknown state")
 }
 
 // readToken reads and validates the credential file. Every failure is

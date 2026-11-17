@@ -16,6 +16,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -51,7 +53,15 @@ const (
 	ReasonNotAdmitted = "not_admitted"
 	// ReasonAdmitDown: the Admitter could not decide; never a pass.
 	ReasonAdmitDown = "admission_unavailable"
+	// ReasonFreshLogin: the verifier requires a fresh login and the token
+	// carries no auth_time, a malformed one, one in the future, or one older
+	// than the maximum age.
+	ReasonFreshLogin = "fresh_login_required"
 )
+
+// MaxFreshLoginAge is the hard cap on Config.MaxAuthAge: a verifier asked to
+// accept a login older than this refuses to be built.
+const MaxFreshLoginAge = 15 * time.Minute
 
 // GrantKindPersonal is the tgk claim of a token minted under a personal
 // grant: a grant scoped to the principal alone, with no team (stn).
@@ -125,8 +135,16 @@ type Config struct {
 	// shape: a team grant (tgr and stn, no tgk) or a personal grant (tgr,
 	// tgk=personal, no stn). Off, the grant claims are not read.
 	RequireGrant bool
-	HTTPClient   *http.Client
-	Now          func() time.Time
+	// MaxAuthAge, when above zero, makes a fresh login part of the token's
+	// validity (the link routes): the token must carry an integer auth_time
+	// that is not in the future (beyond Leeway) and no older than MaxAuthAge.
+	// A token without auth_time (a GitHub-derived token, a refresh-derived
+	// one, an ordinary connector token) is refused with ReasonFreshLogin.
+	// Zero leaves auth_time unread. Above MaxFreshLoginAge is a
+	// configuration error.
+	MaxAuthAge time.Duration
+	HTTPClient *http.Client
+	Now        func() time.Time
 }
 
 // Verifier verifies bearer tokens.
@@ -136,6 +154,7 @@ type Verifier struct {
 	allowed  map[string]struct{}
 	admit    Admitter
 	grant    bool
+	maxAge   time.Duration
 	jwks     *jwksCache
 	now      func() time.Time
 }
@@ -144,6 +163,9 @@ type Verifier struct {
 func New(cfg Config) (*Verifier, error) {
 	if cfg.Issuer == "" || cfg.Resource == "" || cfg.JWKSURL == "" {
 		return nil, errors.New("authn: issuer, resource and jwks url are required")
+	}
+	if cfg.MaxAuthAge < 0 || cfg.MaxAuthAge > MaxFreshLoginAge {
+		return nil, errors.New("authn: the maximum auth age must be within (0, 15m], or zero for none")
 	}
 	now := cfg.Now
 	if now == nil {
@@ -161,6 +183,7 @@ func New(cfg Config) (*Verifier, error) {
 		allowed:  allowed,
 		admit:    cfg.Admitter,
 		grant:    cfg.RequireGrant,
+		maxAge:   cfg.MaxAuthAge,
 		jwks:     newJWKSCache(cfg.JWKSURL, cfg.HTTPClient, now, false),
 		now:      now,
 	}, nil
@@ -199,6 +222,9 @@ type claims struct {
 	Exp *json.Number    `json:"exp"`
 	Nbf *json.Number    `json:"nbf"`
 	Iat *json.Number    `json:"iat"`
+	// AuthTime is read only when the verifier requires a fresh login. It is
+	// kept raw: a quoted number, a fraction or an exponent is not a login time.
+	AuthTime json.RawMessage `json:"auth_time"`
 }
 
 // Verify checks token and returns the principal. A returned error is always
@@ -285,6 +311,9 @@ func (v *Verifier) Verify(ctx context.Context, token string) (*Principal, error)
 	if strings.TrimSpace(c.PID) == "" {
 		return nil, refuse(ReasonNoPrincipal)
 	}
+	if v.maxAge > 0 && !freshLogin(c.AuthTime, now, v.maxAge) {
+		return nil, refuse(ReasonFreshLogin)
+	}
 	p := &Principal{ID: c.PID, Subject: c.Sub}
 	if v.grant {
 		switch {
@@ -312,6 +341,24 @@ func (v *Verifier) Verify(ctx context.Context, token string) (*Principal, error)
 		}
 	}
 	return p, nil
+}
+
+// wholeNumber is a JSON integer literal: no quotes, fraction or exponent.
+var wholeNumber = regexp.MustCompile(`^-?[0-9]{1,19}$`)
+
+// freshLogin reports whether auth_time is a whole-second NumericDate no later
+// than now+Leeway and no older than maxAge. A missing, fractional,
+// non-numeric or out-of-range value is not a fresh login.
+func freshLogin(raw json.RawMessage, now time.Time, maxAge time.Duration) bool {
+	if !wholeNumber.Match(raw) {
+		return false
+	}
+	secs, err := strconv.ParseInt(string(raw), 10, 64)
+	if err != nil || secs <= 0 || secs > 1<<33 {
+		return false
+	}
+	at := time.Unix(secs, 0)
+	return !at.After(now.Add(Leeway)) && now.Sub(at) <= maxAge
 }
 
 // exactAudience accepts aud only when it names exactly one audience equal to

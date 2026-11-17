@@ -242,7 +242,7 @@ func TestKilledMeansZeroDecrypts(t *testing.T) {
 		if _, _, err := h.st.CreateLinkCode(ctx, a, "consent-v1"); !errors.Is(err, ErrKilled) {
 			t.Fatalf("CreateLinkCode: %v", err)
 		}
-		if err := h.st.Link(ctx, strings.Repeat("A", 43), testSession("X")); !errors.Is(err, ErrKilled) {
+		if err := h.st.Link(ctx, a, strings.Repeat("A", 43), testSession("X")); !errors.Is(err, ErrKilled) {
 			t.Fatalf("Link: %v", err)
 		}
 		// A client handed out before the kill is refused per request.
@@ -592,9 +592,9 @@ func TestRedactionMarkerScan(t *testing.T) {
 	h.transit.fail500.Store(true)
 	_, err = h.st.Get(ctx, a)
 	keep(err)
-	keep(h.st.Link(ctx, "x", sess))
+	keep(h.st.Link(ctx, a, "x", sess))
 	code, _, _ := h.st.CreateLinkCode(ctx, a, "consent-v1")
-	keep(h.st.Link(ctx, code, sess))
+	keep(h.st.Link(ctx, a, code, sess))
 	h.transit.fail500.Store(false)
 	// Integrity failure (Vault 400 echo).
 	h.link(pidA, sess)
@@ -623,7 +623,7 @@ func TestRedactionMarkerScan(t *testing.T) {
 	// Session refused by shape.
 	bad := glovoapi.Session{"accessToken": mk + "-ACCESS", "refreshToken": 7}
 	code, _, _ = h.st.CreateLinkCode(ctx, a, "consent-v1")
-	keep(h.st.Link(ctx, code, bad))
+	keep(h.st.Link(ctx, a, code, bad))
 	if len(errs) < 8 {
 		t.Fatalf("only %d error paths exercised", len(errs))
 	}
@@ -932,31 +932,31 @@ func TestLinkCodeFlow(t *testing.T) {
 		if err != nil || time.Until(exp) > linkCodeTTL || time.Until(exp) < linkCodeTTL-time.Minute {
 			t.Fatalf("code: %v %v", exp, err)
 		}
-		if masked, err := h.st.PreviewLink(ctx, code); err != nil || masked != "a***@e***.com" {
+		if masked, err := h.st.PreviewLink(ctx, a, code); err != nil || masked != "a***@e***.com" {
 			t.Fatalf("preview: %q %v", masked, err)
 		}
 		// A second code invalidates the first.
 		code2, _, _ := h.st.CreateLinkCode(ctx, a, "consent-v1")
-		if err := h.st.Link(ctx, code, testSession("A1")); !errors.Is(err, ErrCodeRefused) {
+		if err := h.st.Link(ctx, a, code, testSession("A1")); !errors.Is(err, ErrCodeRefused) {
 			t.Fatalf("superseded code: %v", err)
 		}
-		if err := h.st.Link(ctx, code2, testSession("A1")); err != nil {
+		if err := h.st.Link(ctx, a, code2, testSession("A1")); err != nil {
 			t.Fatal(err)
 		}
-		if err := h.st.Link(ctx, code2, testSession("A1")); !errors.Is(err, ErrCodeRefused) {
+		if err := h.st.Link(ctx, a, code2, testSession("A1")); !errors.Is(err, ErrCodeRefused) {
 			t.Fatalf("reused code: %v", err)
 		}
 		for _, bad := range []string{"", "short", strings.Repeat("A", 44)} {
-			if _, err := h.st.PreviewLink(ctx, bad); !errors.Is(err, ErrCodeRefused) {
+			if _, err := h.st.PreviewLink(ctx, a, bad); !errors.Is(err, ErrCodeRefused) {
 				t.Fatalf("preview %q: %v", bad, err)
 			}
 		}
 		// A failed validation still burns the code.
 		code3, _, _ := h.st.CreateLinkCode(ctx, a, "consent-v1")
-		if err := h.st.Link(ctx, code3, glovoapi.Session{"accessToken": "x"}); !errors.Is(err, ErrSessionRefused) {
+		if err := h.st.Link(ctx, a, code3, glovoapi.Session{"accessToken": "x"}); !errors.Is(err, ErrSessionRefused) {
 			t.Fatalf("bad session: %v", err)
 		}
-		if err := h.st.Link(ctx, code3, testSession("A2")); !errors.Is(err, ErrCodeRefused) {
+		if err := h.st.Link(ctx, a, code3, testSession("A2")); !errors.Is(err, ErrCodeRefused) {
 			t.Fatalf("burned code reused: %v", err)
 		}
 	})

@@ -227,7 +227,7 @@ func (e *isoEnv) link(owner, gen string) glovoapi.Session {
 	if err != nil {
 		e.t.Fatal(err)
 	}
-	if err := e.pg.Store.Link(ctx, code, sess); err != nil {
+	if err := e.pg.Store.Link(ctx, pid, code, sess); err != nil {
 		e.t.Fatal(err)
 	}
 	return sess

@@ -159,7 +159,7 @@ func (h *harness) link(pid string, sess glovoapi.Session) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	if err := h.st.Link(ctx, code, sess); err != nil {
+	if err := h.st.Link(ctx, h.pid(pid), code, sess); err != nil {
 		h.t.Fatal(err)
 	}
 	h.glovo.issue(sess)

@@ -175,3 +175,65 @@ func TestAdapters(t *testing.T) {
 	}
 	_ = src
 }
+
+// CheckFresh never rests on the positive cache: a consent withdrawn right
+// after a cached yes is seen at once, which is what a link upload needs.
+func TestCheckFreshIgnoresThePositiveCache(t *testing.T) {
+	g, src, _ := newGate(t)
+	ctx := context.Background()
+	pid := tokenstore.PIDFrom(&authn.Principal{ID: pidA})
+	if err := g.Check(ctx, pid); err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	src.set("", nil) // withdrawn after the cached yes
+	if err := g.Check(ctx, pid); err != nil {
+		t.Fatalf("control: the cached yes should still answer Check, got %v", err)
+	}
+	if err := g.CheckFresh(ctx, pid); !errors.Is(err, ErrNoConsent) {
+		t.Fatalf("CheckFresh after withdrawal = %v, want ErrNoConsent", err)
+	}
+	// The negative answer dropped the cached yes for everyone.
+	if err := g.Check(ctx, pid); !errors.Is(err, ErrNoConsent) {
+		t.Fatalf("Check after CheckFresh refused = %v, want ErrNoConsent", err)
+	}
+}
+
+func TestCheckFreshReadsEveryTimeAndFailsClosed(t *testing.T) {
+	g, src, _ := newGate(t)
+	ctx := context.Background()
+	pid := tokenstore.PIDFrom(&authn.Principal{ID: pidA})
+	for i := 0; i < 3; i++ {
+		if err := g.CheckFresh(ctx, pid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if src.reads != 3 {
+		t.Fatalf("CheckFresh read the source %d times in 3 calls, want 3", src.reads)
+	}
+	src.set(version, errors.New("mctl-api down"))
+	if err := g.CheckFresh(ctx, pid); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("unreadable = %v, want ErrUnavailable", err)
+	}
+	if err := g.CheckFresh(ctx, tokenstore.PID{}); !errors.Is(err, ErrNoConsent) {
+		t.Fatalf("zero pid = %v, want ErrNoConsent", err)
+	}
+}
+
+// LinkConsent is the upload's re-check: after a cached yes and a withdrawal it
+// must refuse with the consent sentinel the store maps to consent_refused.
+func TestLinkConsentIsUncached(t *testing.T) {
+	g, src, _ := newGate(t)
+	ctx := context.Background()
+	pid := tokenstore.PIDFrom(&authn.Principal{ID: pidA})
+	if err := g.Admit(ctx, pidA); err != nil { // fills the cache, as the token check does
+		t.Fatal(err)
+	}
+	src.set("", nil)
+	if err := g.LinkConsent(ctx, pid); !errors.Is(err, tokenstore.ErrConsentRefused) {
+		t.Fatalf("LinkConsent after withdrawal = %v, want ErrConsentRefused", err)
+	}
+	src.set(version, errors.New("down"))
+	if err := g.LinkConsent(ctx, pid); err == nil || errors.Is(err, tokenstore.ErrConsentRefused) {
+		t.Fatalf("LinkConsent unreadable = %v, want a non-consent error (failed read)", err)
+	}
+}

@@ -385,21 +385,21 @@ func (m *memDB) live(hash []byte) *memCode {
 	return c
 }
 
-func (m *memDB) PeekLinkCode(_ context.Context, hash []byte) (string, error) {
+func (m *memDB) PeekLinkCode(_ context.Context, hash []byte, pid string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	c := m.live(hash)
-	if c == nil {
+	if c == nil || c.pid != pid {
 		return "", errNoRow
 	}
 	return c.pid, nil
 }
 
-func (m *memDB) RedeemLinkCode(_ context.Context, hash []byte) (string, string, error) {
+func (m *memDB) RedeemLinkCode(_ context.Context, hash []byte, pid string) (string, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	c := m.live(hash)
-	if c == nil {
+	if c == nil || c.pid != pid {
 		return "", "", errNoRow
 	}
 	c.used = time.Now()

@@ -270,10 +270,10 @@ func (p *Postgres) InsertLinkCode(ctx context.Context, hash []byte, pid, consent
 }
 
 // PeekLinkCode implements DB.
-func (p *Postgres) PeekLinkCode(ctx context.Context, hash []byte) (string, error) {
+func (p *Postgres) PeekLinkCode(ctx context.Context, hash []byte, caller string) (string, error) {
 	var pid string
 	err := p.db.QueryRowContext(ctx,
-		`SELECT pid FROM glovo_link_codes WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now()`, hash).Scan(&pid)
+		`SELECT pid FROM glovo_link_codes WHERE code_hash = $1 AND pid = $2 AND used_at IS NULL AND expires_at > now()`, hash, caller).Scan(&pid)
 	if err != nil {
 		return "", noRow(err, "preview link code")
 	}
@@ -281,12 +281,14 @@ func (p *Postgres) PeekLinkCode(ctx context.Context, hash []byte) (string, error
 }
 
 // RedeemLinkCode implements DB.
-func (p *Postgres) RedeemLinkCode(ctx context.Context, hash []byte) (string, string, error) {
+func (p *Postgres) RedeemLinkCode(ctx context.Context, hash []byte, caller string) (string, string, error) {
 	var pid, consent string
+	// pid = $2 is part of the same statement: a code of another principal
+	// matches no row, so it is refused and not burned.
 	err := p.db.QueryRowContext(ctx, `
 		UPDATE glovo_link_codes SET used_at = now()
-		 WHERE code_hash = $1 AND used_at IS NULL AND expires_at > now()
-		RETURNING pid, consent_version`, hash).Scan(&pid, &consent)
+		 WHERE code_hash = $1 AND pid = $2 AND used_at IS NULL AND expires_at > now()
+		RETURNING pid, consent_version`, hash, caller).Scan(&pid, &consent)
 	if err != nil {
 		return "", "", noRow(err, "redeem link code")
 	}
