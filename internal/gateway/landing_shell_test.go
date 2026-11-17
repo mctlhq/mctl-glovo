@@ -29,7 +29,7 @@ func TestLandingUsesPlatformShell(t *testing.T) {
 			`class="mctl-site-brand"`, `<span class="mctl-site-brand__accent">M</span><span>CTL</span>`,
 			`<nav class="mctl-site-nav" aria-label="` + tx.LangNavL + `">`,
 			`<footer class="mctl-site-footer">`, `class="mctl-site-footer__links"`, `class="mctl-site-footer__copy"`,
-			`class="mctl-site-chip"`,
+			`class="mctl-site-chip lp-eyebrow"`,
 			`<a class="skip-link" href="#main">` + tx.SkipL + `</a>`, `<main id="main">`,
 			`<pre tabindex="0">`,
 			`href="https://mctl.ai/privacy/"`, `href="mailto:support@mctl.ai"`,
@@ -137,7 +137,7 @@ func TestSystemLightBlock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"@media (prefers-color-scheme:light)", ":root:not([data-theme])", "--surface-bg:", "--surface-fg:"} {
+	for _, want := range []string{"@media (prefers-color-scheme:light),(prefers-color-scheme:no-preference)", ":root:not([data-theme])", "--surface-bg:", "--surface-fg:"} {
 		if !strings.Contains(b, want) {
 			t.Errorf("light block lacks %q", want)
 		}
@@ -147,17 +147,6 @@ func TestSystemLightBlock(t *testing.T) {
 	}
 	if _, err := systemLightBlock(":root{}"); err == nil {
 		t.Error("a sheet without the light rule must be an error, not an empty block")
-	}
-}
-
-// The theme-color meta values must be the design system's page backgrounds.
-func TestLandingThemeColorsMatchTokens(t *testing.T) {
-	tokens := landingAsset("mctl.css")
-	for name, want := range map[string]string{"dark": landingThemeDark, "light": landingThemeLight} {
-		decl := "--mctl-surface-" + name + "-bg: " + want + ";"
-		if !strings.Contains(tokens, decl) {
-			t.Errorf("tokens do not declare %q", decl)
-		}
 	}
 }
 

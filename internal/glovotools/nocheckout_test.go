@@ -123,3 +123,16 @@ func TestHostedLoginIsRefused(t *testing.T) {
 		t.Fatal("glovo_login reached Glovo")
 	}
 }
+
+// The landing page states the tool count from childmcp.KnownTools. The hosted
+// set must stay equal to that list, or the page's figure would describe a
+// different set from the one served.
+func TestHostedToolSetEqualsKnownTools(t *testing.T) {
+	a := append([]string(nil), hostedToolSet...)
+	b := append([]string(nil), childmcp.KnownTools...)
+	sort.Strings(a)
+	sort.Strings(b)
+	if strings.Join(a, ",") != strings.Join(b, ",") {
+		t.Fatalf("hostedToolSet differs from childmcp.KnownTools:\n%v\n%v", a, b)
+	}
+}

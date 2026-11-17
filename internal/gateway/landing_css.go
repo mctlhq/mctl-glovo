@@ -46,9 +46,9 @@ func landingAsset(name string) string {
 
 var lightRule = regexp.MustCompile(`\[data-theme=['"]light['"]\]\s*\{([^}]*)\}`)
 
-// systemLightBlock makes the page follow the visitor's system theme. The
-// design system is dark by default and defines the light surfaces only under
-// an explicit [data-theme='light']. The block is derived from that rule, so
+// systemLightBlock makes light the page's default look and lets a dark system
+// theme switch it back. The design system is dark by default and defines the
+// light surfaces only under an explicit [data-theme='light']. The block is derived from that rule, so
 // it can never name a variable the pinned version does not define (the same
 // approach as mctl-alice's sync-tokens.mjs).
 func systemLightBlock(tokens string) (string, error) {
@@ -64,7 +64,7 @@ func systemLightBlock(tokens string) (string, error) {
 		}
 	}
 	return "/* mctl-glovo: system light theme, derived from the [data-theme='light'] rule above. */\n" +
-		"@media (prefers-color-scheme:light){:root:not([data-theme]){\n" + strings.Join(decls, "\n") + "\n}}\n", nil
+		"@media (prefers-color-scheme:light),(prefers-color-scheme:no-preference){:root:not([data-theme]){\n" + strings.Join(decls, "\n") + "\n}}\n", nil
 }
 
 // landingCSS is the whole stylesheet: tokens, system-light block, shell,

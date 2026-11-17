@@ -21,19 +21,22 @@ const langCookie = "glovo_lang"
 var landingLangs = []string{"en", "es", "ru"}
 
 type landingText struct {
-	Lang, Title, Lead, Preview                string
-	ConnectH, EndpointL, ClaudeAI, ClaudeCode string
-	ClaudeCodeThen, Other                     string
-	CanH                                      string
-	Can                                       []string
-	NeverH                                    string
-	Never                                     []string
-	SafeH                                     string
-	Safe                                      []string
-	Footer                                    string
-	Locale, ProductName                       string
-	SkipL, LangNavL, FooterNavL               string
-	PrivacyL, ContactL                        string
+	Lang, Title, Lead, Preview                 string
+	ConnectH, EndpointL, ClaudeAI, ClaudeCode  string
+	ClaudeCodeThen, Other                      string
+	CanH                                       string
+	Can                                        []string
+	CanNote                                    string
+	NeverH                                     string
+	Never                                      []string
+	SafeH                                      string
+	Safe                                       []string
+	Footer                                     string
+	Locale, ProductName                        string
+	SkipL, LangNavL, FooterNavL                string
+	PrivacyL, ContactL                         string
+	BtnConnect                                 string
+	StatTools, StatNoPay, StatAuthL, StatAudit string
 }
 
 var landingTexts = map[string]landingText{
@@ -54,9 +57,9 @@ var landingTexts = map[string]landingText{
 			"Read your order history and statistics.",
 			"Suggest what to order and plan a reorder.",
 			"Add, remove and change items in your Glovo basket.",
-			"Basket changes go straight to your real Glovo basket, with no approval step. You place and pay for the order in the Glovo app.",
 		},
-		NeverH: "What it never does",
+		CanNote: "Basket changes go straight to your real Glovo basket, with no approval step. You place and pay for the order in the Glovo app.",
+		NeverH:  "What it never does",
 		Never: []string{
 			"No checkout, payment or order placement. Those tools are not offered, and calls to them are refused by name.",
 			"The tools never read or return payment details.",
@@ -68,6 +71,9 @@ var landingTexts = map[string]landingText{
 			"Data processed: your order history and addresses, to answer your requests.",
 			"Every tool call writes one audit line, without arguments or results.",
 		},
+		BtnConnect: "Connect",
+		StatTools:  "tools available", StatNoPay: "checkout or payment tools",
+		StatAuthL: "sign-in with MCTL or Google", StatAudit: "audit line per tool call",
 		Footer: "Not affiliated with or endorsed by Glovo.",
 		Locale: "en_US", ProductName: "Glovo MCP",
 		SkipL: "Skip to content", LangNavL: "Language", FooterNavL: "Footer",
@@ -90,9 +96,9 @@ var landingTexts = map[string]landingText{
 			"Leer tu historial de pedidos y estadísticas.",
 			"Sugerir qué pedir y planificar un pedido repetido.",
 			"Añadir, quitar y cambiar productos en tu cesta de Glovo.",
-			"Los cambios van directo a tu cesta real de Glovo, sin paso de aprobación. El pedido lo haces y lo pagas en la app de Glovo.",
 		},
-		NeverH: "Qué nunca hace",
+		CanNote: "Los cambios van directo a tu cesta real de Glovo, sin paso de aprobación. El pedido lo haces y lo pagas en la app de Glovo.",
+		NeverH:  "Qué nunca hace",
 		Never: []string{
 			"Sin tramitar pedidos, sin pagar, sin realizar pedidos. Esas herramientas no se ofrecen y las llamadas a ellas se rechazan por nombre.",
 			"Las herramientas nunca leen ni devuelven datos de pago.",
@@ -104,6 +110,9 @@ var landingTexts = map[string]landingText{
 			"Datos tratados: tu historial de pedidos y tus direcciones, para responder a tus solicitudes.",
 			"Cada llamada a una herramienta deja una línea de auditoría, sin argumentos ni resultados.",
 		},
+		BtnConnect: "Conectar",
+		StatTools:  "herramientas disponibles", StatNoPay: "herramientas de pago o de tramitación",
+		StatAuthL: "inicio de sesión con MCTL o Google", StatAudit: "línea de auditoría por llamada",
 		Footer: "Sin relación con Glovo ni respaldo de Glovo.",
 		Locale: "es_ES", ProductName: "Glovo MCP",
 		SkipL: "Saltar al contenido", LangNavL: "Idioma", FooterNavL: "Pie de página",
@@ -126,9 +135,9 @@ var landingTexts = map[string]landingText{
 			"Читать историю заказов и статистику.",
 			"Подсказывать, что заказать, и подготовить повторный заказ.",
 			"Добавлять, убирать и менять товары в корзине Glovo.",
-			"Изменения сразу попадают в вашу настоящую корзину Glovo, без шага подтверждения. Заказ вы оформляете и оплачиваете в приложении Glovo.",
 		},
-		NeverH: "Чего не делает никогда",
+		CanNote: "Изменения сразу попадают в вашу настоящую корзину Glovo, без шага подтверждения. Заказ вы оформляете и оплачиваете в приложении Glovo.",
+		NeverH:  "Чего не делает никогда",
 		Never: []string{
 			"Не оформляет заказ, не платит и не отправляет заказ. Таких инструментов нет, а вызовы по их именам отклоняются.",
 			"Инструменты никогда не читают и не возвращают платёжные данные.",
@@ -140,6 +149,9 @@ var landingTexts = map[string]landingText{
 			"Обрабатываются история заказов и адреса, чтобы отвечать на ваши запросы.",
 			"Каждый вызов инструмента оставляет одну строку аудита, без аргументов и результатов.",
 		},
+		BtnConnect: "Подключить",
+		StatTools:  "инструментов доступно", StatNoPay: "инструментов оформления или оплаты",
+		StatAuthL: "вход через MCTL или Google", StatAudit: "строка аудита на вызов",
 		Footer: "Не связан с Glovo и не одобрен Glovo.",
 		Locale: "ru_RU", ProductName: "Glovo MCP",
 		SkipL: "К содержимому", LangNavL: "Язык", FooterNavL: "Нижняя навигация",
@@ -147,7 +159,7 @@ var landingTexts = map[string]landingText{
 	},
 }
 
-var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
+var landingTmpl = template.Must(template.New("landing").Funcs(template.FuncMap{"icon": landingIcon}).Parse(`<!doctype html>
 <html lang="{{.T.Lang}}">
 <head>
 <meta charset="utf-8">
@@ -182,30 +194,52 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 </div>
 </header>
 <main id="main">
-<div class="mctl-site-container">
-<div class="mctl-site-hero mctl-site-hero--stacked">
-<div class="mctl-site-hero__text">
+<section class="lp-hero">
+<div class="mctl-site-container lp-hero__inner">
+<div class="lp-hero__text">
+<span class="mctl-site-chip lp-eyebrow"><b>MCP</b><span>{{.T.Preview}}</span></span>
 <h1 class="mctl-site-hero__title">{{.T.Title}}</h1>
 <p class="mctl-site-hero__lede">{{.T.Lead}}</p>
-<span class="mctl-site-chip">{{.T.Preview}}</span>
+<div class="lp-actions">
+<a class="btn btn-primary" href="#connect">{{.T.BtnConnect}}</a>
+<a class="btn btn-secondary" href="#can">{{.T.CanH}}</a>
 </div>
 </div>
-<section class="mctl-site-section">
-<div class="mctl-site-section__narrow">
-<h2 class="mctl-site-section__title">{{.T.ConnectH}}</h2>
-<div class="card">
-<p>{{.T.EndpointL}}: <code class="endpoint">{{.Endpoint}}</code></p>
-<p>{{.T.ClaudeAI}}</p>
-<p>{{.T.ClaudeCode}}</p>
-<pre tabindex="0"><code>claude mcp add --transport http glovo {{.Endpoint}}</code></pre>
-<p>{{.T.ClaudeCodeThen}}</p>
-<p>{{.T.Other}}</p>
+<div class="lp-plate">
+<p class="lp-plate__label">{{.T.EndpointL}}</p>
+<code class="lp-url">{{.Endpoint}}</code>
+<p class="lp-plate__tags"><span>Streamable HTTP</span><span>OAuth 2.1</span></p>
 </div>
+</div>
+<div class="mctl-site-container">
+<ul class="lp-stats">{{range .Stats}}<li class="lp-stat"><span class="lp-stat__v">{{.V}}</span><span class="lp-stat__l">{{.L}}</span></li>{{end}}</ul>
 </div>
 </section>
-<section class="mctl-site-section"><div class="mctl-site-section__narrow"><h2 class="mctl-site-section__title">{{.T.CanH}}</h2><div class="card"><ul>{{range .T.Can}}<li>{{.}}</li>{{end}}</ul></div></div></section>
-<section class="mctl-site-section"><div class="mctl-site-section__narrow"><h2 class="mctl-site-section__title">{{.T.NeverH}}</h2><div class="card"><ul>{{range .T.Never}}<li>{{.}}</li>{{end}}</ul></div></div></section>
-<section class="mctl-site-section"><div class="mctl-site-section__narrow"><h2 class="mctl-site-section__title">{{.T.SafeH}}</h2><div class="card"><ul>{{range .T.Safe}}<li>{{.}}</li>{{end}}</ul></div></div></section>
+<div class="mctl-site-container lp-body">
+<section class="lp-sec" id="can" aria-labelledby="can-h">
+<h2 class="mctl-site-section__title" id="can-h">{{.T.CanH}}</h2>
+<ul class="lp-grid lp-grid--4">{{range $i, $t := .T.Can}}<li class="lp-card">{{icon (index $.CanIcons $i)}}<p>{{$t}}</p></li>{{end}}</ul>
+<p class="lp-note">{{icon "info"}}<span>{{.T.CanNote}}</span></p>
+</section>
+<section class="lp-sec" id="never" aria-labelledby="never-h">
+<h2 class="mctl-site-section__title" id="never-h">{{.T.NeverH}}</h2>
+<ul class="lp-grid lp-grid--2 lp-never">{{range $i, $t := .T.Never}}<li class="lp-card">{{icon (index $.NeverIcons $i)}}<p>{{$t}}</p></li>{{end}}</ul>
+</section>
+<section class="lp-sec" id="connect" aria-labelledby="connect-h">
+<h2 class="mctl-site-section__title" id="connect-h">{{.T.ConnectH}}</h2>
+<p class="lp-endpoint">{{.T.EndpointL}}: <code class="endpoint">{{.Endpoint}}</code></p>
+<div class="lp-grid lp-grid--3">
+<div class="lp-card">{{icon "plug"}}<div><p>{{.T.ClaudeAI}}</p></div></div>
+<div class="lp-card">{{icon "terminal"}}<div><p>{{.T.ClaudeCode}}</p>
+<pre tabindex="0"><code>claude mcp add --transport http glovo {{.Endpoint}}</code></pre>
+<p>{{.T.ClaudeCodeThen}}</p></div></div>
+<div class="lp-card">{{icon "grid"}}<div><p>{{.T.Other}}</p></div></div>
+</div>
+</section>
+<section class="lp-sec" id="security" aria-labelledby="security-h">
+<h2 class="mctl-site-section__title" id="security-h">{{.T.SafeH}}</h2>
+<ul class="lp-grid lp-grid--2">{{range $i, $t := .T.Safe}}<li class="lp-card">{{icon (index $.SafeIcons $i)}}<p>{{$t}}</p></li>{{end}}</ul>
+</section>
 </div>
 </main>
 <footer class="mctl-site-footer">
@@ -233,13 +267,13 @@ type landingLang struct {
 	Current                bool
 }
 
-// Page-level constants. The theme colours are --mctl-surface-{dark,light}-bg
-// of the pinned design version (TestLandingThemeColorsMatchTokens keeps them
-// in step); Privacy is the platform's page (trailing slash: the bare path
+// Page-level constants. The theme colours are the page backgrounds:
+// --mctl-surface-dark-bg of the pinned design version and --l-cream of
+// landing.css (TestLandingThemeColorsMatchTokens keeps them in step); Privacy is the platform's page (trailing slash: the bare path
 // redirects), Contact is the platform's public support address.
 const (
 	landingThemeDark    = "#0a0b0d"
-	landingThemeLight   = "#f1ede4"
+	landingThemeLight   = "#fff8e6"
 	landingPrivacyURL   = "https://mctl.ai/privacy/"
 	landingContactEmail = "support@mctl.ai"
 )
@@ -313,13 +347,16 @@ func RenderLanding(lang, endpoint string) ([]byte, error) {
 	}
 	var buf bytes.Buffer
 	err := landingTmpl.Execute(&buf, struct {
-		T         landingText
-		CSS       template.CSS
-		Endpoint  string
-		Canonical string
-		SelfURL   string
-		Langs     []landingLang
-	}{landingTexts[lang], template.CSS(landingCSS), endpoint, origin, origin + "?lang=" + lang, langs}) //nolint:gosec // G203: landingCSS is a compile-time constant, never input
+		T                               landingText
+		CSS                             template.CSS
+		Endpoint                        string
+		Canonical                       string
+		SelfURL                         string
+		Langs                           []landingLang
+		Stats                           []landingStat
+		CanIcons, NeverIcons, SafeIcons []string
+	}{landingTexts[lang], template.CSS(landingCSS), endpoint, origin, origin + "?lang=" + lang, langs, //nolint:gosec // G203: landingCSS is a compile-time constant, never input
+		landingStats(landingTexts[lang]), canIcons, neverIcons, safeIcons})
 	return buf.Bytes(), err
 }
 
