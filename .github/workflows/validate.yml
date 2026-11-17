@@ -70,10 +70,15 @@ jobs:
       - name: docker build (no push)
         run: docker build -t mctl-glovo:ci .
 
-      - name: both entrypoints exist and the image runs non-root
+      - name: all entrypoints exist and the image runs non-root
         run: |
-          docker run --rm --entrypoint sh mctl-glovo:ci -c 'test -x /usr/local/bin/mctl-glovo && test -x /usr/local/bin/glovo-migrate && test "$(id -u)" = 10001'
+          docker run --rm --entrypoint sh mctl-glovo:ci -c 'test -x /usr/local/bin/mctl-glovo && test -x /usr/local/bin/glovo-migrate && test -x /usr/local/bin/token-refresher && test "$(id -u)" = 10001'
           # The migrator refuses an empty DSN with exit 1 and prints no secret.
           set +e
           docker run --rm --entrypoint glovo-migrate mctl-glovo:ci
           test $? -eq 1
+          # The refresher refuses an empty configuration with exit 2 and
+          # prints no secret.
+          set +e
+          docker run --rm --entrypoint token-refresher mctl-glovo:ci
+          test $? -eq 2

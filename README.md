@@ -70,8 +70,8 @@ the masked MCTL identity, asks y/N, and uploads `~/.glovo/session.json`
 (or `-session -` for stdin) over https.
 
 ## Image and schema migration
-`Dockerfile` builds one image with two binaries: `mctl-glovo` (default
-entrypoint) and `glovo-migrate`. Releases are cut by release-please (tag
+`Dockerfile` builds one image with three binaries: `mctl-glovo` (default
+entrypoint), `glovo-migrate` and `token-refresher` (see "Token refresher" below). Releases are cut by release-please (tag
 without `v`); the image is built and published centrally by mctl-gitops'
 `build-image.yaml` as `ghcr.io/mctlhq/mctl-glovo:<semver>`. The dispatch to
 mctl-gitops is off until the repository variable `GLOVO_IMAGE_DISPATCH` is
@@ -94,6 +94,27 @@ principal id in logs).
 go test -race ./...
 go run ./cmd/mctl-glovo   # serves /livez and /readyz on :8080
 ```
+
+## Token refresher
+`token-refresher` is the sidecar command (override the entrypoint) that keeps
+a ZITADEL machine-user access token in `TOKEN_FILE`, for a consumer that
+re-reads the file per call. Environment: `ZITADEL_ISSUER` (https),
+`ZITADEL_USER_ID`, `ZITADEL_KEY_ID`, `ZITADEL_SCOPE`, `KEY_FILE` (the private
+key PEM, or the JSON key document ZITADEL emits), `TOKEN_FILE` (absolute,
+its directory must be writable); optional `TOKEN_FILE_MODE` (octal, default
+0644) and `READY_FILE` (exists while a valid token is on disk, for an exec
+probe). It signs an RS256 JWT-profile assertion, exchanges it at
+`{issuer}/oauth/v2/token`, writes the token atomically and renews at half of
+`expires_in`. Failure policy is fail closed: a failed refresh keeps the old
+token only until its own expiry, then the file is removed and the process
+exits 1 (the container restarts); a leftover file is removed on start. Exit 2
+is a refused configuration. No redirects, no proxy, response size bounded,
+nothing secret logged.
+Expiry is counted from before the request was sent, minus a 5 s safety skew
+(at most a quarter of the lifetime), so the file never outlives the real
+validity. Renewal is at half of `expires_in` (floor 5 s, or half the lifetime
+when that is shorter than 10 s), so a short-lived token is renewed before it
+expires.
 
 ## License
 Apache-2.0, see [LICENSE](LICENSE).
