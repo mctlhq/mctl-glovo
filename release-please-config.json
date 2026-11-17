@@ -9,5 +9,6 @@
     ".": {
       "package-name": "mctl-glovo"
     }
-  }
+  },
+  "initial-version": "0.1.0"
 }
