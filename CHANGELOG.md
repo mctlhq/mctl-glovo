@@ -1,0 +1,45 @@
+# Changelog
+
+## 0.1.0 (2026-11-17)
+
+
+### Features
+
+* build infra for C2 (Dockerfile, glovo-migrate, identmask) ([13f03a7](https://github.com/mctlhq/mctl-glovo/commit/13f03a76718c7596465e2fe348ceba6259d3f0a1))
+* build infra for C2 (Dockerfile, glovo-migrate, identmask) ([1d61b24](https://github.com/mctlhq/mctl-glovo/commit/1d61b24a7d98e93578b47403949e368ce377339c))
+* **c2:** configure token-store caps from env for a 10-20 user cohort ([d4ca7cd](https://github.com/mctlhq/mctl-glovo/commit/d4ca7cd4d63ed0e2fc64420af55a6f40a8833d98))
+* **c2:** configure token-store caps from env for a 10-20 user cohort ([c7ee20b](https://github.com/mctlhq/mctl-glovo/commit/c7ee20be21fe8c84099b5330a93e22ee92044699))
+* **c2:** kill switch flip endpoint and per-call enforcement ([657a30e](https://github.com/mctlhq/mctl-glovo/commit/657a30ec5ea4e369c5e6076792c8695c6e047d81))
+* **c2:** kill switch flip endpoint and per-call enforcement (slice 5) ([67c27db](https://github.com/mctlhq/mctl-glovo/commit/67c27dbb2f01d1efb3a2315857d014a84666ee65))
+* **c2:** per-call mctl-api consent admission (slice 3) ([290b954](https://github.com/mctlhq/mctl-glovo/commit/290b954705b073b99bd54c0ea5310b95c832c513))
+* **c2:** per-call mctl-api consent admission for hosted tool calls ([545f3ca](https://github.com/mctlhq/mctl-glovo/commit/545f3caad051876dc3fb6c7face9c0c704656bba))
+* **glovotools:** hosted location writes and a pinned no-checkout tool set ([145847b](https://github.com/mctlhq/mctl-glovo/commit/145847bcf5277051d3295798ecba8360b77b8faf))
+* **glovotools:** hosted location writes and pinned no-checkout tool set ([dbde739](https://github.com/mctlhq/mctl-glovo/commit/dbde7396d51b1c0aeec9a571b11fb26b10f72e33))
+* **landing:** adopt the MCTL public-site shell, head metadata and a11y fixes ([91e0576](https://github.com/mctlhq/mctl-glovo/commit/91e0576b72823344114fd020ed931252d5c50db3))
+* **landing:** adopt the MCTL public-site shell, head metadata, a11y ([06101e4](https://github.com/mctlhq/mctl-glovo/commit/06101e47dff4763e3862550da3eb47ca02073eb2))
+* **landing:** richer layout with Glovo-flavoured colours and MCTL accent ([fd7db6a](https://github.com/mctlhq/mctl-glovo/commit/fd7db6acb539779aaf7a824cabc3881e402a2c5a))
+* **landing:** richer layout with Glovo-flavoured colours and the MCTL accent ([377ad7b](https://github.com/mctlhq/mctl-glovo/commit/377ad7b84923620927967971f8a1b7ad5a357231))
+* **mctl-glovo:** hosted MCP routes behind GLOVO_C2_ENABLED (C2-2 slice 2) ([513b704](https://github.com/mctlhq/mctl-glovo/commit/513b704db7086f43c403d0c14fafe7ba7b177b7b))
+* **mctl-glovo:** hosted MCP routes behind GLOVO_C2_ENABLED (C2-2 slice 2) ([66bab11](https://github.com/mctlhq/mctl-glovo/commit/66bab11ae4468ff5d7bee878f7bd4ec58ed78d05))
+* **refresher:** ZITADEL machine-user token refresher sidecar ([e37d835](https://github.com/mctlhq/mctl-glovo/commit/e37d83568edb687db3442cfa48c9b758a021a5c9))
+* **refresher:** ZITADEL machine-user token refresher sidecar ([da5f43f](https://github.com/mctlhq/mctl-glovo/commit/da5f43fc9defb7565a9b3c62db4021c2317938dc))
+
+
+### Bug Fixes
+
+* follow-ups from the PR 29 review (pins, migrator probe) ([155c4a0](https://github.com/mctlhq/mctl-glovo/commit/155c4a084ac164fc27fdb68a3c4c2d3fcd55ac10))
+* **glovotools:** drop duplicate session-refused case after merging main ([60188a8](https://github.com/mctlhq/mctl-glovo/commit/60188a8630b174f8a139649630795e163b2c178e))
+* **killswitch:** close flip races, re-kill on failed read-back, latch answer ([6d35298](https://github.com/mctlhq/mctl-glovo/commit/6d35298292dad74e108810aac417ef9ba1379796))
+* **landing:** correct overclaims in page copy (P1 audit) ([9bd58e1](https://github.com/mctlhq/mctl-glovo/commit/9bd58e1f18be171c546997245cfedc9c63bd3342))
+* **landing:** correct overclaims in the page copy (P1 audit findings) ([1446bb7](https://github.com/mctlhq/mctl-glovo/commit/1446bb75082cb6dc7c39522a447e8613c846665d))
+* **landing:** skip link above header, self-canonical variants, CI paths, bounded read ([d5f6cc7](https://github.com/mctlhq/mctl-glovo/commit/d5f6cc78efffcce3b20e9270492b96dc712f48f3))
+* **linkflow:** http only for cluster-internal consent API hosts; FIFO-safe token read ([ea0f728](https://github.com/mctlhq/mctl-glovo/commit/ea0f728d29ab6ac06563ae1e23127906eef52e76))
+* **mctl-glovo:** keyed audit digest, read-deadline clear and timeout tests ([0e98128](https://github.com/mctlhq/mctl-glovo/commit/0e9812891e2a6001cda0172a9002253f693ffbf6))
+* PR 29 review follow-ups (pins, migrator partial-schema probe) ([530fe0f](https://github.com/mctlhq/mctl-glovo/commit/530fe0ffa42e1f3d2854897bab92982ca662f43d))
+* **token-refresher:** tighten leak/proxy tests, expiry from request start ([2ce4273](https://github.com/mctlhq/mctl-glovo/commit/2ce427339a6f56560b6d0d978aea645c02587133))
+* **tokenstore:** keep refresh-failure accounting across location writes ([00b2904](https://github.com/mctlhq/mctl-glovo/commit/00b290476a6584f715a54201e88bf2dec8dce28c))
+
+
+### Miscellaneous Chores
+
+* first release is 0.1.0, not 1.0.0 ([01fcb25](https://github.com/mctlhq/mctl-glovo/commit/01fcb2524860224712738348798c0f5a75d4f3fe))
