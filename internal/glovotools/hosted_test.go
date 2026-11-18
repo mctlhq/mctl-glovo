@@ -24,7 +24,7 @@ import (
 // records which access token each request carried, and a ClientSource with
 // one distinguishable client per pid.
 
-type seenReq struct{ auth, path string }
+type seenReq struct{ auth, path, method string }
 
 type fakeGlovoHosted struct {
 	mu   sync.Mutex
@@ -37,7 +37,7 @@ func newFakeGlovoHosted(t *testing.T) *fakeGlovoHosted {
 	f := &fakeGlovoHosted{}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
-		f.seen = append(f.seen, seenReq{r.Header.Get("Authorization"), r.URL.Path})
+		f.seen = append(f.seen, seenReq{r.Header.Get("Authorization"), r.URL.Path, r.Method})
 		f.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{}`))
@@ -97,17 +97,12 @@ func (s *fakeSource) askedPIDs() []string {
 	return append([]string(nil), s.asked...)
 }
 
-func hostedClient(t *testing.T, base, owner string) *glovoapi.Client {
-	t.Helper()
-	return hostedClientGate(t, base, owner, func(context.Context) error { return nil })
-}
-
-func hostedClientGate(t *testing.T, base, owner string, gate func(context.Context) error) *glovoapi.Client {
+func hostedClientGate(t *testing.T, base, owner string, gate func(context.Context) error, extra ...glovoapi.Option) *glovoapi.Client {
 	t.Helper()
 	noRefresh := func(context.Context, glovoapi.Session, func(context.Context, glovoapi.Session) (glovoapi.Session, error)) (glovoapi.Session, error) {
 		return nil, errors.New("unexpected refresh")
 	}
-	c, err := glovoapi.New("",
+	opts := []glovoapi.Option{
 		glovoapi.WithBaseURL(base),
 		glovoapi.WithSession(glovoapi.Session{
 			"accessToken":  marker(owner),
@@ -118,7 +113,8 @@ func hostedClientGate(t *testing.T, base, owner string, gate func(context.Contex
 		glovoapi.WithRefreshCoordinator(noRefresh),
 		glovoapi.WithRequestGate(gate),
 		glovoapi.WithClock(func() time.Time { return time.Unix(1_800_000_000, 0) }),
-	)
+	}
+	c, err := glovoapi.New("", append(opts, extra...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,14 +131,23 @@ type hostedEnv struct {
 	src  *fakeSource
 }
 
-func newHostedEnv(t *testing.T) *hostedEnv {
+func newHostedEnv(t *testing.T) *hostedEnv { return newHostedEnvWith(t, false) }
+
+// newHostedEnvWith builds the hosted env with the basket write switch on or
+// off: on enables it on the backend and on every client.
+func newHostedEnvWith(t *testing.T, writes bool) *hostedEnv {
 	t.Helper()
 	fake := newFakeGlovoHosted(t)
+	var extra []glovoapi.Option
+	if writes {
+		extra = append(extra, glovoapi.WithBasketWrites())
+	}
+	gate := func(context.Context) error { return nil }
 	src := &fakeSource{clients: map[string]*glovoapi.Client{
-		"prn_A": hostedClient(t, fake.srv.URL, "A"),
-		"prn_B": hostedClient(t, fake.srv.URL, "B"),
+		"prn_A": hostedClientGate(t, fake.srv.URL, "A", gate, extra...),
+		"prn_B": hostedClientGate(t, fake.srv.URL, "B", gate, extra...),
 	}}
-	b, err := New(Config{Clients: src})
+	b, err := New(Config{Clients: src, BasketWrites: writes})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +339,18 @@ func TestHostedConfigValidation(t *testing.T) {
 func TestHostedServesSameToolsAsFileMode(t *testing.T) {
 	e := newHostedEnv(t)
 	file := newHarness(t, loadSpec(t), caseSpec{})
-	got, want := strings.Join(e.b.Names(), ","), strings.Join(file.backend.Names(), ",")
+	// Default hosted is read-only: the file-mode set minus the basket writes.
+	// With the switch on it is the whole file-mode set.
+	var wantNames []string
+	for _, n := range file.backend.Names() {
+		if !isBasketWriteTool(n) {
+			wantNames = append(wantNames, n)
+		}
+	}
+	got, want := strings.Join(e.b.Names(), ","), strings.Join(wantNames, ",")
+	if on := newHostedEnvWith(t, true); strings.Join(on.b.Names(), ",") != strings.Join(file.backend.Names(), ",") {
+		t.Fatalf("hosted with BasketWrites differs from file mode:\n%v", on.b.Names())
+	}
 	if got != want {
 		t.Fatalf("tool sets differ:\n hosted: %s\n file:   %s", got, want)
 	}
@@ -556,4 +572,14 @@ func TestHostedSetLocationStoreFailures(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (f *fakeGlovoHosted) methods() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.seen))
+	for i, s := range f.seen {
+		out[i] = s.method + " " + s.path
+	}
+	return out
 }

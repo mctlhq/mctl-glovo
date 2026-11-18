@@ -48,6 +48,57 @@ type c2Config struct {
 	// control is the kill switch endpoint's identity (slice 5); zero value
 	// means the route is not mounted.
 	control controlConfig
+	// basketWrites serves the basket mutation tools. No loader sets it (the
+	// environment cannot: see loadBasketWrites); it is the code seam of a
+	// future approval-gated change, and it needs basketApprover too.
+	basketWrites bool
+	// basketApprover is the per-call approval step in front of every basket
+	// write (mctl-api#1011/#1012). Nil: there is none, and newMCPRoutes then
+	// refuses to serve the write tools.
+	basketApprover basketApprover
+}
+
+// errBasketWritesNoGate is the startup error for GLOVO_C2_BASKET_WRITES=true.
+var errBasketWritesNoGate = errors.New("GLOVO_C2_BASKET_WRITES=true is refused: hosted C2 has no approval gate for basket writes (mctl-api#1011/#1012), and an environment variable alone cannot enable them")
+
+// loadBasketWrites reads GLOVO_C2_BASKET_WRITES, which exists only to be
+// refused. Unset, "" and "false" mean read-only (the only mode: no add,
+// set-quantity or remove tool is listed, a call by name is refused before
+// any Glovo request, and every hosted Glovo client refuses basket
+// mutations). "true" is a startup error, not a switch: until an approval gate
+// exists, writes on the user-facing hosted C2 are not something a deployment
+// can opt into. Anything else (case or whitespace variants, "1", "yes") is
+// an error as well, as a typo must stop the rollout, and never reads as
+// "off" or as "on".
+//
+// The seam for the future is in code, not in the environment: c2Config's
+// basketWrites and basketApprover fields, which no loader sets, and
+// mcpDeps.BasketApprover, without which newMCPRoutes refuses to serve the
+// write tools. The enabling change adds an approval step in front of the
+// writes and sets those fields in code, in the same reviewed change.
+//
+// It is read only with C2 on (loadC2 reads nothing else with C2 off, and no
+// hosted route exists then, so there is nothing to enable).
+func loadBasketWrites(getenv func(string) string) (bool, error) {
+	switch v := getenv("GLOVO_C2_BASKET_WRITES"); v {
+	case "", "false":
+		return false, nil
+	case "true":
+		return false, errBasketWritesNoGate
+	default:
+		return false, fmt.Errorf("GLOVO_C2_BASKET_WRITES: %q is not false (and true is refused)", v)
+	}
+}
+
+// basketWriteOptions is the client layer of the capability: hosted clients
+// refuse basket mutations unless built with glovoapi.WithBasketWrites, so
+// the default config yields none. newMCPRoutes refuses basket writes without
+// an approver.
+func basketWriteOptions(c c2Config) []glovoapi.Option {
+	if !c.basketWrites {
+		return nil
+	}
+	return []glovoapi.Option{glovoapi.WithBasketWrites()}
 }
 
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
@@ -76,6 +127,9 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 		c.vaultRole = "mctl-glovo"
 	}
 	if c.control, err = loadControl(getenv); err != nil {
+		return c2Config{}, err
+	}
+	if c.basketWrites, err = loadBasketWrites(getenv); err != nil { // never true: see loadBasketWrites
 		return c2Config{}, err
 	}
 	c.consentAPI, c.consentTokenFile = getenv("GLOVO_CONSENT_API_URL"), getenv("GLOVO_CONSENT_TOKEN_FILE")
@@ -213,7 +267,7 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		// MaskIdentity needs mctl-api's identity lookup (C2-1c). Until
 		// then PreviewLink refuses, so the helper never uploads.
 		MaskIdentity:  nil,
-		ClientOptions: []glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()},
+		ClientOptions: append([]glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()}, basketWriteOptions(c)...),
 	}
 	withLinkConsent(&scfg, gate)
 	if err := withCaps(&scfg, c); err != nil {
@@ -261,7 +315,9 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		Kill: kill.Check,
 		// Admit is mctl-api's consent (and slot) decision per tool call,
 		// with a few-second positive cache (admit.go).
-		Admit: callAdmit,
+		Admit:          callAdmit,
+		BasketWrites:   c.basketWrites,
+		BasketApprover: c.basketApprover,
 	})
 	if err != nil {
 		closeDB()

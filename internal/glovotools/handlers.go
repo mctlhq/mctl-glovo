@@ -58,6 +58,9 @@ func (a args) ms(k string, def int) time.Duration {
 func handlers(b *Backend) map[string]handler {
 	return map[string]handler{
 		"glovo_get_shopping_guide": func(context.Context, *glovoapi.Client, args) (any, error) {
+			if b.readOnly() {
+				return textResult(shoppingGuideReadOnly), nil
+			}
 			return textResult(shoppingGuide), nil
 		},
 		"glovo_auth_status": func(_ context.Context, c *glovoapi.Client, _ args) (any, error) {
@@ -208,9 +211,13 @@ func handlers(b *Backend) map[string]handler {
 			return glovoapi.CompactReorderPreview(raw)
 		},
 		"glovo_plan_reorder": func(ctx context.Context, c *glovoapi.Client, a args) (any, error) {
-			return glovologic.PlanReorder(ctx, source{c}, a.str("order_id"), glovologic.PlanOptions{
+			plan, err := glovologic.PlanReorder(ctx, source{c}, a.str("order_id"), glovologic.PlanOptions{
 				MaxSearches: a.intOr("max_searches", 5), CandidatesPerLine: a.intOr("candidates_per_line", 3),
 			})
+			if err == nil && plan != nil && b.readOnly() {
+				plan.NextStep = ReadOnlyNextStep
+			}
+			return plan, err
 		},
 		"glovo_get_order_stats": func(ctx context.Context, c *glovoapi.Client, a args) (any, error) {
 			return glovologic.GetOrderStats(ctx, source{c}, glovologic.StatsOptions{
@@ -254,7 +261,8 @@ func (b *Backend) suggestions(ctx context.Context, c *glovoapi.Client, a args) (
 		sess.CustomerID = &id
 	}
 	return glovologic.GetSuggestions(ctx, source{c}, sess, in, glovologic.SuggestOptions{
-		Cache: b.historyCache(), GoogleAPIKey: b.cfg.GoogleAPIKey, GoogleProvider: b.cfg.GoogleProvider, Sleep: b.cfg.Sleep,
+		ReadOnly: b.readOnly(),
+		Cache:    b.historyCache(), GoogleAPIKey: b.cfg.GoogleAPIKey, GoogleProvider: b.cfg.GoogleProvider, Sleep: b.cfg.Sleep,
 	})
 }
 

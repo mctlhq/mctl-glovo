@@ -595,6 +595,7 @@ type fakeGlovo struct {
 	srv       *httptest.Server
 	refreshes atomic.Int64
 	reads     atomic.Int64
+	writes    atomic.Int64 // customer-path requests that are not GET
 	delay     time.Duration
 	status    atomic.Int64 // non-zero: /oauth/refresh answers this status
 	noAccess  atomic.Bool  // /oauth/refresh answers 200 without an access token
@@ -660,12 +661,21 @@ func (g *fakeGlovo) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(next)
 	case strings.HasPrefix(r.URL.Path, "/v1/authenticated/customers/"):
 		g.reads.Add(1)
+		if r.Method != http.MethodGet {
+			g.writes.Add(1)
+		}
 		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		g.mu.Lock()
 		ok := g.access[tok]
 		g.mu.Unlock()
 		if !ok {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/baskets/stores/") {
+			// No basket for this store yet: an add starts by creating one.
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{}`))
 			return
 		}
 		_, _ = w.Write([]byte(`[]`))

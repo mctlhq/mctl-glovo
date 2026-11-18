@@ -155,3 +155,38 @@ func TestNewRefusesAnyZeroCap(t *testing.T) {
 		}
 	}
 }
+
+// A hosted client built by the store (the only constructor of C2 clients) is
+// read-only for baskets: the refusal is the default of the client, not
+// something the caller of Lease.Client has to remember to ask for.
+func TestLeaseClientRefusesBasketWritesByDefault(t *testing.T) {
+	ctx := context.Background()
+	m := newMemDB()
+	h := newHarness(t, m, m, nil, DefaultCaps())
+	h.link(pidA, testSession("A1"))
+	l, err := h.st.Get(ctx, h.pid(pidA))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := l.Client()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err2 := c.AddToBasket(ctx, glovoapi.AddToBasketParams{StoreID: "1001", StoreAddressID: "2001", StoreCategoryID: "4", ProductID: "1", ExternalID: "e", StoreProductID: "s", Quantity: 1})
+	if !errors.Is(err2, glovoapi.ErrBasketWritesDisabled) {
+		t.Fatalf("an add on a default lease client: err = %v, want ErrBasketWritesDisabled", err2)
+	}
+	if n := h.glovo.writes.Load(); n != 0 {
+		t.Fatalf("%d basket write(s) reached Glovo", n)
+	}
+	// With the option, the same client type does write: the refusal above is
+	// the option's absence.
+	cw, err := l.Client(glovoapi.WithBasketWrites())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = cw.AddToBasket(ctx, glovoapi.AddToBasketParams{StoreID: "1001", StoreAddressID: "2001", StoreCategoryID: "4", ProductID: "1", ExternalID: "e", StoreProductID: "s", Quantity: 1})
+	if n := h.glovo.writes.Load(); n == 0 {
+		t.Fatal("with WithBasketWrites no write reached Glovo: the test cannot tell a refusal from a broken flow")
+	}
+}
