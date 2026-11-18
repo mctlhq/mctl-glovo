@@ -53,10 +53,9 @@ Issue: https://github.com/mctlhq/mctl-glovo/issues/40.
 - The order, checkout, payment and place_order surfaces are forbidden at every stage.
 - Allowed surfaces are explicit allowlists: G0 none, G1 to G3 read only, G4
   read and basket-write only.
-- Basket writes may only use the existing mctlhq/mctl-api#1011 and
-  mctlhq/mctl-api#1012 approval; mctl-glovo introduces no second approval
-  ledger. The status of that approval is UNKNOWN: it was not fetched here and
-  is not observed by this artifact.
+- Basket writes may only use the approval defined by mctlhq/mctl-api#1011 and
+  #1012 (status UNKNOWN, not fetched here); mctl-glovo introduces no second
+  approval ledger.
 - The #57 write canary requires a separate operational owner GO, which is
   never implied by the dependency phase or a G4 PASS.
 - Public-artifact hygiene is a heuristic test of this file and the JSON

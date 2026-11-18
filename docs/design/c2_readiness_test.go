@@ -2087,8 +2087,8 @@ var proseClauses = []proseClause{
 	},
 	{
 		"writes-use-existing-approval-no-second-ledger",
-		"Basket writes may only use the existing mctlhq/mctl-api#1011 and mctlhq/mctl-api#1012 approval; mctl-glovo introduces no second approval ledger.",
-		"Basket writes may use the existing mctlhq/mctl-api#1011 and mctlhq/mctl-api#1012 approval; mctl-glovo introduces a second approval ledger.",
+		"Basket writes may only use the approval defined by mctlhq/mctl-api#1011 and #1012 (status UNKNOWN, not fetched here); mctl-glovo introduces no second approval ledger.",
+		"Basket writes may use the approval defined by mctlhq/mctl-api#1011 and #1012 (status UNKNOWN, not fetched here); mctl-glovo introduces a second approval ledger.",
 	},
 	{
 		"canary-needs-separate-owner-go",
@@ -2107,7 +2107,7 @@ func proseErrors(doc string) []string {
 			errs = append(errs, "missing clause "+c.name)
 		}
 	}
-	return errs
+	return append(errs, bareExistingErrors(doc)...)
 }
 
 func TestSafetyProsePinned(t *testing.T) {
@@ -2510,10 +2510,9 @@ const goldenRulesBlock = `## 1. Rules
 - The order, checkout, payment and place_order surfaces are forbidden at every stage.
 - Allowed surfaces are explicit allowlists: G0 none, G1 to G3 read only, G4
   read and basket-write only.
-- Basket writes may only use the existing mctlhq/mctl-api#1011 and
-  mctlhq/mctl-api#1012 approval; mctl-glovo introduces no second approval
-  ledger. The status of that approval is UNKNOWN: it was not fetched here and
-  is not observed by this artifact.
+- Basket writes may only use the approval defined by mctlhq/mctl-api#1011 and
+  #1012 (status UNKNOWN, not fetched here); mctl-glovo introduces no second
+  approval ledger.
 - The #57 write canary requires a separate operational owner GO, which is
   never implied by the dependency phase or a G4 PASS.
 - Public-artifact hygiene is a heuristic test of this file and the JSON
@@ -2649,10 +2648,45 @@ func approvalStatements(w writeApproval) []string {
 		canary = "does not require a separate operational owner GO."
 	}
 	return []string{
-		"Basket writes may only use the existing " + strings.Join(w.LedgerRefs, " and ") + " approval; mctl-glovo introduces " + ledger,
-		"The status of that approval is " + w.ApprovalStatus + ": it was not fetched here and is not observed by this artifact.",
+		"Basket writes may only use the approval defined by " + approvalRefs(w.LedgerRefs) + " (status " + w.ApprovalStatus + ", not fetched here); mctl-glovo introduces " + ledger,
 		"The " + w.CanaryRef + " write canary " + canary,
 	}
+}
+
+// approvalRefs renders the ledger refs the way the Markdown does: the first in
+// full and later refs of the same repository as bare issue numbers.
+func approvalRefs(refs []string) string {
+	var out []string
+	for i, r := range refs {
+		if i > 0 {
+			prefix := refs[0][:strings.Index(refs[0]+"#", "#")+1]
+			if strings.HasPrefix(r, prefix) {
+				r = r[len(prefix)-1:]
+			}
+		}
+		out = append(out, r)
+	}
+	return strings.Join(out, " and ")
+}
+
+// The bare word "existing" in the same clause as an approval reference is
+// refused. Clauses split on . ; : and ,.
+var (
+	existingWord     = regexp.MustCompile(`(?i)\bexisting\b`)
+	approvalRefWord  = regexp.MustCompile(`(?i)\bapproval\b|#101[12]\b`)
+	clauseSeparators = regexp.MustCompile(`[.;:,]`)
+)
+
+// bareExistingErrors refuses any clause that calls the approval "existing",
+// even when the correct clause is also present.
+func bareExistingErrors(doc string) []string {
+	var errs []string
+	for _, c := range clauseSeparators.Split(normalizeProse(doc), -1) {
+		if existingWord.MatchString(c) && approvalRefWord.MatchString(c) {
+			errs = append(errs, "markdown asserts an existing approval: "+strings.TrimSpace(c))
+		}
+	}
+	return errs
 }
 
 func writeApprovalErrors(m matrix, doc string) []string {
@@ -2668,7 +2702,7 @@ func writeApprovalErrors(m matrix, doc string) []string {
 			}
 		}
 	}
-	return errs
+	return append(errs, bareExistingErrors(doc)...)
 }
 
 func TestWriteApprovalPinned(t *testing.T) {
@@ -2711,9 +2745,13 @@ func TestWriteApprovalPinned(t *testing.T) {
 	}
 	t.Run("markdown only", func(t *testing.T) {
 		for _, c := range []struct{ old, repl string }{
-			{"The status of that approval is UNKNOWN:", "The status of that approval is APPROVED:"},
+			{"(status UNKNOWN, not fetched here)", "(status APPROVED, not fetched here)"},
 			{"introduces no second approval", "introduces a second approval"},
-			{"is not observed by this artifact.", "is observed by this artifact."},
+			{"(status UNKNOWN, not fetched here)", "(status UNKNOWN)"},
+			{"approval defined by mctlhq/mctl-api#1011 and #1012", "existing mctlhq/mctl-api#1011 and #1012 approval"},
+			// The correct clause stays; the bare word is added beside it.
+			{"mctl-glovo introduces no second approval ledger.", "mctl-glovo introduces no second approval ledger. The existing approval is in place."},
+			{"mctl-glovo introduces no second approval ledger.", "mctl-glovo introduces no second approval ledger. Existing mctlhq/mctl-api#1011 is enough."},
 		} {
 			bad := strings.Replace(normalizeProse(doc), c.old, c.repl, 1)
 			if bad == normalizeProse(doc) {
@@ -2967,5 +3005,391 @@ func TestCodeFactsWording(t *testing.T) {
 	}
 	if !strings.Contains(normalizeProse(string(raw)), strings.TrimSuffix(m.Baseline.CodeNote, ".")) {
 		t.Error("markdown must carry the code_facts_note wording")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Whole-document golden pin. Every visible character outside the generated
+// MATRIX and EPICS table bodies is compared with golden text. The table
+// bodies are replaced by a position token first, so a table moved to another
+// section changes the compared text. The table bodies keep their own checks
+// (markdownBlockErrors and goldenErrors).
+// ---------------------------------------------------------------------------
+
+const (
+	goldenTitle = `# C2 readiness matrix (G0 to G4)`
+
+	goldenIntro = `Source of truth for the data is ~c2-readiness.json~. A test in this package
+fails if the tables below drift from it.
+
+Baseline: ~main~ at ~ca4a09aaf6b9b99f106177aee206726ff6b004b0~
+(https://github.com/mctlhq/mctl-glovo/commit/ca4a09aaf6b9b99f106177aee206726ff6b004b0).
+Issue: https://github.com/mctlhq/mctl-glovo/issues/40.`
+
+	goldenFreshnessBlock = `## 2. Evidence freshness (proposals, not approved)
+
+No evidence TTL is owner-approved, so there is no effective TTL. The rules
+below are proposals only:
+
+- P1: evidence needs a full 40-hex SHA and an https evidence URL with a
+  non-empty host.
+- P2: evidence needs an ~observed_at~ timestamp (RFC 3339, UTC) and a
+  freshness state of FRESH.
+- P3: evidence older than an owner-approved maximum age is stale. The value
+  is not set here.
+- P4: evidence observed after the reference time is ambiguous and refused.
+- P5: missing, aged, ambiguous or unobservable evidence yields UNKNOWN.
+
+Tests use a fixed reference time (2026-11-18T12:00:00Z) and synthetic
+fixtures. They use a synthetic maximum age only to exercise the refusal
+paths. These are offline syntax and state checks: no evidence URL is fetched
+and no valid operational GO exists.`
+
+	goldenBaselineBlock = `## 3. Baseline facts and unknowns
+
+Code facts are limited to the listed source paths existing at the baseline
+SHA. A path existing is not proof of deployed or runtime behavior:
+
+- ~cmd/glovo-home/main.go~ (separate legacy glovo-home safety inventory only)
+- ~cmd/mctl-glovo/mcp.go~ (hosted plane)
+- ~internal/glovotools/hosted.go~ (hosted plane)
+- ~cmd/glovo-migrate/main.go~
+- ~internal/authn/verifier.go~
+- ~internal/consentgate/gate.go~
+- ~internal/linkflow/consent.go~
+- ~internal/tokenstore/killswitch.go~
+- ~internal/tokenstore/migrations/0001_tokenstore.sql~
+- ~internal/tokenstore/isolation_pg_test.go~
+- ~deploy/mac-mini/tinyproxy.conf~
+- ~Dockerfile~
+
+Open Draft PRs, separate from the baseline and not merged. These are
+operator-recorded snapshot references. They were not fetched or independently
+confirmed here: no full SHA, URL or observation time is known for them.
+
+- #54 (head ~a2b20b65~)
+- #56 (head ~c1179519~)
+- #53 (head ~a3af531c~)
+
+Their content is not asserted here. The existing main baseline does not prove
+PR #54 behavior: disabled-write behavior is UNKNOWN pending reviewed proof. A
+source path existing is a pin, not proof of behavior.
+
+Runtime unknowns, all UNKNOWN until evidence exists:
+
+- deployed image digest
+- chart pin
+- Vault paths and policies
+- database and migration state
+- proxy egress state
+- kill switch state
+- consent-reader and control identity
+- deploy flag value`
+
+	goldenMatrixHeading = `## 4. Matrix`
+
+	goldenEpicsProse = `## 5. Epic dependency snapshot (pinned plan)
+
+Source: mctlhq/.github Draft PR 366 at head
+~97371421997c67260843168783d343d4c7d5fff9~, path
+~roadmap/epics/glovo-c2-friends-pilot.yaml~
+(https://github.com/mctlhq/.github/blob/97371421997c67260843168783d343d4c7d5fff9/roadmap/epics/glovo-c2-friends-pilot.yaml).
+It is a plan, not merged and not live authorization. The table below is a
+hand-transcribed snapshot. Tests are offline and never fetch the source, so
+drift in the source is not detected automatically: re-transcribe the table
+when the pinned head changes. A merged source change would still not prove a
+live rollout. Every external dependency of c2-go-owner is a G0 topic with
+status UNKNOWN.
+
+The gate dependency sets are compared with this table by a test. The offline
+readiness safeguards that G0 lists beyond the epic set (deploy-false,
+vault-control-identity, proxy, migrations, image-pins, rollback-kill, oauth,
+scopes, glovo-home-writes, consent-versions, isolation, capacity) are
+documented separately in the JSON and are not epic dependencies. Only the
+dependency sets of the epics that realize a gate, and the externals of
+c2-write-approval-proof, are transcribed. The G1 to G0 edge is readiness
+ordering, not an epic edge.
+
+A field that was not transcribed is shown as ~UNKNOWN (not transcribed)~. That
+is never a claim of zero dependencies. A ~-~ appears only where the field was
+transcribed and is empty.`
+)
+
+const (
+	matrixSlot = "[[MATRIX TABLE]]"
+	epicsSlot  = "[[EPICS TABLE]]"
+)
+
+// goldenFullDoc is the expected visible Markdown with both table bodies shown
+// as position tokens. Sections 1 and 6 reuse the blocks pinned above.
+func goldenFullDoc() string {
+	return normalizeProse(strings.Join([]string{
+		goldenTitle, goldenStatusBlock, bt(goldenIntro), bt(goldenRulesBlock),
+		bt(goldenFreshnessBlock), bt(goldenBaselineBlock), goldenMatrixHeading, matrixSlot,
+		bt(goldenEpicsProse), epicsSlot, bt(goldenAuthorityBlock),
+	}, "\n\n"))
+}
+
+var markerLike = regexp.MustCompile(`<!--\s*(?:BEGIN|END)\s+(?:MATRIX|EPICS)\s*-->`)
+
+// tokenizeTables validates the four markers strictly and replaces each table
+// body, markers included, with its position token. Each marker must appear
+// exactly once, alone on its line, in the order MATRIX begin, MATRIX end,
+// EPICS begin, EPICS end. Any other marker-like comment is refused.
+func tokenizeTables(doc string) (string, []string) {
+	if n := len(markerLike.FindAllString(doc, -1)); n != 4 {
+		return "", []string{fmt.Sprintf("found %d table markers, want exactly 4", n)}
+	}
+	lines := strings.Split(doc, "\n")
+	pos := map[string]int{}
+	var errs []string
+	for _, marker := range []string{"BEGIN MATRIX", "END MATRIX", "BEGIN EPICS", "END EPICS"} {
+		want := "<!-- " + marker + " -->"
+		idx := -1
+		for i, l := range lines {
+			if l == want {
+				if idx >= 0 {
+					errs = append(errs, "duplicate marker "+want)
+				}
+				idx = i
+			}
+		}
+		if idx < 0 {
+			errs = append(errs, "marker "+want+" missing or not alone on its line")
+		}
+		pos[marker] = idx
+	}
+	if len(errs) != 0 {
+		return "", errs
+	}
+	if pos["BEGIN MATRIX"] >= pos["END MATRIX"] || pos["END MATRIX"] >= pos["BEGIN EPICS"] || pos["BEGIN EPICS"] >= pos["END EPICS"] {
+		return "", []string{"table markers are out of order"}
+	}
+	var out []string
+	out = append(out, lines[:pos["BEGIN MATRIX"]]...)
+	out = append(out, matrixSlot)
+	out = append(out, lines[pos["END MATRIX"]+1:pos["BEGIN EPICS"]]...)
+	out = append(out, epicsSlot)
+	out = append(out, lines[pos["END EPICS"]+1:]...)
+	return strings.Join(out, "\n"), nil
+}
+
+// fullDocErrors pins all visible Markdown outside the generated tables.
+func fullDocErrors(doc string) []string {
+	tokenized, errs := tokenizeTables(doc)
+	if len(errs) != 0 {
+		return errs
+	}
+	if normalizeProse(tokenized) != goldenFullDoc() {
+		return []string{"visible Markdown outside the generated tables differs from golden text"}
+	}
+	return nil
+}
+
+func TestFullMarkdownPinned(t *testing.T) {
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	if errs := fullDocErrors(doc); len(errs) != 0 {
+		t.Fatalf("committed Markdown differs from the golden document: %v", errs)
+	}
+	t.Run("comments and whitespace are ignored", func(t *testing.T) {
+		d := mustReplace(t, doc, "## 4. Matrix\n", "## 4. Matrix\n<!-- a note -->\n")
+		d = mustReplace(t, d, "Nothing here authorizes anything.", "Nothing   here <!-- x\n y --> authorizes\nanything.")
+		if errs := fullDocErrors(d); len(errs) != 0 {
+			t.Fatalf("comment or whitespace change refused: %v", errs)
+		}
+	})
+	differs := func(t *testing.T, bad string) {
+		t.Helper()
+		if errs := fullDocErrors(bad); len(errs) != 1 || !strings.Contains(errs[0], "differs from golden") {
+			t.Fatalf("got %v, want the golden difference", errs)
+		}
+	}
+	t.Run("insertion before Status", func(t *testing.T) {
+		differs(t, mustReplace(t, doc, "Status: PLANNING ARTIFACT.", "An extra visible sentence.\n\nStatus: PLANNING ARTIFACT."))
+	})
+	t.Run("polarity flip in section 2", func(t *testing.T) {
+		differs(t, mustReplace(t, doc, "yields UNKNOWN.", "yields PASS."))
+	})
+	t.Run("polarity flip in section 2 stale", func(t *testing.T) {
+		differs(t, mustReplace(t, doc, "is ambiguous and refused.", "is fresh and accepted."))
+	})
+	t.Run("polarity flip in section 5", func(t *testing.T) {
+		differs(t, mustReplace(t, doc, "It is a plan, not merged and not live authorization.", "It is a plan, merged and live authorization."))
+	})
+	t.Run("flip in section 3", func(t *testing.T) {
+		differs(t, mustReplace(t, doc, "is not proof of deployed or runtime behavior:", "is proof of deployed or runtime behavior:"))
+	})
+	t.Run("appended after the last section", func(t *testing.T) {
+		differs(t, doc+"\n- Late bullet.\n")
+	})
+	t.Run("table moved into another section", func(t *testing.T) {
+		blk, ok := mdBlock(doc, matrixBegin, matrixEnd)
+		if !ok {
+			t.Fatal("matrix block missing")
+		}
+		whole := matrixBegin + blk + matrixEnd
+		moved := strings.Replace(doc, whole, "", 1)
+		moved = mustReplace(t, moved, "## 3. Baseline facts and unknowns", whole+"\n\n## 3. Baseline facts and unknowns")
+		if errs := fullDocErrors(moved); len(errs) == 0 {
+			t.Fatal("a table moved to another section was not refused")
+		}
+	})
+	t.Run("marker problems", func(t *testing.T) {
+		for name, bad := range map[string]string{
+			"missing begin":      strings.Replace(doc, "<!-- BEGIN MATRIX -->\n", "", 1),
+			"missing end":        strings.Replace(doc, "<!-- END EPICS -->\n", "", 1),
+			"duplicate begin":    strings.Replace(doc, "<!-- BEGIN EPICS -->\n", "<!-- BEGIN EPICS -->\n<!-- BEGIN EPICS -->\n", 1),
+			"extra spaced":       doc + "\n<!--  END  MATRIX -->\n",
+			"inline marker":      strings.Replace(doc, "<!-- END MATRIX -->\n", "<!-- END MATRIX --> hidden prose\n", 1),
+			"swapped order":      strings.Replace(strings.Replace(doc, "<!-- BEGIN MATRIX -->", "<!-- TMP -->", 1), "<!-- BEGIN EPICS -->", "<!-- BEGIN MATRIX -->", 1),
+			"prose in unclosed":  strings.Replace(doc, "<!-- BEGIN EPICS -->\n", "<!-- hide\nA hidden claim.\n<!-- BEGIN EPICS -->\n", 1),
+			"markers after body": strings.Replace(strings.Replace(doc, "<!-- BEGIN MATRIX -->\n", "", 1), "<!-- END MATRIX -->\n", "<!-- END MATRIX -->\n<!-- BEGIN MATRIX -->\n", 1),
+		} {
+			if bad == doc {
+				t.Fatalf("%s: mutation changed nothing", name)
+			}
+			if errs := fullDocErrors(bad); len(errs) == 0 {
+				t.Errorf("%s: marker problem was not refused", name)
+			}
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Committed wire data. These checks read only the committed JSON and are
+// separate from the synthetic PASS fixtures used by the verdict model.
+// ---------------------------------------------------------------------------
+
+const (
+	wireKind          = "planning-artifact-not-an-authorization-engine"
+	wireSchemaVersion = 2
+)
+
+// unknownOrNull accepts the exact string UNKNOWN or an absent or null value
+// (decoded as the empty string).
+func unknownOrNull(s string) bool { return s == "UNKNOWN" || s == "" }
+
+func wireEvidenceErrors(owner, sha, url string, f freshness) []string {
+	var errs []string
+	if !unknownOrNull(sha) {
+		errs = append(errs, owner+" evidence sha is not UNKNOWN or null")
+	}
+	if !unknownOrNull(url) {
+		errs = append(errs, owner+" evidence url is not UNKNOWN or null")
+	}
+	if !unknownOrNull(f.State) {
+		errs = append(errs, owner+" freshness is not UNKNOWN or null")
+	}
+	if f.ObservedAt != nil {
+		errs = append(errs, owner+" records an observation")
+	}
+	return errs
+}
+
+// wireDataErrors requires the committed data to carry no live claim.
+func wireDataErrors(m matrix) []string {
+	var errs []string
+	if m.Kind != wireKind {
+		errs = append(errs, fmt.Sprintf("kind %q, want %q", m.Kind, wireKind))
+	}
+	if m.SchemaVersion != wireSchemaVersion {
+		errs = append(errs, fmt.Sprintf("schema_version %d, want %d", m.SchemaVersion, wireSchemaVersion))
+	}
+	for i := range m.Gates {
+		g := &m.Gates[i]
+		if g.Status != "UNKNOWN" {
+			errs = append(errs, fmt.Sprintf("gate %s status %q, want UNKNOWN", g.ID, g.Status))
+		}
+		if c := g.Canary; c != nil {
+			if c.Status != "UNKNOWN" {
+				errs = append(errs, fmt.Sprintf("gate %s canary status %q, want UNKNOWN", g.ID, c.Status))
+			}
+			errs = append(errs, wireEvidenceErrors("gate "+g.ID+" canary", c.EvidenceSHA, c.EvidenceURL, c.Freshness)...)
+		}
+	}
+	for i := range m.Topics {
+		tp := &m.Topics[i]
+		if tp.Status != "UNKNOWN" {
+			errs = append(errs, fmt.Sprintf("topic %s status %q, want UNKNOWN", tp.ID, tp.Status))
+		}
+	}
+	return errs
+}
+
+func TestCommittedWireData(t *testing.T) {
+	m := loadMatrix(t)
+	if errs := wireDataErrors(m); len(errs) != 0 {
+		t.Fatalf("committed wire data: %v", errs)
+	}
+	if m.gate("G4") == nil || m.gate("G4").Canary == nil {
+		t.Fatal("G4 canary missing: the canary checks would be vacuous")
+	}
+	mut := map[string]func(*matrix){
+		"gate PASS":              func(m *matrix) { m.Gates[0].Status = "PASS" },
+		"gate FAIL":              func(m *matrix) { m.Gates[1].Status = "FAIL" },
+		"gate empty":             func(m *matrix) { m.Gates[2].Status = "" },
+		"gate lowercase":         func(m *matrix) { m.Gates[3].Status = "unknown" },
+		"canary PASS":            func(m *matrix) { m.Gates[4].Canary.Status = "PASS" },
+		"canary empty":           func(m *matrix) { m.Gates[4].Canary.Status = "" },
+		"canary BLOCKED":         func(m *matrix) { m.Gates[4].Canary.Status = "BLOCKED" },
+		"topic PASS":             func(m *matrix) { m.Topics[0].Status = "PASS" },
+		"topic empty":            func(m *matrix) { m.Topics[1].Status = "" },
+		"topic MAYBE":            func(m *matrix) { m.Topics[len(m.Topics)-1].Status = "MAYBE" },
+		"canary sha":             func(m *matrix) { m.Gates[4].Canary.EvidenceSHA = strings.Repeat("a", 40) },
+		"canary url":             func(m *matrix) { m.Gates[4].Canary.EvidenceURL = "https://example.invalid/x" },
+		"canary freshness":       func(m *matrix) { m.Gates[4].Canary.Freshness.State = "FRESH" },
+		"canary observation":     func(m *matrix) { m.Gates[4].Canary.Freshness.ObservedAt = strp("2026-11-18T11:00:00Z") },
+		"kind changed":           func(m *matrix) { m.Kind = "authorization-engine" },
+		"kind empty":             func(m *matrix) { m.Kind = "" },
+		"schema_version changed": func(m *matrix) { m.SchemaVersion = 3 },
+		"schema_version zero":    func(m *matrix) { m.SchemaVersion = 0 },
+	}
+	for name, f := range mut {
+		t.Run(name, func(t *testing.T) {
+			bad := cloneMatrix(m)
+			c := *bad.Gates[4].Canary
+			bad.Gates[4].Canary = &c
+			f(&bad)
+			if len(wireDataErrors(bad)) == 0 {
+				t.Fatalf("%s was not refused", name)
+			}
+		})
+	}
+	// The synthetic PASS fixtures stay valid for the verdict model only.
+	if v, _ := verdict(goodGate("G1", "D1"), refTime, dur(24)); v != "PASS" {
+		t.Error("synthetic fixture no longer passes the verdict model")
+	}
+	if len(wireDataErrors(matrix{Kind: wireKind, SchemaVersion: wireSchemaVersion, Gates: []gate{goodGate("G1", "D1")}})) == 0 {
+		t.Error("a synthetic PASS gate must not satisfy the wire-data check")
+	}
+}
+
+func TestBareExistingApprovalRefused(t *testing.T) {
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	if errs := bareExistingErrors(doc); len(errs) != 0 {
+		t.Fatalf("committed Markdown: %v", errs)
+	}
+	for name, bad := range map[string]string{
+		"alone":     strings.Replace(doc, "Role names are planning labels", "The existing approval is enough. Role names are planning labels", 1),
+		"beside":    strings.Replace(doc, "mctl-glovo introduces no second\n  approval ledger.", "mctl-glovo introduces no second\n  approval ledger. The existing mctlhq/mctl-api#1011 approval applies.", 1),
+		"uppercase": strings.Replace(doc, "Role names are planning labels", "EXISTING #1012 is enough. Role names are planning labels", 1),
+	} {
+		if bad == doc {
+			t.Fatalf("%s: mutation changed nothing", name)
+		}
+		if len(proseErrors(bad)) == 0 || len(bareExistingErrors(bad)) == 0 {
+			t.Errorf("%s: bare existing next to the approval was not refused", name)
+		}
+		if len(fullDocErrors(bad)) == 0 {
+			t.Errorf("%s: full-document pin did not refuse it", name)
+		}
 	}
 }
