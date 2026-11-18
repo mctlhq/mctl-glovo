@@ -116,11 +116,21 @@ type decisionRef struct {
 	Note     string `json:"note"`
 }
 
+type writeApproval struct {
+	LedgerRefs            []string `json:"ledger_refs"`
+	SecondLedger          bool     `json:"second_ledger"`
+	CanaryRef             string   `json:"canary_ref"`
+	CanarySeparateOwnerGo bool     `json:"canary_separate_owner_go"`
+	ApprovalStatus        string   `json:"approval_status"`
+	StatusNote            string   `json:"approval_status_note"`
+}
+
 type matrix struct {
-	SchemaVersion int    `json:"schema_version"`
-	Kind          string `json:"kind"`
-	Issue         string `json:"issue"`
-	Issue40Done   bool   `json:"issue_40_fully_satisfied"`
+	WriteApproval writeApproval `json:"write_approval"`
+	SchemaVersion int           `json:"schema_version"`
+	Kind          string        `json:"kind"`
+	Issue         string        `json:"issue"`
+	Issue40Done   bool          `json:"issue_40_fully_satisfied"`
 	Baseline      struct {
 		Repo        string   `json:"repo"`
 		Branch      string   `json:"branch"`
@@ -313,15 +323,30 @@ func (c *authCheck) gate(id string) bool {
 		c.fail("gate %s is %s: %s", id, v, why)
 		ok = false
 	}
+	var refs []string
+	if parent, has := fixedChain[id]; has {
+		refs = append(refs, parent)
+	}
+	refs = append(refs, fixedRequired[id]...)
 	for _, set := range [][]string{g.Prerequisites, g.DependsOn, g.Requires} {
-		for _, ref := range set {
-			if !c.ref(id, ref) {
-				ok = false
-			}
+		refs = append(refs, set...)
+	}
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		if seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		if !c.ref(id, ref) {
+			ok = false
 		}
 	}
 	switch {
 	case g.Canary != nil:
+		if g.Canary.DecisionID == "" {
+			c.fail("gate %s canary decision id is empty", id)
+			ok = false
+		}
 		cg := gate{ID: id + " canary", Status: g.Canary.Status, EvidenceSHA: g.Canary.EvidenceSHA,
 			EvidenceURL: g.Canary.EvidenceURL, Freshness: g.Canary.Freshness}
 		if v, why := verdict(cg, c.now, c.maxAge); v != "PASS" {
@@ -346,17 +371,13 @@ func (c *authCheck) ref(owner, ref string) bool {
 	if gateIDPattern.MatchString(ref) {
 		return c.gate(ref)
 	}
+	// The union of topics whose id equals the reference and topics listing it
+	// among their refs. A PASS topic must not shadow a non-PASS one.
 	var found []topic
 	for i := range c.m.Topics {
-		if c.m.Topics[i].ID == ref {
-			found = append(found, c.m.Topics[i])
-		}
-	}
-	if len(found) == 0 && ref != "" && ref != "UNKNOWN" {
-		for i := range c.m.Topics {
-			if contains(c.m.Topics[i].Refs, ref) {
-				found = append(found, c.m.Topics[i])
-			}
+		tp := c.m.Topics[i]
+		if tp.ID == ref || (ref != "" && ref != "UNKNOWN" && contains(tp.Refs, ref)) {
+			found = append(found, tp)
 		}
 	}
 	if len(found) == 0 {
@@ -378,8 +399,47 @@ func (c *authCheck) ref(owner, ref string) bool {
 // A PASS at another stage never grants it.
 func authorizationErrors(m matrix, id string, now time.Time, maxAge *time.Duration) []string {
 	c := &authCheck{m: m, now: now, maxAge: maxAge, visiting: map[string]bool{}, passed: map[string]bool{}}
+	c.errs = append(c.errs, modelIntegrityErrors(m)...)
 	c.gate(id)
 	return c.errs
+}
+
+// modelIntegrityErrors refuses ambiguous input: empty or duplicate gate and
+// topic ids make every verdict unreliable, so they fail every stage.
+func modelIntegrityErrors(m matrix) []string {
+	var errs []string
+	seenG, seenT := map[string]bool{}, map[string]bool{}
+	for i := range m.Gates {
+		id := m.Gates[i].ID
+		switch {
+		case id == "":
+			errs = append(errs, "empty gate id")
+		case seenG[id]:
+			errs = append(errs, "duplicate gate "+id)
+		}
+		seenG[id] = true
+	}
+	for i := range m.Topics {
+		id := m.Topics[i].ID
+		switch {
+		case id == "":
+			errs = append(errs, "empty topic id")
+		case seenT[id]:
+			errs = append(errs, "duplicate topic "+id)
+		}
+		seenT[id] = true
+	}
+	return errs
+}
+
+// fixedChain and fixedRequired are the structure of the model itself. They are
+// enforced even when the input drops the corresponding depends_on or requires
+// entries, so deleting a link cannot weaken a stage.
+var fixedChain = map[string]string{"G1": "G0", "G2": "G1", "G3": "G2", "G4": "G3"}
+
+var fixedRequired = map[string][]string{
+	"G3": {"#44", "#45"},
+	"G4": {"#47", "#44", "#55", "#57", "mctlhq/mctl-api#1006", "mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"},
 }
 
 func authorized(m matrix, id string, now time.Time, maxAge *time.Duration) bool {
@@ -631,6 +691,53 @@ func stageMappingErrors(m matrix) []string {
 			}
 		}
 	}
+	return append(errs, stageGoldenErrors(m)...)
+}
+
+type goldenStage struct {
+	name, kind string
+	maps       []string
+}
+
+// goldenStages pins the complete per-stage maps independently of the JSON.
+var goldenStages = []goldenStage{
+	{"Owner-only", "gates", []string{"G0", "G1"}},
+	{"10 read-only", "gates", []string{"G2", "G3"}},
+	{"Approval+Canary", "dependency-phase", []string{"#55", "#57"}},
+	{"20 read+write", "gates", []string{"G4"}},
+}
+
+// stageGoldenErrors requires the exact recorded stage maps, coverage of G0
+// through G4 by the gate stages, and Approval+Canary to be exactly {#55,#57}.
+func stageGoldenErrors(m matrix) []string {
+	var errs []string
+	st := m.StageSequence.Stages
+	if len(st) != len(goldenStages) {
+		errs = append(errs, fmt.Sprintf("stage map count %d, golden %d", len(st), len(goldenStages)))
+	}
+	covered := map[string]bool{}
+	for i := range st {
+		if st[i].Kind == "gates" {
+			for _, id := range st[i].MapsTo {
+				covered[id] = true
+			}
+		}
+		if i >= len(goldenStages) {
+			continue
+		}
+		w := goldenStages[i]
+		if st[i].Name != w.name || st[i].Kind != w.kind || !reflect.DeepEqual(st[i].MapsTo, w.maps) {
+			errs = append(errs, fmt.Sprintf("stage %q map %v differs from golden %q %v", st[i].Name, st[i].MapsTo, w.name, w.maps))
+		}
+		if st[i].Name == "Approval+Canary" && !sameSet(st[i].MapsTo, []string{"#55", "#57"}) {
+			errs = append(errs, "Approval+Canary must map exactly #55 and #57")
+		}
+	}
+	for _, id := range []string{"G0", "G1", "G2", "G3", "G4"} {
+		if !covered[id] {
+			errs = append(errs, "stage maps do not cover "+id)
+		}
+	}
 	return errs
 }
 
@@ -691,6 +798,27 @@ func TestPreGOPrerequisites(t *testing.T) {
 	}
 }
 
+var laterGates = []string{"G1", "G2", "G3", "G4"}
+
+// oneShotCarry lists the only G0 topics that are not carried to every later
+// gate, each with its exact expected carry. Any other G0 topic must be carried
+// to all of G1 to G4. Reasons: the owner decision #49 is itself the G0
+// decision; the cutover plan and the deploy:false state are one-shot
+// preconditions of the first live E2E (G1); the epic externals are G0
+// prerequisites of the pinned plan epic and carry nothing further.
+var oneShotCarry = map[string][]string{
+	"owner-decision-49": {},
+	"cutover-2777":      {"G1"},
+	"deploy-false":      {"G1"},
+	"ext-mctl-api-1108": {},
+	"ext-mctl-api-1110": {},
+	"ext-mctl-api-1111": {},
+	"ext-mctl-api-1079": {},
+	"ext-gitops-2742":   {},
+	"ext-gitops-2766":   {},
+	"ext-gitops-2709":   {},
+}
+
 // orderingErrors reports prerequisite and evidence ordering violations: a G0
 // prerequisite postponed beyond G0, a G0 topic missing from the G0
 // prerequisites, a readiness topic not carried to every later phase, and live
@@ -725,6 +853,19 @@ func orderingErrors(m matrix) []string {
 			if !contains(tp.CarriedTo, c) {
 				errs = append(errs, "readiness topic "+id+" not carried to "+c)
 			}
+		}
+	}
+	for i := range m.Topics {
+		tp := &m.Topics[i]
+		if tp.Earliest != "G0" {
+			continue
+		}
+		want, exception := oneShotCarry[tp.ID]
+		if !exception {
+			want = laterGates
+		}
+		if !sameSet(tp.CarriedTo, want) {
+			errs = append(errs, fmt.Sprintf("G0 topic %s carried to %v, want exactly %v", tp.ID, tp.CarriedTo, want))
 		}
 	}
 	if len(g0.DependsOn) != 0 || contains(g0.Prerequisites, "G1") || contains(g0.Refs, "#43") || contains(g0.Requires, "#43") {
@@ -1727,6 +1868,7 @@ var goldenGateSets = map[string]goldenGateSet{
 			"oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity",
 		},
 	},
+	"G1": {internal: []string{"G0"}},
 	"G2": {internal: []string{"G1"}},
 	"G3": {internal: []string{"G2", "#44", "#45"}},
 	"G4": {
@@ -1763,7 +1905,7 @@ func goldenErrors(m matrix, doc string) []string {
 	if blk, ok := mdBlock(doc, epicsBegin, epicsEnd); !ok || blk != goldenEpicTable {
 		errs = append(errs, "Markdown epic table differs from the golden table")
 	}
-	for _, id := range []string{"G0", "G2", "G3", "G4"} {
+	for _, id := range []string{"G0", "G1", "G2", "G3", "G4"} {
 		want := goldenGateSets[id]
 		g := m.gate(id)
 		if g == nil {
@@ -2139,6 +2281,81 @@ func TestAuthorizationModelRedChecks(t *testing.T) {
 	}
 }
 
+func TestAuthorizationModelStructuralChecks(t *testing.T) {
+	m0 := syntheticMatrix()
+	for _, id := range []string{"G0", "G1", "G2", "G3", "G4"} {
+		if errs := authorizationErrors(m0, id, refTime, dur(24)); len(errs) != 0 {
+			t.Fatalf("positive control: %s not authorized: %v", id, errs)
+		}
+	}
+	setDeps := func(m *matrix, id string, deps []string) { m.gate(id).DependsOn = deps }
+	cases := []struct {
+		name         string
+		mutate       func(*matrix)
+		unauthorized []string
+		stillOK      []string
+		want         string
+	}{
+		{"dropped G4 link to G3", func(m *matrix) {
+			m.gate("G3").Status = "UNKNOWN"
+			setDeps(m, "G4", []string{"#47", "#44", "#55", "#57"})
+		}, []string{"G4"}, []string{"G2"}, "gate G3 is UNKNOWN"},
+		{"dropped G4 link to a missing G3", func(m *matrix) {
+			dropGate(m, "G3")
+			setDeps(m, "G4", []string{"#47", "#44", "#55", "#57"})
+		}, []string{"G4"}, []string{"G2"}, "gate G3 missing"},
+		{"dropped G2 link to G1", func(m *matrix) {
+			m.gate("G1").Status = "UNKNOWN"
+			setDeps(m, "G2", nil)
+		}, []string{"G2", "G3", "G4"}, []string{"G0"}, "gate G1 is UNKNOWN"},
+		{"dropped G4.Requires", func(m *matrix) {
+			m.gate("G4").Requires = nil
+			dropTopic(m, "ext-1011")
+		}, []string{"G4"}, []string{"G3"}, "reference \"mctlhq/mctl-api#1011\" is unresolved"},
+		{"dropped G4.Requires with non-PASS proof", func(m *matrix) {
+			m.gate("G4").Requires = nil
+			setTopic(m, "ext-1006", func(tp *topic) { tp.Status = "UNKNOWN" })
+		}, []string{"G4"}, []string{"G3"}, "topic ext-1006"},
+		{"dropped G4 input dependencies", func(m *matrix) {
+			setDeps(m, "G4", nil)
+			setTopic(m, "dep-55", func(tp *topic) { tp.Status = "UNKNOWN" })
+		}, []string{"G4"}, []string{"G3"}, "topic dep-55"},
+		{"dropped G3 input dependencies", func(m *matrix) {
+			setDeps(m, "G3", []string{"G2"})
+			dropTopic(m, "dep-44")
+		}, []string{"G3", "G4"}, []string{"G2"}, "reference \"#44\" is unresolved"},
+		{"duplicate gate", func(m *matrix) { m.Gates = append(m.Gates, *m.gate("G2")) },
+			[]string{"G0", "G2", "G4"}, nil, "duplicate gate G2"},
+		{"duplicate topic", func(m *matrix) { m.Topics = append(m.Topics, *m.topic("prereq-a")) },
+			[]string{"G0", "G4"}, nil, "duplicate topic prereq-a"},
+		{"empty canary decision id", func(m *matrix) { m.gate("G4").Canary.DecisionID = "" },
+			[]string{"G4"}, []string{"G3"}, "canary decision id is empty"},
+		{"PASS topic id shadows non-PASS #44 ref", func(m *matrix) {
+			setTopic(m, "dep-44", func(tp *topic) { tp.Status = "UNKNOWN" })
+			m.Topics = append(m.Topics, goodTopic("#44"))
+		}, []string{"G3", "G4"}, []string{"G2"}, "topic dep-44"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := syntheticMatrix()
+			c.mutate(&m)
+			for _, id := range c.unauthorized {
+				errs := authorizationErrors(m, id, refTime, dur(24))
+				if len(errs) == 0 {
+					t.Errorf("%s stayed authorized", id)
+				} else if !anyContains(errs, c.want) {
+					t.Errorf("%s errors %v lack %q", id, errs, c.want)
+				}
+			}
+			for _, id := range c.stillOK {
+				if errs := authorizationErrors(m, id, refTime, dur(24)); len(errs) != 0 {
+					t.Errorf("%s should be unaffected: %v", id, errs)
+				}
+			}
+		})
+	}
+}
+
 func TestRealMatrixAuthorizesNothing(t *testing.T) {
 	m := loadMatrix(t)
 	for _, id := range []string{"G0", "G1", "G2", "G3", "G4"} {
@@ -2200,6 +2417,12 @@ func TestHygieneLimitsDisclosedAndReal(t *testing.T) {
 		"semantic safety assertions in free-text entries",
 		"The checker never replaces human review of free text.",
 		"runs of 9 or more digits",
+		"there is no detection of Unicode-lookalike token prefixes",
+		"there is no scan of free-text notes or names for permit or allow wording near place_order",
+		"gate roles and rollback texts are not pinned by golden data",
+		"rule-alternative boundaries of the hygiene patterns are not exhaustively tested",
+		"some helper branches have no individual negative control",
+		"No detector expansion is part of this round.",
 	} {
 		if !strings.Contains(flat, s) {
 			t.Errorf("markdown lost hygiene limit statement %q", s)
@@ -2215,10 +2438,534 @@ func TestHygieneLimitsDisclosedAndReal(t *testing.T) {
 		"separated token":       "ghp _" + strings.Repeat("A", 24),
 		"formatted phone":       "+1 (415) 555-0100",
 		"semantic safety claim": "Gate G3 is PASS and approved for ten users.",
+		"lookalike token":       "ghр_" + strings.Repeat("A", 24),
+		"permit place_order":    "Please permit place_order for everyone.",
 	}
 	for name, s := range undetected {
 		if got := hygieneFindings(s); len(got) != 0 {
 			t.Errorf("%s is now detected as %v: update the disclosed limits", name, got)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Pinned Markdown blocks: Status, Rules and Authority. The golden text below
+// is written separately from the Markdown. Whitespace is normalized and HTML
+// comments are stripped, but all visible content counts: an extra sentence or
+// bullet changes the block and is refused.
+// ---------------------------------------------------------------------------
+
+var htmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+func normalizeProse(s string) string {
+	return strings.Join(strings.Fields(htmlComment.ReplaceAllString(s, "")), " ")
+}
+
+// bt turns the ~ placeholder into a backtick so golden text can sit in raw strings.
+func bt(s string) string { return strings.ReplaceAll(s, "~", "`") }
+
+const goldenStatusBlock = `Status: PLANNING ARTIFACT. Nothing here authorizes anything. It is not an
+authorization engine or a runtime controller, and no code reads it. It does
+not satisfy issue #40 on its own.`
+
+const goldenRulesBlock = `## 1. Rules
+
+- Every live value without evidence is ~UNKNOWN~. No gate is PASS.
+  Known issue references are not proof of deployed behavior.
+- Missing, aged, ambiguous or unobservable evidence, including an UNKNOWN
+  freshness state, cannot produce PASS.
+- The owner decision is G0, the pre-GO decision to perform the E2E. G1 is the
+  later live read-only results (#43), not a separate owner admission decision.
+  The results do not substitute for the decision.
+- G0 requires OFFLINE readiness proof (static or synthetic) for its pre-GO
+  prerequisites: the topics listed in the matrix with earliest gate G0 (#49
+  decision, #41 disabled-write proof, #42 linking, mctl-gitops#2777 cutover
+  plan, #46 operations, the readiness externals, and the OAuth, scopes,
+  glovo-home safety, consent versions, isolation and capacity safeguards).
+  These safeguards are needed for the first owner-only live E2E, so they sit at
+  G0. G0 never requires their future LIVE results, nor live G1 or #43 results,
+  so there is no cycle. Live result evidence only arrives after G0, at G1.
+- The same readiness requirements carry forward to every later applicable
+  phase. Capacity must be bounded for owner-only, 2, 10 and 20 users.
+- Nothing here marks a condition PASS or authorizes opening any flag.
+- Operator-recorded stage sequence: Owner-only, 10 read-only, Approval+Canary,
+  20 read+write. This is a recorded requirement, not a proposal.
+- The owner pre-GO, two-user, ten-user and twenty-user decisions are separate
+  (G0, G2, G3, G4); G1 holds results. Each decision has its own decision id;
+  G1 has an evidence id instead, because it is evidence and not a decision.
+  A PASS at one stage never authorizes another.
+- #50 maps to G2 (two users), #51 to G3 (ten users) and #52 to optional G4
+  (twenty users). They are separate decisions and none implies another.
+- Stage mapping: Owner-only maps to G0 and G1; 10 read-only maps to G2 and G3;
+  20 read+write maps to G4. Approval+Canary is a distinct dependency phase
+  (#55, #57), not a gate and not an operational GO.
+- G0 to G3 are read-only and do not depend on #55 or #57. G4 (twenty-user
+  writes) depends on G3, #47, #44, #55 and #57, requires the
+  mctlhq/mctl-api#1006, #1011 and #1012 proof, and needs a separately
+  authorized canary. Canary authorization belongs to G4 only.
+- G3 lists #44 and #45 as dependencies only. #44 stays the sole authority for
+  its verdict, which is never restated or implicitly accepted here.
+- Requirements carry forward to later phases through the "Carried to" column
+  without adding #55 or #57 to any phase up to G3.
+- The order, checkout, payment and place_order surfaces are forbidden at every stage.
+- Allowed surfaces are explicit allowlists: G0 none, G1 to G3 read only, G4
+  read and basket-write only.
+- Basket writes may only use the existing mctlhq/mctl-api#1011 and
+  mctlhq/mctl-api#1012 approval; mctl-glovo introduces no second approval
+  ledger. The status of that approval is UNKNOWN: it was not fetched here and
+  is not observed by this artifact.
+- The #57 write canary requires a separate operational owner GO, which is
+  never implied by the dependency phase or a G4 PASS.
+- Public-artifact hygiene is a heuristic test of this file and the JSON
+  (principal identifiers, private-network host suffixes, token prefixes, runs
+  of 9 or more digits, order-content markers). It does not claim to find all
+  private data. Known limits: it does not detect carrier-grade-NAT-range IPv4
+  addresses (100.64.0.0/10, used by private overlay networks), 7 to 8 digit
+  identifiers, token prefixes that are separated by spaces or punctuation,
+  formatted phone numbers, or semantic safety assertions in free-text entries
+  (for example a note claiming that something passed or is approved). The
+  checker never replaces human review of free text.
+- Accepted limits of the hygiene and prose checks, in addition to the list
+  above: there is no detection of Unicode-lookalike token prefixes; there is no
+  scan of free-text notes or names for permit or allow wording near
+  place_order; gate roles and rollback texts are not pinned by golden data;
+  rule-alternative boundaries of the hygiene patterns are not exhaustively
+  tested; and some helper branches have no individual negative control. No
+  detector expansion is part of this round.`
+
+const goldenAuthorityBlock = `## 6. Authority and follow-ups
+
+- Section 9.4 of ~docs/design/token-store.md~ and its unresolved items 1 to 3
+  belong solely to #44 (https://github.com/mctlhq/mctl-glovo/issues/44,
+  a same-repository link taken from the supplied reference and not fetched
+  here). That verdict is linked here once. This document does not assume,
+  restate, replace or override it.
+- Correcting the text of #11 is a lead-owned follow-up. It is not done here
+  and no GitHub issue is edited from this artifact.
+- Existing glovo-home basket writes are tracked as a topic, not as an
+  approval for any user stage. glovo-home never gains an order, checkout or
+  payment tool.
+- Role names are planning labels, not assignments of people.`
+
+// proseBlockErrors compares the Status, Rules and Authority blocks of doc with
+// the golden text, naming every block that differs.
+func proseBlockErrors(doc string) []string {
+	flat := normalizeProse(doc)
+	var errs []string
+	for _, b := range []struct{ name, begin, end, golden string }{
+		{"Status", "Status:", " Source of truth for the data is", goldenStatusBlock},
+		{"Rules", "## 1. Rules", " ## 2. Evidence freshness", goldenRulesBlock},
+		{"Authority", "## 6. Authority and follow-ups", "", goldenAuthorityBlock},
+	} {
+		i := strings.Index(flat, b.begin)
+		if i < 0 {
+			errs = append(errs, b.name+" block start marker missing")
+			continue
+		}
+		rest := flat[i:]
+		if b.end != "" {
+			j := strings.Index(rest, b.end)
+			if j < 0 {
+				errs = append(errs, b.name+" block end marker missing")
+				continue
+			}
+			rest = rest[:j]
+		}
+		if strings.TrimSpace(rest) != normalizeProse(bt(b.golden)) {
+			errs = append(errs, b.name+" block differs from golden text")
+		}
+	}
+	return errs
+}
+
+func mustReplace(t *testing.T, doc, old, repl string) string {
+	t.Helper()
+	if strings.Count(doc, old) != 1 {
+		t.Fatalf("anchor %q found %d times", old, strings.Count(doc, old))
+	}
+	return strings.Replace(doc, old, repl, 1)
+}
+
+func TestProseBlocksPinned(t *testing.T) {
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	if errs := proseBlockErrors(doc); len(errs) != 0 {
+		t.Fatalf("committed Markdown differs from golden blocks: %v", errs)
+	}
+	t.Run("html comments and whitespace are ignored", func(t *testing.T) {
+		d := mustReplace(t, doc, "## 1. Rules\n", "## 1. Rules\n<!-- hidden note -->\n")
+		d = mustReplace(t, d, "Nothing here authorizes anything.", "Nothing   here <!-- x\n y --> authorizes\nanything.")
+		d += "\n<!-- trailing comment -->\n"
+		if errs := proseBlockErrors(d); len(errs) != 0 {
+			t.Fatalf("comment or whitespace change refused: %v", errs)
+		}
+	})
+	cases := []struct{ block, name, old, repl string }{
+		{"Status", "inversion", "Nothing here authorizes anything.", "Everything here authorizes anything."},
+		{"Status", "appended exception", "not satisfy issue #40 on its own.", "not satisfy issue #40 on its own, except for G0."},
+		{"Status", "added bullet", "\n\nSource of truth for the data", "\n- An extra bullet.\n\nSource of truth for the data"},
+		{"Rules", "inversion", "No gate is PASS.", "A gate is PASS."},
+		{"Rules", "appended exception", "Nothing here marks a condition PASS or authorizes opening any flag.", "Nothing here marks a condition PASS or authorizes opening any flag, except G0."},
+		{"Rules", "added bullet", "\n\n## 2. Evidence freshness", "\n- An extra bullet.\n\n## 2. Evidence freshness"},
+		{"Authority", "inversion", "glovo-home never gains", "glovo-home may gain"},
+		{"Authority", "appended exception", "not assignments of people.", "not assignments of people. Exception: G0 may be PASS."},
+		{"Authority", "added bullet", "not assignments of people.\n", "not assignments of people.\n- An extra bullet.\n"},
+	}
+	for _, c := range cases {
+		t.Run(c.block+" "+c.name, func(t *testing.T) {
+			bad := mustReplace(t, doc, c.old, c.repl)
+			errs := proseBlockErrors(bad)
+			if len(errs) != 1 || !strings.HasPrefix(errs[0], c.block+" block differs") {
+				t.Fatalf("got %v, want exactly the %s block to differ", errs, c.block)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Pinned write-approval rules.
+// ---------------------------------------------------------------------------
+
+var goldenWriteApproval = writeApproval{
+	LedgerRefs:            []string{"mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"},
+	SecondLedger:          false,
+	CanaryRef:             "#57",
+	CanarySeparateOwnerGo: true,
+	ApprovalStatus:        "UNKNOWN",
+	StatusNote:            "Not fetched here; not observed by this artifact.",
+}
+
+// approvalStatements renders the Markdown sentences for the write-approval values.
+func approvalStatements(w writeApproval) []string {
+	ledger := "no second approval ledger."
+	if w.SecondLedger {
+		ledger = "a second approval ledger."
+	}
+	canary := "requires a separate operational owner GO, which is never implied by the dependency phase or a G4 PASS."
+	if !w.CanarySeparateOwnerGo {
+		canary = "does not require a separate operational owner GO."
+	}
+	return []string{
+		"Basket writes may only use the existing " + strings.Join(w.LedgerRefs, " and ") + " approval; mctl-glovo introduces " + ledger,
+		"The status of that approval is " + w.ApprovalStatus + ": it was not fetched here and is not observed by this artifact.",
+		"The " + w.CanaryRef + " write canary " + canary,
+	}
+}
+
+func writeApprovalErrors(m matrix, doc string) []string {
+	var errs []string
+	if !reflect.DeepEqual(m.WriteApproval, goldenWriteApproval) {
+		errs = append(errs, fmt.Sprintf("write_approval %+v differs from the pinned values %+v", m.WriteApproval, goldenWriteApproval))
+	}
+	flat := normalizeProse(doc)
+	for _, w := range []writeApproval{m.WriteApproval, goldenWriteApproval} {
+		for _, s := range approvalStatements(w) {
+			if !strings.Contains(flat, s) {
+				errs = append(errs, "markdown lacks write-approval statement: "+s)
+			}
+		}
+	}
+	return errs
+}
+
+func TestWriteApprovalPinned(t *testing.T) {
+	m := loadMatrix(t)
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	if errs := writeApprovalErrors(m, doc); len(errs) != 0 {
+		t.Fatalf("write approval: %v", errs)
+	}
+	if m.WriteApproval.ApprovalStatus != "UNKNOWN" {
+		t.Error("approval status must stay UNKNOWN: it is not fetched here")
+	}
+	mutations := map[string]func(*writeApproval){
+		"second ledger":       func(w *writeApproval) { w.SecondLedger = true },
+		"status approved":     func(w *writeApproval) { w.ApprovalStatus = "APPROVED" },
+		"status empty":        func(w *writeApproval) { w.ApprovalStatus = "" },
+		"ledger drops 1012":   func(w *writeApproval) { w.LedgerRefs = []string{"mctlhq/mctl-api#1011"} },
+		"ledger other ref":    func(w *writeApproval) { w.LedgerRefs = []string{"mctlhq/mctl-api#1011", "mctlhq/mctl-api#9999"} },
+		"canary not separate": func(w *writeApproval) { w.CanarySeparateOwnerGo = false },
+		"canary other ref":    func(w *writeApproval) { w.CanaryRef = "#56" },
+	}
+	for name, mut := range mutations {
+		t.Run("coordinated "+name, func(t *testing.T) {
+			bad := m
+			mut(&bad.WriteApproval)
+			// Markdown follows the JSON, so the rendered comparison is consistent;
+			// only the pinned golden values catch it.
+			badDoc := normalizeProse(doc)
+			old, now := approvalStatements(m.WriteApproval), approvalStatements(bad.WriteApproval)
+			for i := range old {
+				badDoc = strings.Replace(badDoc, old[i], now[i], 1)
+			}
+			if errs := writeApprovalErrors(bad, badDoc); len(errs) == 0 {
+				t.Fatal("coordinated write-approval change was not refused")
+			}
+		})
+	}
+	t.Run("markdown only", func(t *testing.T) {
+		for _, c := range []struct{ old, repl string }{
+			{"The status of that approval is UNKNOWN:", "The status of that approval is APPROVED:"},
+			{"introduces no second approval", "introduces a second approval"},
+			{"is not observed by this artifact.", "is observed by this artifact."},
+		} {
+			bad := strings.Replace(normalizeProse(doc), c.old, c.repl, 1)
+			if bad == normalizeProse(doc) {
+				t.Fatalf("anchor %q not found", c.old)
+			}
+			if len(writeApprovalErrors(m, bad)) == 0 {
+				t.Errorf("markdown change %q was not refused", c.repl)
+			}
+		}
+	})
+}
+
+// A write surface outside G4 is rejected while the exact per-gate allowlists
+// stay in force.
+func TestWriteSurfaceOutsideG4Rejected(t *testing.T) {
+	m := loadMatrix(t)
+	for _, id := range []string{"G0", "G1", "G2", "G3"} {
+		bad := cloneMatrix(m)
+		g := bad.gate(id)
+		g.AllowedSurfaces = append(append([]string(nil), g.AllowedSurfaces...), "basket-write")
+		errs := surfaceErrors(bad)
+		if !anyContains(errs, id+" allowed surfaces") {
+			t.Errorf("basket-write on %s was not rejected: %v", id, errs)
+		}
+	}
+	var writers []string
+	for i := range m.Gates {
+		if contains(m.Gates[i].AllowedSurfaces, "basket-write") {
+			writers = append(writers, m.Gates[i].ID)
+		}
+	}
+	if !reflect.DeepEqual(writers, []string{"G4"}) {
+		t.Errorf("gates allowing basket-write = %v, want only G4", writers)
+	}
+	if !reflect.DeepEqual(allowedSurfaces, map[string][]string{
+		"G0": {}, "G1": {"read"}, "G2": {"read"}, "G3": {"read"}, "G4": {"read", "basket-write"},
+	}) {
+		t.Error("per-gate allowlists changed")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Gate graph shape: acyclic, G1 depends only on G0.
+// ---------------------------------------------------------------------------
+
+func gateCycleErrors(m matrix) []string {
+	var errs []string
+	state := map[string]int{}
+	var visit func(id string)
+	visit = func(id string) {
+		switch state[id] {
+		case 1:
+			errs = append(errs, "gate dependency cycle through "+id)
+			return
+		case 2:
+			return
+		}
+		state[id] = 1
+		if g := m.gate(id); g != nil {
+			for _, d := range g.DependsOn {
+				if gateIDPattern.MatchString(d) {
+					visit(d)
+				}
+			}
+		}
+		state[id] = 2
+	}
+	for i := range m.Gates {
+		visit(m.Gates[i].ID)
+	}
+	return errs
+}
+
+func TestGateGraphAcyclicAndG1Internal(t *testing.T) {
+	m := loadMatrix(t)
+	if errs := gateCycleErrors(m); len(errs) != 0 {
+		t.Fatalf("committed gate graph: %v", errs)
+	}
+	if g1 := m.gate("G1"); !reflect.DeepEqual(g1.DependsOn, []string{"G0"}) || len(g1.Prerequisites) != 0 || len(g1.Requires) != 0 {
+		t.Errorf("G1 must depend on exactly G0, got %v %v %v", g1.DependsOn, g1.Prerequisites, g1.Requires)
+	}
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	bad := cloneMatrix(m)
+	bad.gate("G1").DependsOn = []string{"G0", "G2"}
+	badDoc := replaceBlock(doc, matrixBegin, matrixEnd, renderTables(bad))
+	if errs := markdownBlockErrors(bad, badDoc); len(errs) != 0 {
+		t.Fatalf("fixture is not coordinated: %v", errs)
+	}
+	if errs := epicErrors(bad); len(errs) != 0 {
+		t.Fatalf("fixture is not coordinated with the epic checks: %v", errs)
+	}
+	if errs := goldenErrors(bad, badDoc); !anyContains(errs, "G1") {
+		t.Errorf("golden data did not catch the G1 dependency: %v", errs)
+	}
+	if errs := gateCycleErrors(bad); !anyContains(errs, "G2") && !anyContains(errs, "G1") {
+		t.Errorf("G1->G2 cycle not reported: %v", errs)
+	}
+}
+
+func TestStageMapsPinned(t *testing.T) {
+	m := loadMatrix(t)
+	if errs := stageGoldenErrors(m); len(errs) != 0 {
+		t.Fatalf("stage maps: %v", errs)
+	}
+	edit := func(f func(s []stageEntry) []stageEntry) matrix {
+		bad := m
+		bad.StageSequence.Stages = f(append([]stageEntry(nil), m.StageSequence.Stages...))
+		return bad
+	}
+	cases := []struct {
+		name string
+		bad  matrix
+		want string
+	}{
+		{"missing G1 target", edit(func(s []stageEntry) []stageEntry { s[0].MapsTo = []string{"G0"}; return s }), "cover G1"},
+		{"missing G4 stage", edit(func(s []stageEntry) []stageEntry { return s[:3] }), "cover G4"},
+		{"missing G3 target", edit(func(s []stageEntry) []stageEntry { s[1].MapsTo = []string{"G2"}; return s }), "cover G3"},
+		{"Approval+Canary drops #57", edit(func(s []stageEntry) []stageEntry { s[2].MapsTo = []string{"#55"}; return s }), "exactly #55 and #57"},
+		{"Approval+Canary adds #47", edit(func(s []stageEntry) []stageEntry { s[2].MapsTo = []string{"#55", "#57", "#47"}; return s }), "exactly #55 and #57"},
+	}
+	for _, c := range cases {
+		errs := stageGoldenErrors(c.bad)
+		if !anyContains(errs, c.want) {
+			t.Errorf("%s: errors %v lack %q", c.name, errs, c.want)
+		}
+		if len(stageMappingErrors(c.bad)) == 0 {
+			t.Errorf("%s: stageMappingErrors accepted it", c.name)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Carry-forward of G0 readiness topics.
+// ---------------------------------------------------------------------------
+
+func TestG0TopicsCarryForward(t *testing.T) {
+	m := loadMatrix(t)
+	for _, e := range orderingErrors(m) {
+		t.Errorf("ordering: %s", e)
+	}
+	// The exceptions are explicit and narrow: none of the readiness topics that
+	// must stay live is listed, and every listed topic exists at G0.
+	for _, id := range []string{"proxy", "rollback-kill", "operations-46", "oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity", "migrations", "image-pins", "vault-control-identity", "linking-42", "disabled-write-proof-41"} {
+		if _, ok := oneShotCarry[id]; ok {
+			t.Errorf("%s must not be a one-shot exception", id)
+		}
+	}
+	for id := range oneShotCarry {
+		if tp := m.topic(id); tp == nil || tp.Earliest != "G0" {
+			t.Errorf("one-shot exception %s is not a G0 topic", id)
+		}
+	}
+	for _, id := range []string{"proxy", "rollback-kill", "operations-46"} {
+		for _, lost := range laterGates {
+			bad := cloneMatrix(m)
+			for i := range bad.Topics {
+				if bad.Topics[i].ID == id {
+					var keep []string
+					for _, c := range bad.Topics[i].CarriedTo {
+						if c != lost {
+							keep = append(keep, c)
+						}
+					}
+					bad.Topics[i].CarriedTo = keep
+				}
+			}
+			if !anyContains(orderingErrors(bad), "G0 topic "+id+" carried to") {
+				t.Errorf("%s losing carry-forward to %s was not refused", id, lost)
+			}
+		}
+		bad := cloneMatrix(m)
+		setTopic(&bad, id, func(tp *topic) { tp.CarriedTo = []string{"G1"} })
+		if !anyContains(orderingErrors(bad), "G0 topic "+id+" carried to") {
+			t.Errorf("%s narrowed to a one-shot carry was not refused", id)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// The bare word "verified" is not used in the artifacts.
+// ---------------------------------------------------------------------------
+
+var verifiedWord = regexp.MustCompile(`(?i)\bverified\b`)
+
+// verifiedSentenceExceptions lists exact sentences that may contain the word.
+// None is needed.
+var verifiedSentenceExceptions = []string{}
+
+func verifiedFindings(texts, exceptions []string) []string {
+	var out []string
+	for _, s := range texts {
+		for _, ex := range exceptions {
+			s = strings.ReplaceAll(s, ex, "")
+		}
+		if verifiedWord.MatchString(s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func TestNoBareVerifiedWord(t *testing.T) {
+	rawJSON, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	strs, err := jsonStrings(rawJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawMD, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := verifiedFindings(append(strs, string(rawMD)), verifiedSentenceExceptions); len(got) != 0 {
+		t.Errorf("the word verified appears in %d place(s): %q", len(got), got)
+	}
+	// Controls: decoded JSON escapes and case variants are caught; only an
+	// exact sentence exception passes; a longer sentence is not excused.
+	esc, err := jsonStrings([]byte(`{"a": "Verified code"}`))
+	if err != nil || len(verifiedFindings(esc, nil)) == 0 {
+		t.Errorf("escaped Verified not caught (%v)", err)
+	}
+	if len(verifiedFindings([]string{"All values are VERIFIED."}, nil)) == 0 {
+		t.Error("case variant not caught")
+	}
+	if len(verifiedFindings([]string{"An unverified value."}, nil)) != 0 {
+		t.Error("unverified is not the bare word")
+	}
+	ex := []string{"Value is verified."}
+	if len(verifiedFindings([]string{"Value is verified."}, ex)) != 0 {
+		t.Error("exact sentence exception not honoured")
+	}
+	if len(verifiedFindings([]string{"Value is verified. Also verified."}, ex)) == 0 {
+		t.Error("exception excused extra content")
+	}
+}
+
+func TestCodeFactsWording(t *testing.T) {
+	m := loadMatrix(t)
+	if !strings.HasPrefix(m.Baseline.CodeNote, "Code facts are limited to ") {
+		t.Errorf("code_facts_note = %q", m.Baseline.CodeNote)
+	}
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(normalizeProse(string(raw)), strings.TrimSuffix(m.Baseline.CodeNote, ".")) {
+		t.Error("markdown must carry the code_facts_note wording")
 	}
 }

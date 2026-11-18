@@ -13,7 +13,7 @@ Issue: https://github.com/mctlhq/mctl-glovo/issues/40.
 
 ## 1. Rules
 
-- Every live value that has not been verified is `UNKNOWN`. No gate is PASS.
+- Every live value without evidence is `UNKNOWN`. No gate is PASS.
   Known issue references are not proof of deployed behavior.
 - Missing, aged, ambiguous or unobservable evidence, including an UNKNOWN
   freshness state, cannot produce PASS.
@@ -55,7 +55,8 @@ Issue: https://github.com/mctlhq/mctl-glovo/issues/40.
   read and basket-write only.
 - Basket writes may only use the existing mctlhq/mctl-api#1011 and
   mctlhq/mctl-api#1012 approval; mctl-glovo introduces no second approval
-  ledger.
+  ledger. The status of that approval is UNKNOWN: it was not fetched here and
+  is not observed by this artifact.
 - The #57 write canary requires a separate operational owner GO, which is
   never implied by the dependency phase or a G4 PASS.
 - Public-artifact hygiene is a heuristic test of this file and the JSON
@@ -67,6 +68,13 @@ Issue: https://github.com/mctlhq/mctl-glovo/issues/40.
   formatted phone numbers, or semantic safety assertions in free-text entries
   (for example a note claiming that something passed or is approved). The
   checker never replaces human review of free text.
+- Accepted limits of the hygiene and prose checks, in addition to the list
+  above: there is no detection of Unicode-lookalike token prefixes; there is no
+  scan of free-text notes or names for permit or allow wording near
+  place_order; gate roles and rollback texts are not pinned by golden data;
+  rule-alternative boundaries of the hygiene patterns are not exhaustively
+  tested; and some helper branches have no individual negative control. No
+  detector expansion is part of this round.
 
 ## 2. Evidence freshness (proposals, not approved)
 
@@ -89,7 +97,7 @@ and no valid operational GO exists.
 
 ## 3. Baseline facts and unknowns
 
-Verified code facts are limited to these source paths existing at the baseline
+Code facts are limited to the listed source paths existing at the baseline
 SHA. A path existing is not proof of deployed or runtime behavior:
 
 - `cmd/glovo-home/main.go` (separate legacy glovo-home safety inventory only)

@@ -8,7 +8,7 @@
     "branch": "main",
     "sha": "ca4a09aaf6b9b99f106177aee206726ff6b004b0",
     "evidence_url": "https://github.com/mctlhq/mctl-glovo/commit/ca4a09aaf6b9b99f106177aee206726ff6b004b0",
-    "code_facts_note": "Verified code facts are limited to the listed source paths existing at the baseline SHA. A path existing is not proof of deployed or runtime behavior.",
+    "code_facts_note": "Code facts are limited to the listed source paths existing at the baseline SHA. A path existing is not proof of deployed or runtime behavior.",
     "source_paths": [
       "cmd/glovo-home/main.go",
       "cmd/mctl-glovo/mcp.go",
@@ -53,6 +53,14 @@
     ]
   },
   "forbidden_surfaces": ["order", "checkout", "payment", "place_order"],
+  "write_approval": {
+    "ledger_refs": ["mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"],
+    "second_ledger": false,
+    "canary_ref": "#57",
+    "canary_separate_owner_go": true,
+    "approval_status": "UNKNOWN",
+    "approval_status_note": "Not fetched here; not observed by this artifact."
+  },
   "stage_sequence": {
     "source": "operator-recorded requirement",
     "stages": [
