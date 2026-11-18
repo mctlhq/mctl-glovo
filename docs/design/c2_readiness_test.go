@@ -38,6 +38,7 @@ type gate struct {
 	Status          string    `json:"status"`
 	Role            string    `json:"role"`
 	DecisionID      string    `json:"decision_id"`
+	EvidenceID      string    `json:"evidence_id"`
 	EvidenceSHA     string    `json:"evidence_sha"`
 	EvidenceURL     string    `json:"evidence_url"`
 	Rollback        string    `json:"rollback"`
@@ -49,6 +50,7 @@ type gate struct {
 	Refs            []string  `json:"refs"`
 	Prerequisites   []string  `json:"prerequisites"`
 	Canary          *canary   `json:"canary_authorization"`
+	Note            string    `json:"note"`
 }
 
 type topic struct {
@@ -64,6 +66,43 @@ type topic struct {
 	Rollback    string    `json:"rollback"`
 	Earliest    string    `json:"earliest_gate"`
 	CarriedTo   []string  `json:"carried_to"`
+	Note        string    `json:"note"`
+}
+
+type stageEntry struct {
+	Name   string   `json:"name"`
+	Kind   string   `json:"kind"`
+	MapsTo []string `json:"maps_to"`
+	Note   string   `json:"note"`
+}
+
+type extDep struct {
+	Ref    string `json:"ref"`
+	Target string `json:"target"`
+}
+
+type epic struct {
+	Epic       string   `json:"epic"`
+	Issue      string   `json:"issue"`
+	Target     string   `json:"target"`
+	RealizedBy string   `json:"realized_by"`
+	CarriedBy  string   `json:"carried_by"`
+	DependsOn  []string `json:"depends_on"`
+	External   []extDep `json:"external_depends_on"`
+}
+
+type planSource struct {
+	Repo       string              `json:"repo"`
+	PR         int                 `json:"pr"`
+	PRState    string              `json:"pr_state"`
+	Merged     bool                `json:"merged"`
+	HeadSHA    string              `json:"head_sha"`
+	Path       string              `json:"path"`
+	URL        string              `json:"url"`
+	Note       string              `json:"note"`
+	Epics      []epic              `json:"epics"`
+	Safeguards map[string][]string `json:"additional_offline_safeguards"`
+	ScopeNote  string              `json:"scope_note"`
 }
 
 type decisionRef struct {
@@ -105,10 +144,11 @@ type matrix struct {
 	} `json:"freshness"`
 	Forbidden     []string `json:"forbidden_surfaces"`
 	StageSequence struct {
-		Source string   `json:"source"`
-		Order  []string `json:"order"`
+		Source string       `json:"source"`
+		Stages []stageEntry `json:"stages"`
 	} `json:"stage_sequence"`
-	Authority struct {
+	PlanSource planSource `json:"epic_plan_source"`
+	Authority  struct {
 		Section94 struct {
 			SourceOfTruth string `json:"source_of_truth"`
 			URL           string `json:"url"`
@@ -360,11 +400,26 @@ func TestStageAuthorizationsDistinct(t *testing.T) {
 		seen[id] = owner
 	}
 	for i, id := range want {
-		g := m.Gates[i]
+		g := &m.Gates[i]
 		if g.ID != id {
 			t.Fatalf("gate %d is %s, want %s", i, g.ID, id)
 		}
-		add(g.ID, g.DecisionID)
+		switch g.Kind {
+		case "decision":
+			if g.EvidenceID != "" {
+				t.Errorf("decision gate %s carries an evidence id", g.ID)
+			}
+			add(g.ID, g.DecisionID)
+		case "result":
+			// A result is evidence, not a decision: it has an evidence id and
+			// no decision id.
+			if g.DecisionID != "" {
+				t.Errorf("result gate %s carries a decision id %q", g.ID, g.DecisionID)
+			}
+			add(g.ID+" evidence", g.EvidenceID)
+		default:
+			t.Errorf("gate %s has kind %q", g.ID, g.Kind)
+		}
 	}
 	g4 := m.gate("G4")
 	if g4.Canary == nil {
@@ -397,9 +452,66 @@ func TestStageSequenceRecorded(t *testing.T) {
 		t.Errorf("stage sequence source = %q", m.StageSequence.Source)
 	}
 	want := []string{"Owner-only", "10 read-only", "Approval+Canary", "20 read+write"}
-	if strings.Join(m.StageSequence.Order, ",") != strings.Join(want, ",") {
-		t.Errorf("stage sequence = %v, want %v", m.StageSequence.Order, want)
+	var got []string
+	for i := range m.StageSequence.Stages {
+		got = append(got, m.StageSequence.Stages[i].Name)
 	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("stage sequence = %v, want %v", got, want)
+	}
+	if errs := stageMappingErrors(m); len(errs) != 0 {
+		t.Errorf("stage mapping: %v", errs)
+	}
+	// Negative control: mapping Approval+Canary to a gate is refused.
+	bad := m
+	bad.StageSequence.Stages = append([]stageEntry(nil), m.StageSequence.Stages...)
+	bad.StageSequence.Stages[2].MapsTo = []string{"G4"}
+	if len(stageMappingErrors(bad)) == 0 {
+		t.Error("Approval+Canary mapped to a gate was not refused")
+	}
+}
+
+// stageMappingErrors checks that every recorded stage maps to real gate or
+// dependency ids, and that Approval+Canary stays a distinct dependency phase
+// (#55, #57 as G4 dependencies) rather than a gate or an operational GO.
+func stageMappingErrors(m matrix) []string {
+	var errs []string
+	g4 := m.gate("G4")
+	last := -1
+	for i := range m.StageSequence.Stages {
+		s := &m.StageSequence.Stages[i]
+		if len(s.MapsTo) == 0 {
+			errs = append(errs, s.Name+" maps to nothing")
+		}
+		for _, id := range s.MapsTo {
+			switch s.Kind {
+			case "gates":
+				idx := -1
+				for j := range m.Gates {
+					if m.Gates[j].ID == id {
+						idx = j
+					}
+				}
+				if idx < 0 {
+					errs = append(errs, s.Name+" maps to unknown gate "+id)
+				} else if idx <= last {
+					errs = append(errs, s.Name+" gate "+id+" is out of order")
+				} else {
+					last = idx
+				}
+			case "dependency-phase":
+				if m.gate(id) != nil {
+					errs = append(errs, s.Name+" is a dependency phase but maps to gate "+id)
+				}
+				if g4 == nil || !contains(g4.DependsOn, id) {
+					errs = append(errs, s.Name+" dependency "+id+" is not a G4 dependency")
+				}
+			default:
+				errs = append(errs, s.Name+" has kind "+s.Kind)
+			}
+		}
+	}
+	return errs
 }
 
 func TestPreGOPrerequisites(t *testing.T) {
@@ -451,7 +563,8 @@ func TestPreGOPrerequisites(t *testing.T) {
 		t.Error("G1 must depend on G0 and hold the #43 results")
 	}
 	// Every topic with earliest G0 must be a G0 prerequisite.
-	for _, tp := range m.Topics {
+	for i := range m.Topics {
+		tp := &m.Topics[i]
 		if tp.Earliest == "G0" && !contains(g0.Prerequisites, tp.ID) {
 			t.Errorf("topic %s has earliest gate G0 but is not a G0 prerequisite", tp.ID)
 		}
@@ -473,7 +586,8 @@ func orderingErrors(m matrix) []string {
 			errs = append(errs, "prerequisite "+id+" postponed beyond G0")
 		}
 	}
-	for _, tp := range m.Topics {
+	for i := range m.Topics {
+		tp := &m.Topics[i]
 		if tp.Earliest == "G0" && !contains(g0.Prerequisites, tp.ID) {
 			errs = append(errs, "topic "+tp.ID+" at G0 is not a G0 prerequisite")
 		}
@@ -584,28 +698,25 @@ func TestDecisionRefsStaySeparate(t *testing.T) {
 
 func TestReadOnlyPhasesHaveNoWriteDependency(t *testing.T) {
 	m := loadMatrix(t)
+	writeOnly := []string{"#55", "#57", "mctlhq/mctl-api#1006", "mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"}
 	for _, id := range []string{"G0", "G1", "G2", "G3"} {
 		g := m.gate(id)
 		if g.WriteDependency {
 			t.Errorf("%s is read-only but declares a write dependency", id)
 		}
-		for _, dep := range []string{"#55", "#57"} {
+		for _, dep := range writeOnly {
 			if contains(g.DependsOn, dep) || contains(g.Requires, dep) || contains(g.Prerequisites, dep) || contains(g.Refs, dep) {
-				t.Errorf("%s depends on %s", id, dep)
-			}
-		}
-		for _, req := range []string{"#1011", "#1012"} {
-			if contains(g.Requires, req) {
-				t.Errorf("%s requires write proof %s", id, req)
+				t.Errorf("%s depends on write-stage item %s", id, dep)
 			}
 		}
 		if contains(g.AllowedSurfaces, "basket-write") {
 			t.Errorf("%s allows basket-write", id)
 		}
 	}
-	// Topics carried into read-only phases must not smuggle in #55 or #57.
-	for _, tp := range m.Topics {
-		for _, dep := range []string{"#55", "#57"} {
+	// Topics carried into read-only phases must not smuggle in write-stage items.
+	for i := range m.Topics {
+		tp := &m.Topics[i]
+		for _, dep := range writeOnly {
 			if contains(tp.Refs, dep) {
 				t.Errorf("topic %s references %s", tp.ID, dep)
 			}
@@ -620,7 +731,7 @@ func TestReadOnlyPhasesHaveNoWriteDependency(t *testing.T) {
 			t.Errorf("G4 must depend on %s", dep)
 		}
 	}
-	for _, req := range []string{"#1011", "#1012"} {
+	for _, req := range []string{"mctlhq/mctl-api#1006", "mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"} {
 		if !contains(g4.Requires, req) {
 			t.Errorf("G4 must require %s", req)
 		}
@@ -630,19 +741,153 @@ func TestReadOnlyPhasesHaveNoWriteDependency(t *testing.T) {
 	}
 }
 
-func TestForbiddenSurfaces(t *testing.T) {
-	m := loadMatrix(t)
-	for _, s := range []string{"order", "checkout", "payment"} {
-		if !contains(m.Forbidden, s) {
-			t.Errorf("%s missing from forbidden_surfaces", s)
+// forbiddenSurfaces is the canonical forbidden list. place_order is explicit.
+var forbiddenSurfaces = []string{"order", "checkout", "payment", "place_order"}
+
+// allowedSurfaces is the explicit per-gate allowlist: G0 has no operational
+// surface, G1 to G3 are read only and G4 adds basket-write. Nothing else.
+var allowedSurfaces = map[string][]string{
+	"G0": {},
+	"G1": {"read"},
+	"G2": {"read"},
+	"G3": {"read"},
+	"G4": {"read", "basket-write"},
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, x := range a {
+		seen[x] = true
+	}
+	if len(seen) != len(a) {
+		return false
+	}
+	for _, x := range b {
+		if !seen[x] {
+			return false
 		}
 	}
-	for _, g := range m.Gates {
+	return true
+}
+
+// surfaceErrors reports every deviation from the explicit allowlists and any
+// forbidden surface that is missing, allowed or implied.
+func surfaceErrors(m matrix) []string {
+	var errs []string
+	for _, s := range forbiddenSurfaces {
+		if !contains(m.Forbidden, s) {
+			errs = append(errs, s+" missing from forbidden_surfaces")
+		}
+	}
+	for i := range m.Gates {
+		g := &m.Gates[i]
+		want, ok := allowedSurfaces[g.ID]
+		if !ok {
+			errs = append(errs, g.ID+" has no explicit surface allowlist")
+			continue
+		}
+		if !sameSet(g.AllowedSurfaces, want) {
+			errs = append(errs, fmt.Sprintf("%s allowed surfaces %v, want exactly %v", g.ID, g.AllowedSurfaces, want))
+		}
 		for _, s := range g.AllowedSurfaces {
-			if contains(m.Forbidden, s) || s == "order" || s == "checkout" || s == "payment" {
-				t.Errorf("%s allows forbidden surface %s", g.ID, s)
+			if contains(m.Forbidden, s) || contains(forbiddenSurfaces, s) {
+				errs = append(errs, g.ID+" allows forbidden surface "+s)
 			}
 		}
+	}
+	return errs
+}
+
+// canaryErrors reports canary authorization anywhere but G4, and a missing or
+// empty one on G4.
+func canaryErrors(m matrix) []string {
+	var errs []string
+	for i := range m.Gates {
+		g := &m.Gates[i]
+		switch {
+		case g.ID == "G4" && (g.Canary == nil || g.Canary.DecisionID == ""):
+			errs = append(errs, "G4 lacks its own canary authorization")
+		case g.ID != "G4" && g.Canary != nil:
+			errs = append(errs, g.ID+" carries a canary authorization; only G4 may")
+		}
+	}
+	return errs
+}
+
+func TestForbiddenSurfaces(t *testing.T) {
+	m := loadMatrix(t)
+	for _, e := range surfaceErrors(m) {
+		t.Error(e)
+	}
+}
+
+func TestSurfaceAllowlistNegativeControls(t *testing.T) {
+	m := loadMatrix(t)
+	with := func(id string, surfaces []string) matrix {
+		bad := m
+		bad.Gates = append([]gate(nil), m.Gates...)
+		for i := range bad.Gates {
+			if bad.Gates[i].ID == id {
+				bad.Gates[i].AllowedSurfaces = surfaces
+			}
+		}
+		return bad
+	}
+	cases := map[string]matrix{
+		"G4 place_order":       with("G4", []string{"read", "basket-write", "place_order"}),
+		"G4 checkout":          with("G4", []string{"read", "basket-write", "checkout"}),
+		"G4 arbitrary surface": with("G4", []string{"read", "basket-write", "admin"}),
+		"G3 basket-write":      with("G3", []string{"read", "basket-write"}),
+		"G2 order":             with("G2", []string{"read", "order"}),
+		"G1 empty":             with("G1", nil),
+		"G0 read":              with("G0", []string{"read"}),
+	}
+	for name, bad := range cases {
+		if len(surfaceErrors(bad)) == 0 {
+			t.Errorf("%s was not refused", name)
+		}
+	}
+	dropped := m
+	dropped.Forbidden = []string{"order", "checkout", "payment"}
+	if len(surfaceErrors(dropped)) == 0 {
+		t.Error("place_order dropped from forbidden_surfaces was not refused")
+	}
+}
+
+func TestCanaryOnlyOnG4(t *testing.T) {
+	m := loadMatrix(t)
+	for _, e := range canaryErrors(m) {
+		t.Error(e)
+	}
+	for _, id := range []string{"G0", "G1", "G2", "G3"} {
+		if g := m.gate(id); g.Canary != nil {
+			t.Errorf("read-only stage %s carries a canary authorization", id)
+		}
+	}
+	for _, id := range []string{"G0", "G1", "G2", "G3"} {
+		bad := m
+		bad.Gates = append([]gate(nil), m.Gates...)
+		for i := range bad.Gates {
+			if bad.Gates[i].ID == id {
+				bad.Gates[i].Canary = &canary{DecisionID: "D-synthetic-canary", Status: "UNKNOWN"}
+			}
+		}
+		if len(canaryErrors(bad)) == 0 {
+			t.Errorf("canary on %s was not refused", id)
+		}
+	}
+	noCanary := m
+	noCanary.Gates = append([]gate(nil), m.Gates...)
+	for i := range noCanary.Gates {
+		if noCanary.Gates[i].ID == "G4" {
+			noCanary.Gates[i].Canary = nil
+		}
+	}
+	if len(canaryErrors(noCanary)) == 0 {
+		t.Error("G4 without a canary was not refused")
 	}
 }
 
@@ -657,12 +902,13 @@ func TestRealMatrixNeverPasses(t *testing.T) {
 	if len(m.Freshness.Proposals) == 0 {
 		t.Error("freshness proposals missing")
 	}
-	for _, g := range m.Gates {
+	for i := range m.Gates {
+		g := &m.Gates[i]
 		if g.Status == "PASS" {
 			t.Errorf("%s is PASS in the planning artifact", g.ID)
 		}
 		// Even with a generous synthetic ttl the committed state must not pass.
-		if v, _ := verdict(g, refTime, dur(24*365)); v == "PASS" {
+		if v, _ := verdict(*g, refTime, dur(24*365)); v == "PASS" {
 			t.Errorf("%s evaluates to PASS", g.ID)
 		}
 		if g.EvidenceSHA != "UNKNOWN" || g.EvidenceURL != "UNKNOWN" || g.Freshness.State != "UNKNOWN" {
@@ -720,6 +966,8 @@ func TestTopicsCoverRequiredAreasWithMetadata(t *testing.T) {
 		"operations-46", "deploy-false", "vault-control-identity", "proxy", "migrations",
 		"image-pins", "rollback-kill", "oauth", "scopes", "glovo-home-writes",
 		"consent-versions", "isolation", "capacity",
+		"ext-mctl-api-1108", "ext-mctl-api-1110", "ext-mctl-api-1111", "ext-mctl-api-1079",
+		"ext-gitops-2742", "ext-gitops-2766", "ext-gitops-2709",
 	}
 	order := map[string]int{"G0": 0, "G1": 1, "G2": 2, "G3": 3, "G4": 4}
 	roles := []string{"owner", "lead", "platform-operator", "service-maintainer"}
@@ -787,14 +1035,16 @@ func renderTables(m matrix) string {
 	}
 	b.WriteString("\n| Gate | Status | Role | Phase | Depends on | Prerequisites | Evidence SHA | Evidence URL | Freshness | Rollback |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|\n")
-	for _, g := range m.Gates {
+	for i := range m.Gates {
+		g := &m.Gates[i]
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			g.ID, g.Status, g.Role, g.Phase, list(g.DependsOn), list(g.Prerequisites),
 			g.EvidenceSHA, g.EvidenceURL, g.Freshness.State, g.Rollback)
 	}
 	b.WriteString("\n| Topic | Role | Refs | Earliest gate | Carried to | Status | Evidence SHA | Evidence URL | Freshness | Rollback |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|\n")
-	for _, tp := range m.Topics {
+	for i := range m.Topics {
+		tp := &m.Topics[i]
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			tp.Name, tp.Role, list(tp.Refs), tp.Earliest, list(tp.CarriedTo), tp.Status,
 			tp.EvidenceSHA, tp.EvidenceURL, tp.Freshness.State, tp.Rollback)
@@ -809,14 +1059,17 @@ func TestMarkdownMatchesJSON(t *testing.T) {
 		t.Fatalf("read %s: %v", mdPath, err)
 	}
 	doc := string(raw)
-	const begin, end = "<!-- BEGIN MATRIX -->\n", "<!-- END MATRIX -->"
-	i, j := strings.Index(doc, begin), strings.Index(doc, end)
-	if i < 0 || j < i {
-		t.Fatal("matrix markers missing in markdown")
-	}
-	got := doc[i+len(begin) : j]
-	if want := renderTables(m); got != want {
-		t.Fatalf("markdown matrix drifted from %s.\nwant:\n%s\ngot:\n%s", jsonPath, want, got)
+	for _, blk := range []struct{ begin, end, want string }{
+		{"<!-- BEGIN MATRIX -->\n", "<!-- END MATRIX -->", renderTables(m)},
+		{"<!-- BEGIN EPICS -->\n", "<!-- END EPICS -->", renderEpics(m)},
+	} {
+		i, j := strings.Index(doc, blk.begin), strings.Index(doc, blk.end)
+		if i < 0 || j < i {
+			t.Fatalf("markers %q missing in markdown", blk.begin)
+		}
+		if got := doc[i+len(blk.begin) : j]; got != blk.want {
+			t.Fatalf("markdown block %q drifted from %s.\nwant:\n%s\ngot:\n%s", blk.begin, jsonPath, blk.want, got)
+		}
 	}
 	if !strings.Contains(doc, m.Baseline.SHA) {
 		t.Error("markdown must name the baseline SHA")
@@ -841,13 +1094,386 @@ func TestMarkdownMatchesJSON(t *testing.T) {
 		t.Errorf("#44 url appears %d times in markdown, want 1", n)
 	}
 	// Stage and mapping statements in prose must not drift from the data.
+	// Whitespace is normalized so line wrapping does not matter.
+	flat := strings.Join(strings.Fields(doc), " ")
 	for _, s := range []string{
 		"#50 maps to G2", "#51 to G3", "#52 to optional G4",
-		"Owner-only, 10 read-only, Approval+Canary,\n  20 read+write",
-		"G4 (twenty-user\n  writes) depends on G3, #55 and #57",
+		"Owner-only, 10 read-only, Approval+Canary, 20 read+write",
+		"Owner-only maps to G0 and G1; 10 read-only maps to G2 and G3; 20 read+write maps to G4.",
+		"Approval+Canary is a distinct dependency phase (#55, #57), not a gate and not an operational GO.",
+		"G4 (twenty-user writes) depends on G3, #47, #44, #55 and #57",
+		forbiddenStatement(m),
+		"Allowed surfaces are explicit allowlists: G0 none, G1 to G3 read only, G4 read and basket-write only.",
+		"Canary authorization belongs to G4 only.",
+		m.PlanSource.URL,
+		"not merged and not live authorization",
 	} {
-		if !strings.Contains(doc, s) {
+		if !strings.Contains(flat, s) {
 			t.Errorf("markdown lost statement %q", s)
 		}
+	}
+}
+
+// forbiddenStatement is the canonical prose the Markdown must keep, built from
+// the JSON forbidden list so the two cannot drift.
+func forbiddenStatement(m matrix) string {
+	f := m.Forbidden
+	if len(f) < 2 {
+		return "forbidden surfaces missing"
+	}
+	return "The " + strings.Join(f[:len(f)-1], ", ") + " and " + f[len(f)-1] + " surfaces are forbidden at every stage."
+}
+
+func renderEpics(m matrix) string {
+	var b strings.Builder
+	b.WriteString("| Epic | Issue | Maps to | Depends on | External depends on |\n|---|---|---|---|---|\n")
+	for i := range m.PlanSource.Epics {
+		e := &m.PlanSource.Epics[i]
+		var ext []string
+		for _, x := range e.External {
+			ext = append(ext, x.Ref)
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", e.Epic, e.Issue, e.Target, list(e.DependsOn), list(ext))
+	}
+	return b.String()
+}
+
+// epicErrors compares the actual dependency SETS of each gate with the pinned
+// plan table. Any added or removed dependency is reported. The additional
+// offline safeguards are documented separately and excluded from the epic set.
+func epicErrors(m matrix) []string {
+	var errs []string
+	ps := m.PlanSource
+	if !sha40.MatchString(ps.HeadSHA) || !strings.Contains(ps.URL, ps.HeadSHA) || !strings.Contains(ps.URL, ps.Path) || !validHTTPS(ps.URL) {
+		errs = append(errs, "plan source must be pinned to a full head SHA, path and https url")
+	}
+	if ps.Merged || ps.PRState != "draft" || ps.PR != 366 {
+		errs = append(errs, "plan source must be the open Draft PR 366, not merged")
+	}
+	byID := map[string]*epic{}
+	for i := range ps.Epics {
+		e := &ps.Epics[i]
+		if _, dup := byID[e.Epic]; dup {
+			errs = append(errs, "duplicate epic "+e.Epic)
+		}
+		byID[e.Epic] = e
+	}
+	expected := map[string][]string{}
+	covered := map[string]bool{}
+	for i := range ps.Epics {
+		e := &ps.Epics[i]
+		for _, d := range e.DependsOn {
+			dep, ok := byID[d]
+			if !ok {
+				errs = append(errs, e.Epic+" depends on unknown epic "+d)
+				continue
+			}
+			if e.RealizedBy != "" {
+				expected[e.RealizedBy] = append(expected[e.RealizedBy], dep.Target)
+			}
+		}
+		if e.RealizedBy != "" {
+			covered[e.RealizedBy] = true
+			if e.Target != e.RealizedBy {
+				errs = append(errs, e.Epic+" realized_by "+e.RealizedBy+" must equal its target "+e.Target)
+			}
+		}
+		for _, x := range e.External {
+			if e.CarriedBy == "" {
+				errs = append(errs, e.Epic+" has externals but no carrier gate")
+				continue
+			}
+			covered[e.CarriedBy] = true
+			expected[e.CarriedBy] = append(expected[e.CarriedBy], x.Target)
+			if tp := m.topic(x.Target); tp != nil {
+				if !contains(tp.Refs, x.Ref) || tp.Earliest != e.CarriedBy {
+					errs = append(errs, "external topic "+x.Target+" must carry ref "+x.Ref+" at "+e.CarriedBy)
+				}
+			} else if x.Target != x.Ref {
+				errs = append(errs, "external "+x.Ref+" has no topic and is not carried by its own ref")
+			}
+		}
+		if tp := m.topic(e.Target); tp != nil && !contains(tp.Refs, e.Issue) {
+			errs = append(errs, "topic "+tp.ID+" must reference "+e.Issue)
+		}
+	}
+	for _, want := range []string{"G0", "G2", "G3", "G4"} {
+		if !covered[want] {
+			errs = append(errs, "no pinned epic covers "+want)
+		}
+	}
+	for i := range m.Gates {
+		g := &m.Gates[i]
+		if !covered[g.ID] {
+			continue
+		}
+		extra := ps.Safeguards[g.ID]
+		var actual []string
+		for _, set := range [][]string{g.DependsOn, g.Prerequisites, g.Requires} {
+			for _, d := range set {
+				if !contains(extra, d) {
+					actual = append(actual, d)
+				}
+			}
+		}
+		for _, x := range extra {
+			if !contains(g.DependsOn, x) && !contains(g.Prerequisites, x) && !contains(g.Requires, x) {
+				errs = append(errs, g.ID+" documents safeguard "+x+" that it does not list")
+			}
+		}
+		if !sameSet(actual, expected[g.ID]) {
+			errs = append(errs, fmt.Sprintf("%s dependency set %v differs from the pinned plan %v", g.ID, actual, expected[g.ID]))
+		}
+	}
+	return errs
+}
+
+func TestEpicDependenciesMatchPinnedPlan(t *testing.T) {
+	m := loadMatrix(t)
+	for _, e := range epicErrors(m) {
+		t.Error(e)
+	}
+	mutate := func(id string, f func(*gate)) matrix {
+		bad := m
+		bad.Gates = append([]gate(nil), m.Gates...)
+		for i := range bad.Gates {
+			if bad.Gates[i].ID == id {
+				f(&bad.Gates[i])
+			}
+		}
+		return bad
+	}
+	without := func(xs []string, x string) []string {
+		var out []string
+		for _, v := range xs {
+			if v != x {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	cases := map[string]matrix{
+		"G3 drops #45":        mutate("G3", func(g *gate) { g.DependsOn = without(g.DependsOn, "#45") }),
+		"G3 drops #44":        mutate("G3", func(g *gate) { g.DependsOn = without(g.DependsOn, "#44") }),
+		"G3 adds #47":         mutate("G3", func(g *gate) { g.DependsOn = append(append([]string(nil), g.DependsOn...), "#47") }),
+		"G4 drops #47":        mutate("G4", func(g *gate) { g.DependsOn = without(g.DependsOn, "#47") }),
+		"G4 drops #44":        mutate("G4", func(g *gate) { g.DependsOn = without(g.DependsOn, "#44") }),
+		"G4 drops 1006":       mutate("G4", func(g *gate) { g.Requires = without(g.Requires, "mctlhq/mctl-api#1006") }),
+		"G2 adds #44":         mutate("G2", func(g *gate) { g.DependsOn = append(append([]string(nil), g.DependsOn...), "#44") }),
+		"G0 drops 1108":       mutate("G0", func(g *gate) { g.Prerequisites = without(g.Prerequisites, "ext-mctl-api-1108") }),
+		"G0 drops cutover":    mutate("G0", func(g *gate) { g.Prerequisites = without(g.Prerequisites, "cutover-2777") }),
+		"G0 adds unknown dep": mutate("G0", func(g *gate) { g.Prerequisites = append(append([]string(nil), g.Prerequisites...), "extra-dep") }),
+	}
+	for name, bad := range cases {
+		if len(epicErrors(bad)) == 0 {
+			t.Errorf("%s was not refused", name)
+		}
+	}
+	// Epic-set change in the plan table itself is also visible.
+	bad := m
+	bad.PlanSource.Epics = append([]epic(nil), m.PlanSource.Epics...)
+	for i := range bad.PlanSource.Epics {
+		if bad.PlanSource.Epics[i].Epic == "c2-go-10" {
+			bad.PlanSource.Epics[i].DependsOn = []string{"c2-go-2"}
+		}
+	}
+	if len(epicErrors(bad)) == 0 {
+		t.Error("plan table losing G3 dependencies was not refused")
+	}
+}
+
+// Public-artifact hygiene. This is heuristic: it flags likely principal
+// identifiers, tailnet host suffixes, token prefixes, long digit runs and
+// order-content markers. It does not claim to find all private data or
+// arbitrary shopping prose.
+type hygieneRule struct {
+	class string
+	re    *regexp.Regexp
+}
+
+var hygieneRules = []hygieneRule{
+	{"principal", regexp.MustCompile(`(?i)\bprincipals?\s*[:=]\s*\S+`)},
+	{"principal", regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`)},
+	{"principal", regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)},
+	{"tailnet", regexp.MustCompile(`(?i)\.ts\.net\b|\.tailscale\.(net|com)\b|\btailnet\b`)},
+	{"token", regexp.MustCompile(`\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{8,}`)},
+	{"token", regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{8,}`)},
+	{"token", regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{8,}`)},
+	{"token", regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{8,}`)},
+	{"token", regexp.MustCompile(`\bAKIA[0-9A-Z]{12,}`)},
+	{"token", regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.`)},
+	{"token", regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}`)},
+	{"token", regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY`)},
+	{"digits", regexp.MustCompile(`\d{9,}`)},
+	{"order-content", regexp.MustCompile(`(?i)\border[ _-]?(id|number|no)\b`)},
+	{"order-content", regexp.MustCompile(`(?i)\b(delivery|shipping) address\b`)},
+	{"order-content", regexp.MustCompile(`\b\d+\s?[x×]\s+[A-Za-z]{3,}`)},
+}
+
+var fullSHA = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
+
+// hygieneFindings returns the classes that match text. The one exception is a
+// full 40-hex commit SHA that contains a hex letter: it is removed before the
+// digit-run rule so legitimate pins do not trip it. All other text, including
+// note strings, is scanned.
+func hygieneFindings(text string) []string {
+	text = fullSHA.ReplaceAllStringFunc(text, func(s string) string {
+		if strings.Trim(s, "0123456789") == "" {
+			return s
+		}
+		return " "
+	})
+	var out []string
+	for _, r := range hygieneRules {
+		if r.re.MatchString(text) && !contains(out, r.class) {
+			out = append(out, r.class)
+		}
+	}
+	return out
+}
+
+// jsonStrings returns every string value, object key and number literal in a
+// JSON document.
+func jsonStrings(raw []byte) ([]string, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	var out []string
+	var walk func(any)
+	walk = func(x any) {
+		switch t := x.(type) {
+		case string:
+			out = append(out, t)
+		case json.Number:
+			out = append(out, t.String())
+		case []any:
+			for _, e := range t {
+				walk(e)
+			}
+		case map[string]any:
+			for k, e := range t {
+				out = append(out, k)
+				walk(e)
+			}
+		}
+	}
+	walk(v)
+	return out, nil
+}
+
+func scanMarkdown(doc string) []string { return hygieneFindings(doc) }
+
+func scanJSON(raw []byte) ([]string, error) {
+	strs, err := jsonStrings(raw)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, s := range strs {
+		for _, c := range hygieneFindings(s) {
+			if !contains(out, c) {
+				out = append(out, c)
+			}
+		}
+	}
+	return out, nil
+}
+
+// hygieneSamples are harmless synthetic strings built at run time. None is a
+// real secret, identity or order.
+func hygieneSamples() map[string][]string {
+	return map[string][]string{
+		"principal": {
+			"principal: " + "user-" + strings.Repeat("x", 6),
+			"owner" + "@" + "example.invalid",
+			"11111111-2222-3333-4444-555555555555",
+		},
+		"tailnet": {"mini-host.tail1234." + "ts" + ".net", "the tailnet name"},
+		"token": {
+			"ghp" + "_" + strings.Repeat("A", 24),
+			"github_pat" + "_" + strings.Repeat("B", 24),
+			"sk" + "-" + strings.Repeat("c", 20),
+			"xoxb" + "-" + strings.Repeat("1", 10),
+			"Bearer " + strings.Repeat("d", 20),
+			"eyJ" + strings.Repeat("e", 20) + ".payload",
+		},
+		"digits":        {"ref " + strings.Repeat("7", 12)},
+		"order-content": {"order id 12", "delivery address line", "2 x margherita"},
+	}
+}
+
+func TestHygieneDetectorsOnSyntheticCases(t *testing.T) {
+	for class, samples := range hygieneSamples() {
+		for i, s := range samples {
+			if !contains(scanMarkdown("Some prose. "+s+" more prose."), class) {
+				t.Errorf("markdown sample %s/%d not detected", class, i)
+			}
+			raw, err := json.Marshal(map[string]any{"note": s, "list": []string{"ok", s}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := scanJSON(raw)
+			if err != nil || !contains(got, class) {
+				t.Errorf("json sample %s/%d not detected (%v, %v)", class, i, got, err)
+			}
+			// A key or a bare number is scanned as well.
+			raw, err = json.Marshal(map[string]any{s: "ok"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err = scanJSON(raw); err != nil || !contains(got, class) {
+				t.Errorf("json key sample %s/%d not detected (%v, %v)", class, i, got, err)
+			}
+		}
+	}
+	if got, err := scanJSON([]byte(`{"n": 123456789012}`)); err != nil || !contains(got, "digits") {
+		t.Errorf("json number literal not detected (%v, %v)", got, err)
+	}
+}
+
+func TestHygieneAvoidsLegitimateValues(t *testing.T) {
+	m := loadMatrix(t)
+	good := []string{
+		m.Baseline.SHA,
+		m.Baseline.EvidenceURL,
+		m.PlanSource.HeadSHA,
+		m.PlanSource.URL,
+		"2026-11-18T12:00:00Z",
+		"https://github.com/mctlhq/mctl-glovo/issues/44",
+		"mctlhq/mctl-api#1006",
+		strings.Repeat("a", 40),
+	}
+	for _, s := range good {
+		if got := hygieneFindings(s); len(got) != 0 {
+			t.Errorf("legitimate value %q flagged as %v", s, got)
+		}
+	}
+	// A 40-digit run is not a commit SHA and is still flagged.
+	if !contains(hygieneFindings(strings.Repeat("9", 40)), "digits") {
+		t.Error("a 40-digit run must still be flagged")
+	}
+}
+
+func TestPublicArtifactsHaveNoSensitiveMarkers(t *testing.T) {
+	rawJSON, err := os.ReadFile(jsonPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := scanJSON(rawJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("%s contains likely sensitive marker classes %v", jsonPath, got)
+	}
+	rawMD, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := scanMarkdown(string(rawMD)); len(got) != 0 {
+		t.Errorf("%s contains likely sensitive marker classes %v", mdPath, got)
 	}
 }

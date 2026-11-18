@@ -34,16 +34,28 @@ Issue: https://github.com/mctlhq/mctl-glovo/issues/40.
 - Operator-recorded stage sequence: Owner-only, 10 read-only, Approval+Canary,
   20 read+write. This is a recorded requirement, not a proposal.
 - The owner pre-GO, two-user, ten-user and twenty-user decisions are separate
-  (G0, G2, G3, G4); G1 holds results. Each decision has its own decision id. A PASS at one stage
-  never authorizes another.
+  (G0, G2, G3, G4); G1 holds results. Each decision has its own decision id;
+  G1 has an evidence id instead, because it is evidence and not a decision.
+  A PASS at one stage never authorizes another.
 - #50 maps to G2 (two users), #51 to G3 (ten users) and #52 to optional G4
   (twenty users). They are separate decisions and none implies another.
+- Stage mapping: Owner-only maps to G0 and G1; 10 read-only maps to G2 and G3;
+  20 read+write maps to G4. Approval+Canary is a distinct dependency phase
+  (#55, #57), not a gate and not an operational GO.
 - G0 to G3 are read-only and do not depend on #55 or #57. G4 (twenty-user
-  writes) depends on G3, #55 and #57, requires the existing #1011 and #1012
-  proof, and needs a separately authorized canary.
+  writes) depends on G3, #47, #44, #55 and #57, requires the
+  mctlhq/mctl-api#1006, #1011 and #1012 proof, and needs a separately
+  authorized canary. Canary authorization belongs to G4 only.
+- G3 lists #44 and #45 as dependencies only. #44 stays the sole authority for
+  its verdict, which is never restated or implicitly accepted here.
 - Requirements carry forward to later phases through the "Carried to" column
   without adding #55 or #57 to any phase up to G3.
-- The order, checkout and payment surfaces are forbidden at every stage.
+- The order, checkout, payment and place_order surfaces are forbidden at every stage.
+- Allowed surfaces are explicit allowlists: G0 none, G1 to G3 read only, G4
+  read and basket-write only.
+- Public-artifact hygiene is a heuristic test of this file and the JSON
+  (principal identifiers, private-network host suffixes, token prefixes, long
+  digit runs, order-content markers). It does not claim to find all private data.
 
 ## 2. Evidence freshness (proposals, not approved)
 
@@ -114,11 +126,11 @@ Runtime unknowns, all UNKNOWN until evidence exists:
 
 | Gate | Status | Role | Phase | Depends on | Prerequisites | Evidence SHA | Evidence URL | Freshness | Rollback |
 |---|---|---|---|---|---|---|---|---|---|
-| G0 | UNKNOWN | owner | pre-go | - | owner-decision-49, disabled-write-proof-41, linking-42, cutover-2777, operations-46, deploy-false, vault-control-identity, proxy, migrations, image-pins, rollback-kill, oauth, scopes, glovo-home-writes, consent-versions, isolation, capacity | UNKNOWN | UNKNOWN | UNKNOWN | Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran. |
+| G0 | UNKNOWN | owner | pre-go | - | owner-decision-49, disabled-write-proof-41, linking-42, cutover-2777, operations-46, deploy-false, vault-control-identity, proxy, migrations, image-pins, rollback-kill, oauth, scopes, glovo-home-writes, consent-versions, isolation, capacity, ext-mctl-api-1108, ext-mctl-api-1110, ext-mctl-api-1111, ext-mctl-api-1079, ext-gitops-2742, ext-gitops-2766, ext-gitops-2709 | UNKNOWN | UNKNOWN | UNKNOWN | Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran. |
 | G1 | UNKNOWN | owner | owner-read-only | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | Kill switch and credential revocation. Exact procedure UNKNOWN. |
 | G2 | UNKNOWN | owner | two-user-read-only | G1 | - | UNKNOWN | UNKNOWN | UNKNOWN | Remove both users from the allowlist and revoke their tokens. Exact procedure UNKNOWN. |
-| G3 | UNKNOWN | owner | ten-user-read-only | G2 | - | UNKNOWN | UNKNOWN | UNKNOWN | Return to the two-user allowlist. Exact procedure UNKNOWN. |
-| G4 | UNKNOWN | owner | twenty-user-write | G3, #55, #57 | - | UNKNOWN | UNKNOWN | UNKNOWN | Disable basket writes, return to the ten-user read-only allowlist. Exact procedure UNKNOWN. |
+| G3 | UNKNOWN | owner | ten-user-read-only | G2, #44, #45 | - | UNKNOWN | UNKNOWN | UNKNOWN | Return to the two-user allowlist. Exact procedure UNKNOWN. |
+| G4 | UNKNOWN | owner | twenty-user-write | G3, #47, #44, #55, #57 | - | UNKNOWN | UNKNOWN | UNKNOWN | Disable basket writes, return to the ten-user read-only allowlist. Exact procedure UNKNOWN. |
 
 | Topic | Role | Refs | Earliest gate | Carried to | Status | Evidence SHA | Evidence URL | Freshness | Rollback |
 |---|---|---|---|---|---|---|---|---|---|
@@ -139,9 +151,58 @@ Runtime unknowns, all UNKNOWN until evidence exists:
 | Consent versions | service-maintainer | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | Isolation | service-maintainer | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | Capacity | platform-operator | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-api#1108 (epic external) | service-maintainer | mctlhq/mctl-api#1108 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-api#1110 (epic external) | service-maintainer | mctlhq/mctl-api#1110 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-api#1111 (epic external) | service-maintainer | mctlhq/mctl-api#1111 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-api#1079 (epic external) | service-maintainer | mctlhq/mctl-api#1079 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-gitops#2742 (epic external) | platform-operator | mctlhq/mctl-gitops#2742 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-gitops#2766 (epic external) | platform-operator | mctlhq/mctl-gitops#2766 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-gitops#2709 (epic external) | platform-operator | mctlhq/mctl-gitops#2709 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 <!-- END MATRIX -->
 
-## 5. Authority and follow-ups
+## 5. Epic dependency snapshot (pinned plan)
+
+Source: mctlhq/.github Draft PR 366 at head
+`97371421997c67260843168783d343d4c7d5fff9`, path
+`roadmap/epics/glovo-c2-friends-pilot.yaml`
+(https://github.com/mctlhq/.github/blob/97371421997c67260843168783d343d4c7d5fff9/roadmap/epics/glovo-c2-friends-pilot.yaml).
+It is a plan, not merged and not live authorization. The table below is a
+hand-transcribed snapshot. Tests are offline and never fetch the source, so
+drift in the source is not detected automatically: re-transcribe the table
+when the pinned head changes. A merged source change would still not prove a
+live rollout. Every external dependency of c2-go-owner is a G0 topic with
+status UNKNOWN.
+
+The gate dependency sets are compared with this table by a test. The offline
+readiness safeguards that G0 lists beyond the epic set (deploy-false,
+vault-control-identity, proxy, migrations, image-pins, rollback-kill, oauth,
+scopes, glovo-home-writes, consent-versions, isolation, capacity) are
+documented separately in the JSON and are not epic dependencies. Only the
+dependency sets of the epics that realize a gate, and the externals of
+c2-write-approval-proof, are transcribed. The G1 to G0 edge is readiness
+ordering, not an epic edge.
+
+<!-- BEGIN EPICS -->
+| Epic | Issue | Maps to | Depends on | External depends on |
+|---|---|---|---|---|
+| c2-go-owner | #40 | G0 | c2-write-gate-decision, c2-write-disabled-proof, c2-fresh-link-identity, c2-cutover-package, c2-pilot-operations | mctlhq/mctl-api#1108, mctlhq/mctl-api#1110, mctlhq/mctl-api#1111, mctlhq/mctl-api#1079, mctlhq/mctl-gitops#2742, mctlhq/mctl-gitops#2766, mctlhq/mctl-gitops#2709 |
+| c2-write-gate-decision | #49 | owner-decision-49 | - | - |
+| c2-write-disabled-proof | #41 | disabled-write-proof-41 | - | - |
+| c2-fresh-link-identity | #42 | linking-42 | - | - |
+| c2-cutover-package | mctl-gitops#2777 | cutover-2777 | - | - |
+| c2-pilot-operations | #46 | operations-46 | - | - |
+| c2-e2e-resilience | #43 | G1 | - | - |
+| c2-go-2 | #50 | G2 | c2-e2e-resilience | - |
+| c2-security-boundary | #44 | #44 | - | - |
+| c2-order-intelligence | #45 | #45 | - | - |
+| c2-go-10 | #51 | G3 | c2-go-2, c2-security-boundary, c2-order-intelligence | - |
+| c2-cohort-feedback | #47 | #47 | - | - |
+| c2-write-approval-proof | #55 | #55 | - | mctlhq/mctl-api#1006, mctlhq/mctl-api#1011, mctlhq/mctl-api#1012 |
+| c2-write-canary | #57 | #57 | - | - |
+| c2-go-20 | #52 | G4 | c2-go-10, c2-cohort-feedback, c2-security-boundary, c2-write-approval-proof, c2-write-canary | - |
+<!-- END EPICS -->
+
+## 6. Authority and follow-ups
 
 - Section 9.4 of `docs/design/token-store.md` and its unresolved items 1 to 3
   belong solely to #44 (https://github.com/mctlhq/mctl-glovo/issues/44,
