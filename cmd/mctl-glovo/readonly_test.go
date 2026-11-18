@@ -393,3 +393,28 @@ func TestApproverSitsInFrontOfEveryWriteToolCall(t *testing.T) {
 		})
 	}
 }
+
+// Configuring the fresh-login link routes must not open basket writes: the
+// two features share c2Config and the token store config, and a merge of
+// one into the other is where a write option could slip in.
+func TestLinkLoginConfiguredStaysReadOnly(t *testing.T) {
+	e := fullEnv()
+	e["GLOVO_LINK_RESOURCE"] = "https://glovo.example.test/link"
+	c, err := loadC2(env(e))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.linkResource == "" {
+		t.Fatal("link resource was not loaded")
+	}
+	if c.basketWrites || c.basketApprover != nil {
+		t.Fatal("link login configuration enabled basket writes")
+	}
+	if got := basketWriteOptions(c); len(got) != 0 {
+		t.Fatalf("link login configuration yields %d basket write option(s)", len(got))
+	}
+	e["GLOVO_C2_BASKET_WRITES"] = "true"
+	if _, err := loadC2(env(e)); err == nil {
+		t.Fatal("GLOVO_C2_BASKET_WRITES=true must stay refused with link login configured")
+	}
+}
