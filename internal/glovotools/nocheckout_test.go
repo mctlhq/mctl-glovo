@@ -9,10 +9,11 @@ import (
 	"github.com/mctlhq/mctl-glovo/internal/childmcp"
 )
 
-// hostedToolSet is the exact set of tool names a hosted backend serves. It
-// is pinned: adding or removing a tool is a conscious change to this list,
-// made together with a review of what the tool can do on a real account.
-// Basket writes only; nothing here checks out, pays or places an order.
+// hostedToolSet is the exact set of tool names a hosted backend serves with
+// BasketWrites on. It is pinned: adding or removing a tool is a conscious
+// change to this list, made together with a review of what the tool can do
+// on a real account. Basket writes only; nothing here checks out, pays or
+// places an order. The default hosted set is readOnlyToolSet.
 var hostedToolSet = []string{
 	"glovo_add_to_basket",
 	"glovo_analyze_order_history",
@@ -43,6 +44,18 @@ var hostedToolSet = []string{
 	"glovo_set_quantity",
 }
 
+// readOnlyToolSet is what a hosted backend serves by default (BasketWrites
+// off): hostedToolSet without the three basket write tools.
+var readOnlyToolSet = func() []string {
+	var out []string
+	for _, n := range hostedToolSet {
+		if !isBasketWriteTool(n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}()
+
 // forbiddenWords are checkout, payment and order-placement words. This list
 // is deliberately independent of childmcp.Blocked, so one cannot be loosened
 // without this test noticing. Reading words (order_items, purchase_history,
@@ -59,17 +72,27 @@ func words(name string) []string {
 }
 
 func TestHostedServesExactlyThePinnedNonCheckoutToolSet(t *testing.T) {
-	e := newHostedEnv(t)
+	for _, tc := range []struct {
+		name   string
+		writes bool
+		want   []string
+	}{{"default read-only", false, readOnlyToolSet}, {"basket writes on", true, hostedToolSet}} {
+		t.Run(tc.name, func(t *testing.T) { checkPinnedToolSet(t, newHostedEnvWith(t, tc.writes), tc.want) })
+	}
+}
+
+func checkPinnedToolSet(t *testing.T, e *hostedEnv, wantNames []string) {
+	t.Helper()
 	got := append([]string(nil), e.b.Names()...)
 	sort.Strings(got)
-	want := append([]string(nil), hostedToolSet...)
+	want := append([]string(nil), wantNames...)
 	sort.Strings(want)
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("hosted tool set changed.\n got: %v\nwant: %v", got, want)
 	}
 	// The MCP surface (ServerTools) is the same set as Names.
 	var served []string
-	for _, st := range e.b.ServerTools() {
+	for _, st := range e.b.ServerTools() { //nolint:gocritic // test loop, copy is irrelevant
 		served = append(served, st.Tool.Name)
 	}
 	sort.Strings(served)
@@ -128,7 +151,8 @@ func TestHostedLoginIsRefused(t *testing.T) {
 // set must stay equal to that list, or the page's figure would describe a
 // different set from the one served.
 func TestHostedToolSetEqualsKnownTools(t *testing.T) {
-	a := append([]string(nil), hostedToolSet...)
+	a := append([]string(nil), readOnlyToolSet...)
+	a = append(a, BasketWriteTools...)
 	b := append([]string(nil), childmcp.KnownTools...)
 	sort.Strings(a)
 	sort.Strings(b)

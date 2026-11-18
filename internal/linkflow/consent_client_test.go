@@ -50,7 +50,7 @@ func consentServer(t *testing.T, status int, body string) (*APIConsent, *int) {
 }
 
 func TestAPIConsentActive(t *testing.T) {
-	c, calls := consentServer(t, 200, `{"principal_id":"`+testPID+`","state":"active","consent_version":"c2-link-v1","recorded_at":"2026-11-16T00:00:00Z"}`)
+	c, calls := consentServer(t, 200, `{"principal_id":"`+testPID+`","state":"active","consent_version":"`+ConsentVersion+`","recorded_at":"2026-11-16T00:00:00Z"}`)
 	v, err := c.RecordedConsent(context.Background(), pidOf(testPID))
 	if err != nil || v != ConsentVersion || *calls != 1 {
 		t.Fatalf("= %q %v (calls %d)", v, err, *calls)

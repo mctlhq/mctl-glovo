@@ -1,0 +1,278 @@
+{
+  "schema_version": 2,
+  "kind": "planning-artifact-not-an-authorization-engine",
+  "issue": "https://github.com/mctlhq/mctl-glovo/issues/40",
+  "issue_40_fully_satisfied": false,
+  "baseline": {
+    "repo": "mctlhq/mctl-glovo",
+    "branch": "main",
+    "sha": "ca4a09aaf6b9b99f106177aee206726ff6b004b0",
+    "evidence_url": "https://github.com/mctlhq/mctl-glovo/commit/ca4a09aaf6b9b99f106177aee206726ff6b004b0",
+    "code_facts_note": "Code facts are limited to the listed source paths existing at the baseline SHA. A path existing is not proof of deployed or runtime behavior.",
+    "source_paths": [
+      "cmd/glovo-home/main.go",
+      "cmd/mctl-glovo/mcp.go",
+      "internal/glovotools/hosted.go",
+      "cmd/glovo-migrate/main.go",
+      "internal/authn/verifier.go",
+      "internal/consentgate/gate.go",
+      "internal/linkflow/consent.go",
+      "internal/tokenstore/killswitch.go",
+      "internal/tokenstore/migrations/0001_tokenstore.sql",
+      "internal/tokenstore/isolation_pg_test.go",
+      "deploy/mac-mini/tinyproxy.conf",
+      "Dockerfile"
+    ],
+    "open_draft_prs": [
+      {"number": 54, "head": "a2b20b65", "state": "draft", "merged": false, "source": "operator-recorded snapshot reference"},
+      {"number": 56, "head": "c1179519", "state": "draft", "merged": false, "source": "operator-recorded snapshot reference"},
+      {"number": 53, "head": "a3af531c", "state": "draft", "merged": false, "source": "operator-recorded snapshot reference"}
+    ],
+    "open_draft_prs_note": "These heads are operator-recorded snapshot references. They were not fetched or independently confirmed here, and no full SHA, URL or observation time is known for them. Open Draft PRs are not merged and are not baseline facts. Their content is not asserted here. In particular the existing main baseline does not prove PR #54 behavior: disabled-write behavior is UNKNOWN pending reviewed proof.",
+    "runtime_unknowns": [
+      "deployed image digest",
+      "chart pin",
+      "Vault paths and policies",
+      "database and migration state",
+      "proxy egress state",
+      "kill switch state",
+      "consent-reader and control identity",
+      "deploy flag value"
+    ]
+  },
+  "freshness": {
+    "owner_approved": false,
+    "effective_ttl": null,
+    "note": "No evidence TTL is owner-approved. The rules below are PROPOSALS only. Until an owner approves one, no gate can be PASS for freshness reasons.",
+    "proposals": [
+      {"id": "P1", "rule": "Evidence needs a full 40-hex SHA and an https evidence URL with a non-empty host."},
+      {"id": "P2", "rule": "Evidence needs an observed_at timestamp (RFC 3339, UTC) and a freshness state of FRESH."},
+      {"id": "P3", "rule": "Evidence older than an owner-approved maximum age is stale. The value is not set here."},
+      {"id": "P4", "rule": "Evidence observed after the reference time is ambiguous and refused."},
+      {"id": "P5", "rule": "Missing, aged, ambiguous or unobservable evidence yields UNKNOWN, never PASS."}
+    ]
+  },
+  "forbidden_surfaces": ["order", "checkout", "payment", "place_order"],
+  "write_approval": {
+    "ledger_refs": ["mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"],
+    "second_ledger": false,
+    "canary_ref": "#57",
+    "canary_separate_owner_go": true,
+    "approval_status": "UNKNOWN",
+    "approval_status_note": "Not fetched here; not observed by this artifact."
+  },
+  "stage_sequence": {
+    "source": "operator-recorded requirement",
+    "stages": [
+      {"name": "Owner-only", "kind": "gates", "maps_to": ["G0", "G1"], "note": "G0 is the pre-GO decision; G1 holds the live read-only results."},
+      {"name": "10 read-only", "kind": "gates", "maps_to": ["G2", "G3"], "note": "G2 is the two-user read-only step on the path to the ten-user G3."},
+      {"name": "Approval+Canary", "kind": "dependency-phase", "maps_to": ["#55", "#57"], "note": "A distinct dependency phase for the write-approval proof (#55) and the write canary (#57). It is not a gate and not an operational GO."},
+      {"name": "20 read+write", "kind": "gates", "maps_to": ["G4"], "note": "Optional twenty-user write stage."}
+    ]
+  },
+  "epic_plan_source": {
+    "repo": "mctlhq/.github",
+    "pr": 366,
+    "pr_state": "draft",
+    "merged": false,
+    "head_sha": "97371421997c67260843168783d343d4c7d5fff9",
+    "path": "roadmap/epics/glovo-c2-friends-pilot.yaml",
+    "url": "https://github.com/mctlhq/.github/blob/97371421997c67260843168783d343d4c7d5fff9/roadmap/epics/glovo-c2-friends-pilot.yaml",
+    "note": "Hand-transcribed snapshot of an open Draft PR. It is a plan, not merged and not live authorization. Tests are offline and never fetch it, so drift in the source is NOT detected automatically: re-transcribe this table by hand when the pinned head changes. A merged source change would still not prove a live rollout.",
+    "epics": [
+      {"epic": "c2-go-owner", "issue": "#40", "target": "G0", "realized_by": "G0", "carried_by": "G0",
+        "depends_on": ["c2-write-gate-decision", "c2-write-disabled-proof", "c2-fresh-link-identity", "c2-cutover-package", "c2-pilot-operations"],
+        "external_depends_on": [
+          {"ref": "mctlhq/mctl-api#1108", "target": "ext-mctl-api-1108"},
+          {"ref": "mctlhq/mctl-api#1110", "target": "ext-mctl-api-1110"},
+          {"ref": "mctlhq/mctl-api#1111", "target": "ext-mctl-api-1111"},
+          {"ref": "mctlhq/mctl-api#1079", "target": "ext-mctl-api-1079"},
+          {"ref": "mctlhq/mctl-gitops#2742", "target": "ext-gitops-2742"},
+          {"ref": "mctlhq/mctl-gitops#2766", "target": "ext-gitops-2766"},
+          {"ref": "mctlhq/mctl-gitops#2709", "target": "ext-gitops-2709"}
+        ]},
+      {"epic": "c2-write-gate-decision", "issue": "#49", "target": "owner-decision-49"},
+      {"epic": "c2-write-disabled-proof", "issue": "#41", "target": "disabled-write-proof-41"},
+      {"epic": "c2-fresh-link-identity", "issue": "#42", "target": "linking-42"},
+      {"epic": "c2-cutover-package", "issue": "mctl-gitops#2777", "target": "cutover-2777"},
+      {"epic": "c2-pilot-operations", "issue": "#46", "target": "operations-46"},
+      {"epic": "c2-e2e-resilience", "issue": "#43", "target": "G1"},
+      {"epic": "c2-go-2", "issue": "#50", "target": "G2", "realized_by": "G2", "depends_on": ["c2-e2e-resilience"]},
+      {"epic": "c2-security-boundary", "issue": "#44", "target": "#44"},
+      {"epic": "c2-order-intelligence", "issue": "#45", "target": "#45"},
+      {"epic": "c2-go-10", "issue": "#51", "target": "G3", "realized_by": "G3", "depends_on": ["c2-go-2", "c2-security-boundary", "c2-order-intelligence"]},
+      {"epic": "c2-cohort-feedback", "issue": "#47", "target": "#47"},
+      {"epic": "c2-write-approval-proof", "issue": "#55", "target": "#55", "carried_by": "G4",
+        "external_depends_on": [
+          {"ref": "mctlhq/mctl-api#1006", "target": "mctlhq/mctl-api#1006"},
+          {"ref": "mctlhq/mctl-api#1011", "target": "mctlhq/mctl-api#1011"},
+          {"ref": "mctlhq/mctl-api#1012", "target": "mctlhq/mctl-api#1012"}
+        ]},
+      {"epic": "c2-write-canary", "issue": "#57", "target": "#57"},
+      {"epic": "c2-go-20", "issue": "#52", "target": "G4", "realized_by": "G4", "depends_on": ["c2-go-10", "c2-cohort-feedback", "c2-security-boundary", "c2-write-approval-proof", "c2-write-canary"]}
+    ],
+    "additional_offline_safeguards": {
+      "G0": ["deploy-false", "vault-control-identity", "proxy", "migrations", "image-pins", "rollback-kill", "oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity"]
+    },
+    "scope_note": "Only the dependency sets of the epics that realize a gate (c2-go-owner, c2-go-2, c2-go-10, c2-go-20) and the externals of c2-write-approval-proof are transcribed. For epics outside that set the omitted dependency fields were not transcribed and are displayed as UNKNOWN (not transcribed), never as zero dependencies. The G1 to G0 edge is readiness ordering, not an epic edge."
+  },
+  "authority": {
+    "section_9_4": {
+      "source_of_truth": "#44",
+      "url": "https://github.com/mctlhq/mctl-glovo/issues/44",
+      "url_note": "Same-repository issue link taken from the supplied reference; not fetched here. Sole authority for docs/design/token-store.md section 9.4 unresolved items 1-3.",
+      "override": false,
+      "unresolved_items": [1, 2, 3],
+      "note": "Link the #44 verdict. This artifact neither restates, assumes nor replaces it."
+    },
+    "issue_11_text_correction": {
+      "owner": "lead",
+      "status": "FOLLOW_UP_NOT_DONE",
+      "note": "Correction of the #11 issue text is lead-owned. No GitHub issue is edited from this artifact."
+    }
+  },
+  "decision_refs": [
+    {"id": "#50", "required": true, "stage": "G2", "note": "Two-user admission. Separate from #51 and #52."},
+    {"id": "#51", "required": true, "stage": "G3", "note": "Ten-user admission. Separate from #50 and #52."},
+    {"id": "#52", "required": false, "stage": "G4", "note": "Optional twenty-user. Never implied by #50 or #51."}
+  ],
+  "gates": [
+    {
+      "id": "G0",
+      "name": "Owner pre-GO decision to perform the E2E",
+      "kind": "decision",
+      "phase": "pre-go",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-owner-pre-go",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": [],
+      "write_dependency": false,
+      "depends_on": [],
+      "requires": [],
+      "refs": [],
+      "prerequisites": [
+        "owner-decision-49", "disabled-write-proof-41", "linking-42", "cutover-2777",
+        "operations-46", "deploy-false", "vault-control-identity", "proxy",
+        "migrations", "image-pins", "rollback-kill", "oauth", "scopes",
+        "glovo-home-writes", "consent-versions", "isolation", "capacity",
+        "ext-mctl-api-1108", "ext-mctl-api-1110", "ext-mctl-api-1111", "ext-mctl-api-1079",
+        "ext-gitops-2742", "ext-gitops-2766", "ext-gitops-2709"
+      ]
+    },
+    {
+      "id": "G1",
+      "name": "Owner live E2E results (read-only)",
+      "kind": "result",
+      "phase": "owner-read-only",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "evidence_id": "E-owner-e2e-results",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Kill switch and credential revocation. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read"],
+      "write_dependency": false,
+      "depends_on": ["G0"],
+      "requires": [],
+      "refs": ["#43"],
+      "prerequisites": []
+    },
+    {
+      "id": "G2",
+      "name": "Two-user admission (read-only)",
+      "kind": "decision",
+      "phase": "two-user-read-only",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-two-users",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Remove both users from the allowlist and revoke their tokens. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read"],
+      "write_dependency": false,
+      "depends_on": ["G1"],
+      "requires": [],
+      "refs": ["#50"],
+      "prerequisites": []
+    },
+    {
+      "id": "G3",
+      "name": "Ten-user admission (read-only)",
+      "kind": "decision",
+      "phase": "ten-user-read-only",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-ten-users",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Return to the two-user allowlist. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read"],
+      "write_dependency": false,
+      "depends_on": ["G2", "#44", "#45"],
+      "requires": [],
+      "refs": ["#51"],
+      "prerequisites": [],
+      "note": "#44 and #45 are listed as dependencies only. The #44 verdict is linked from authority and is never restated or implicitly accepted here."
+    },
+    {
+      "id": "G4",
+      "name": "Twenty-user writes (optional, separately authorized canary)",
+      "kind": "decision",
+      "phase": "twenty-user-write",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-twenty-users-write",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Disable basket writes, return to the ten-user read-only allowlist. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read", "basket-write"],
+      "write_dependency": true,
+      "depends_on": ["G3", "#47", "#44", "#55", "#57"],
+      "requires": ["mctlhq/mctl-api#1006", "mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"],
+      "refs": ["#52"],
+      "prerequisites": [],
+      "canary_authorization": {
+        "decision_id": "D-twenty-users-canary",
+        "status": "UNKNOWN",
+        "evidence_sha": "UNKNOWN",
+        "evidence_url": "UNKNOWN",
+        "freshness": {"observed_at": null, "state": "UNKNOWN"},
+        "note": "Separate from the G4 decision. Both are needed."
+      }
+    }
+  ],
+  "topics": [
+    {"id": "owner-decision-49", "name": "Owner decision #49", "status": "UNKNOWN", "role": "owner", "refs": ["#49"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Withdraw the decision. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": []},
+    {"id": "disabled-write-proof-41", "name": "Disabled-write proof #41", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#41", "#54 (draft, behavior UNKNOWN)"], "source_paths": ["cmd/mctl-glovo/mcp.go", "internal/glovotools/hosted.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Keep writes disabled. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "linking-42", "name": "Linking #42", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#42"], "source_paths": ["internal/linkflow/consent.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Unlink the owner account. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "cutover-2777", "name": "mctl-gitops#2777 cutover plan", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctl-gitops#2777"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Revert the cutover change. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1"]},
+    {"id": "operations-46", "name": "Operations #46", "status": "UNKNOWN", "role": "platform-operator", "refs": ["#46"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "deploy-false", "name": "deploy:false state", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1"]},
+    {"id": "vault-control-identity", "name": "Vault and consent-reader/control identity", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": ["internal/consentgate/gate.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Revoke the identity. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "proxy", "name": "Proxy", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": ["deploy/mac-mini/tinyproxy.conf"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Remove proxy egress. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "migrations", "name": "Database and migrations", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["cmd/glovo-migrate/main.go", "internal/tokenstore/migrations/0001_tokenstore.sql"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "image-pins", "name": "Image and chart pins", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": ["Dockerfile"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Revert to the previous pins. Exact pins UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "rollback-kill", "name": "Rollback and kill switch readiness", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": ["internal/tokenstore/killswitch.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "This is the rollback mechanism. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "oauth", "name": "OAuth", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/authn/verifier.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "scopes", "name": "Scopes", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/authn/verifier.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "glovo-home-writes", "name": "Existing glovo-home writes", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#41"], "source_paths": ["cmd/glovo-home/main.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Disable basket writes. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "consent-versions", "name": "Consent versions", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/linkflow/consent.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "isolation", "name": "Isolation", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/tokenstore/isolation_pg_test.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "capacity", "name": "Capacity", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "ext-mctl-api-1108", "name": "mctl-api#1108 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1108"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
+    {"id": "ext-mctl-api-1110", "name": "mctl-api#1110 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1110"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
+    {"id": "ext-mctl-api-1111", "name": "mctl-api#1111 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1111"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
+    {"id": "ext-mctl-api-1079", "name": "mctl-api#1079 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1079"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
+    {"id": "ext-gitops-2742", "name": "mctl-gitops#2742 (epic external)", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctlhq/mctl-gitops#2742"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
+    {"id": "ext-gitops-2766", "name": "mctl-gitops#2766 (epic external)", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctlhq/mctl-gitops#2766"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
+    {"id": "ext-gitops-2709", "name": "mctl-gitops#2709 (epic external)", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctlhq/mctl-gitops#2709"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."}
+  ]
+}

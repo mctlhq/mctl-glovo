@@ -12,13 +12,16 @@ import (
 // /link. A code is issued only when mctl-api's consent record for the
 // caller names exactly this version: a consent to an older text is not a
 // consent to this one.
-const ConsentVersion = "c2-link-v1"
+const ConsentVersion = "c2-link-v2"
 
 // ConsentText is what linking allows, shown on /link with ConsentVersion.
-// Changing a word here means a new ConsentVersion.
+// Changing a word here means a new ConsentVersion, and the same version in
+// mctl-api's internal/glovoconsent (until both match no link code is issued).
+// Every capability it names must be a tool that tools/list serves
+// (cmd/mctl-glovo TestConsentTextMatchesTheServedTools).
 var ConsentText = []string{
 	"Linking stores your Glovo session (access and refresh tokens and the device id) encrypted with a key held in Vault. Only the mctl-glovo service can decrypt it, and only for requests made with your MCTL account.",
-	"The session is used to read your Glovo account and to build baskets you ask for. It is never used to place an order or to pay.",
+	"The session is used only to read your Glovo account: your order history, your basket, your saved locations and stores, so that your assistant can analyse your orders and plan a reorder. It is never used to change your basket, to place an order or to pay.",
 	"You can unlink at any time. Unlinking deletes the stored session at once; encrypted database backups age out within 14 days.",
 	"MCTL cannot revoke the session at Glovo. After unlinking, sign out of other sessions in Glovo; after a suspected breach, also change your Glovo password.",
 }

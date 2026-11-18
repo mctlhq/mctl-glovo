@@ -29,6 +29,14 @@ const hostedInstructions = `Use Glovo read-only tools before mutating the real b
 Do not checkout or pay. Basket tools only prepare the user's real Glovo basket for later human review.
 If a tool says your Glovo account is not linked or expired, link it again at https://glovo.mctl.ai/link.`
 
+// hostedReadOnlyInstructions are served while basket writes are off, the
+// default: there is no tool that changes a basket, so the text must not
+// promise one.
+const hostedReadOnlyInstructions = `These Glovo tools are read-only: browse stores and menus, read the basket, the order history and reorder plans.
+
+This service does not change your basket, check out or pay.
+If a tool says your Glovo account is not linked or expired, link it again at https://glovo.mctl.ai/link.`
+
 // hostedCallTimeout bounds one tool call. The HTTP server has no write
 // timeout on the MCP routes (see noDeadline), so this is the bound.
 const hostedCallTimeout = 3 * time.Minute
@@ -95,9 +103,18 @@ type mcpDeps struct {
 	// is no unkeyed default.
 	Who auditWho
 	// Kill is required: no tool call may run without the switch being read.
-	Kill    killGate
-	Admit   callAdmitter
-	Version string
+	Kill  killGate
+	Admit callAdmitter
+	// BasketWrites serves the basket mutation tools. The zero value is off:
+	// the tools are not listed and a call by name is refused before any
+	// Glovo request. See glovotools.Config.BasketWrites; enabling it is not
+	// an approval.
+	BasketWrites bool
+	// BasketApprover is the approval step in front of every basket write.
+	// BasketWrites without it is a startup error, and the write tools never
+	// run without it being asked first (approvalMiddleware).
+	BasketApprover basketApprover
+	Version        string
 	// CallTimeout bounds one tool call (default hostedCallTimeout) and
 	// BodyReadTimeout one POST body read (default hostedBodyReadTimeout).
 	// Tests shorten them.
@@ -137,15 +154,23 @@ func newMCPRoutes(d mcpDeps) (*mcpRoutes, error) {
 	if version == "" {
 		version = "dev"
 	}
-	backend, err := glovotools.New(glovotools.Config{Clients: d.Clients})
+	if d.BasketWrites && d.BasketApprover == nil {
+		return nil, errors.New("mcp routes: basket writes need an approval gate (BasketApprover); none is configured")
+	}
+	backend, err := glovotools.New(glovotools.Config{Clients: d.Clients, BasketWrites: d.BasketWrites})
 	if err != nil {
 		return nil, err
 	}
+	instructions := hostedReadOnlyInstructions
+	if d.BasketWrites {
+		instructions = hostedInstructions
+	}
 	srv := server.NewMCPServer("mctl-glovo", version,
 		server.WithToolCapabilities(true),
-		server.WithInstructions(hostedInstructions),
+		server.WithInstructions(instructions),
 		server.WithRecovery(),
 		server.WithToolHandlerMiddleware(auditMiddleware(d.Audit, d.Who, d.Kill, d.KillTimeout, d.Admit, d.CallTimeout)),
+		server.WithToolHandlerMiddleware(approvalMiddleware(d.BasketApprover)),
 	)
 	backend.Install(srv)
 	streamable := gateway.NewStreamable(srv, log.With("component", "mcp"))
@@ -229,6 +254,29 @@ func (c *clearOnDone) Read(p []byte) (int, error) {
 // could not run (unavailable, timeout) or the tool returned an isError
 // result; the result text, which for a hosted refusal is a fixed sentence,
 // is deliberately not parsed here.
+// basketApprover decides whether one basket write by one principal may run.
+// An error refuses it. There is no implementation yet: it is the seam of the
+// approval step (mctl-api#1011/#1012).
+type basketApprover func(ctx context.Context, pid, tool string, args map[string]any) error
+
+// approvalMiddleware asks the approver before every basket write tool. It
+// sits inside the audit middleware, so the kill switch and the admitter have
+// run. Fail closed: no approver, or an approver error, refuses. Reads pass.
+func approvalMiddleware(approve basketApprover) server.ToolHandlerMiddleware {
+	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
+		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			if glovotools.IsBasketWriteTool(req.Params.Name) {
+				pid := tokenstore.PIDFrom(authn.FromContext(ctx))
+				approved := approve != nil && approve(ctx, pid.String(), req.Params.Name, req.GetArguments()) == nil
+				if !approved {
+					return mcp.NewToolResultError(glovotools.BasketWritesRefusal), nil
+				}
+			}
+			return next(ctx, req)
+		}
+	}
+}
+
 func auditMiddleware(audit *slog.Logger, who auditWho, kill killGate, killTimeout time.Duration, admit callAdmitter, callTimeout time.Duration) server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (res *mcp.CallToolResult, err error) {

@@ -41,6 +41,9 @@ var toolDefsJSON []byte
 //go:embed shopping-guide.md
 var shoppingGuide string
 
+//go:embed shopping-guide-readonly.md
+var shoppingGuideReadOnly string
+
 // LoginRefusal is the glovo_login result in the native backend. Signing in
 // needs a browser on the owner's machine, which a gateway call must never
 // start.
@@ -81,6 +84,51 @@ type Config struct {
 	// off: its file is shared by whoever uses the directory, which is the
 	// wrong shape for a multi-user process.
 	Clients ClientSource
+	// BasketWrites serves the basket mutation tools (BasketWriteTools) in
+	// hosted mode. The zero value is off: a hosted backend is read-only, the
+	// three tools are not registered and a call by name is refused before
+	// any Glovo request. It has no effect on a session-file backend
+	// (glovo-home), which always serves them. Turning it on is not an
+	// approval: it only stops this layer refusing, and a future approval
+	// step (mctl-api#1011/#1012) is a separate gate in front of it.
+	BasketWrites bool
+}
+
+// BasketWriteTools are the tools that change a real Glovo basket. A hosted
+// backend serves them only with Config.BasketWrites.
+var BasketWriteTools = []string{"glovo_add_to_basket", "glovo_set_quantity", "glovo_remove_from_basket"}
+
+// BasketWritesRefusal is the answer to a basket write tool called by name on
+// a read-only hosted backend.
+const BasketWritesRefusal = "Basket changes are not enabled in this deployment. Basket tools are read-only here."
+
+// IsBasketWriteTool reports whether name is one of BasketWriteTools.
+func IsBasketWriteTool(name string) bool { return isBasketWriteTool(name) }
+
+func isBasketWriteTool(name string) bool {
+	for _, n := range BasketWriteTools {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// readOnly reports a hosted backend that does not serve basket writes.
+func (b *Backend) readOnly() bool { return b.cfg.Clients != nil && !b.cfg.BasketWrites }
+
+// ReadOnlyNextStep is the next_step of a reorder plan on a read-only hosted
+// backend: it must not name a tool that is not served.
+const ReadOnlyNextStep = "Inspect each selected candidate with glovo_get_product and reselect required options. This service cannot change your basket: add the items in the Glovo app. This plan never places an order."
+
+// readOnlyDescriptions replace the upstream descriptions that point at
+// basket tools, on a read-only hosted backend. Everything else is untouched.
+var readOnlyDescriptions = map[string]string{
+	"glovo_get_shopping_guide":      "Return the Glovo shopping playbook for these read-only tools.",
+	"glovo_login":                   "Not available here: link your Glovo account at https://glovo.mctl.ai/link.",
+	"glovo_get_store_order_options": "Read delivery minimums, surcharges, restrictions, public store information, and similar stores. No basket changes, no checkout or order placement.",
+	"glovo_preview_reorder":         "Read one past order and report its lines and whether Glovo allows a reorder. This never mutates the basket or places an order.",
+	"glovo_plan_reorder":            "Resolve past order lines against authenticated Easy Reorder and current store search results. Read-only: this service cannot change a basket.",
 }
 
 // ClientSource resolves the hosted Glovo client of one pid.
@@ -157,6 +205,11 @@ func New(cfg Config) (*Backend, error) {
 		extra[n] = true
 	}
 	b := &Backend{cfg: cfg, client: c, byName: map[string]*tool{}}
+	if b.readOnly() {
+		for _, n := range BasketWriteTools {
+			extra[n] = true
+		}
+	}
 	hs := handlers(b)
 	for _, d := range defs {
 		if childmcp.Blocked(d.Name) || !known[d.Name] {
@@ -176,6 +229,9 @@ func New(cfg Config) (*Backend, error) {
 			} else {
 				return nil, fmt.Errorf("glovotools: no handler for %q", d.Name)
 			}
+		}
+		if desc, ok := readOnlyDescriptions[d.Name]; ok && b.readOnly() {
+			d.Description = desc
 		}
 		t := &tool{def: d, schema: s, handler: h}
 		b.tools = append(b.tools, t)
@@ -233,6 +289,13 @@ func (b *Backend) Install(srv *server.MCPServer) { srv.SetTools(b.ServerTools().
 // an error return means the call itself could not run (unknown tool,
 // draining, cancelled or timed out).
 func (b *Backend) Call(ctx context.Context, name string, rawArgs map[string]any) (*mcp.CallToolResult, error) {
+	// A read-only hosted backend refuses a basket write by name first, before
+	// the tool lookup, the argument check and the client lookup, so that no
+	// Glovo request and no token store read can follow. Registration is the
+	// first line (the tool is not listed); this is the second.
+	if b.readOnly() && isBasketWriteTool(name) {
+		return mcp.NewToolResultError(BasketWritesRefusal), nil
+	}
 	t, ok := b.byName[name]
 	if !ok {
 		return nil, fmt.Errorf("tool %q not found", name)
