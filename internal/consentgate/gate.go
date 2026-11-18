@@ -88,16 +88,31 @@ func New(cfg Config) (*Gate, error) {
 // Check is nil when pid holds an active consent to Version. ErrNoConsent is
 // a definite no; ErrUnavailable is a failed read. Both refuse.
 func (g *Gate) Check(ctx context.Context, pid tokenstore.PID) error {
+	return g.check(ctx, pid, true)
+}
+
+// CheckFresh is Check without the positive cache: it always reads the
+// source, so a consent withdrawn a moment ago is seen now. The link routes
+// use it, because a link stores a real Glovo session and must never rest on
+// a cached yes. A positive answer still refreshes the cache for Check; a
+// negative or failed one drops it.
+func (g *Gate) CheckFresh(ctx context.Context, pid tokenstore.PID) error {
+	return g.check(ctx, pid, false)
+}
+
+func (g *Gate) check(ctx context.Context, pid tokenstore.PID, useCache bool) error {
 	id := pid.String()
 	if id == "" {
 		return ErrNoConsent
 	}
 	now := g.now()
-	g.mu.Lock()
-	until, hit := g.ok[id]
-	g.mu.Unlock()
-	if hit && now.Before(until) {
-		return nil
+	if useCache {
+		g.mu.Lock()
+		until, hit := g.ok[id]
+		g.mu.Unlock()
+		if hit && now.Before(until) {
+			return nil
+		}
 	}
 	v, err := g.src.RecordedConsent(ctx, pid)
 	switch {
@@ -129,9 +144,10 @@ func (g *Gate) Admit(ctx context.Context, principalID string) error {
 }
 
 // LinkConsent is tokenstore.Config.LinkConsent: the re-check /link/upload
-// makes after the code is redeemed and before the session is stored.
+// makes after the code is redeemed and before the session is stored. It reads
+// the source every time (CheckFresh), never the positive cache.
 func (g *Gate) LinkConsent(ctx context.Context, pid tokenstore.PID) error {
-	switch err := g.Check(ctx, pid); {
+	switch err := g.CheckFresh(ctx, pid); {
 	case errors.Is(err, ErrNoConsent):
 		return fmt.Errorf("%w: %w", tokenstore.ErrConsentRefused, err)
 	case err != nil:

@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/mctlhq/mctl-glovo/internal/config"
 	"github.com/mctlhq/mctl-glovo/internal/consentgate"
 	"github.com/mctlhq/mctl-glovo/internal/linkflow"
 	"github.com/mctlhq/mctl-glovo/internal/tokenstore"
@@ -245,5 +247,85 @@ func TestC2StoreRechecksConsent(t *testing.T) {
 	}
 	if err := cfg.LinkConsent(context.Background(), tokenstore.PID{}); err == nil {
 		t.Fatal("upload consent check passed with no consent")
+	}
+}
+
+// GLOVO_LINK_RESOURCE and GLOVO_LINK_MAX_AUTH_AGE: unset leaves the link
+// login off (preview and upload refuse), and a wrong value stops the boot
+// instead of falling back to the MCP audience or a longer age.
+func TestC2LinkLoginConfig(t *testing.T) {
+	e := fullEnv()
+	c, err := loadC2(env(e))
+	if err != nil || c.linkResource != "" || c.linkMaxAuthAge != 5*time.Minute {
+		t.Fatalf("defaults: %+v %v", c, err)
+	}
+	e["GLOVO_LINK_RESOURCE"] = "https://glovo.mctl.ai/link"
+	e["GLOVO_LINK_MAX_AUTH_AGE"] = "15m"
+	if c, err = loadC2(env(e)); err != nil || c.linkResource != "https://glovo.mctl.ai/link" || c.linkMaxAuthAge != 15*time.Minute {
+		t.Fatalf("configured: %+v %v", c, err)
+	}
+	for name, kv := range map[string][2]string{
+		"resource is the MCP resource": {"GLOVO_LINK_RESOURCE", config.Resource},
+		"resource not https":           {"GLOVO_LINK_RESOURCE", "http://glovo.mctl.ai/link"},
+		"resource not a URL":           {"GLOVO_LINK_RESOURCE", "glovo.mctl.ai/link"},
+		"resource with a query":        {"GLOVO_LINK_RESOURCE", "https://glovo.mctl.ai/link?x=1"},
+		"resource with userinfo":       {"GLOVO_LINK_RESOURCE", "https://u@glovo.mctl.ai/link"},
+		"age over the cap":             {"GLOVO_LINK_MAX_AUTH_AGE", "16m"},
+		"age zero":                     {"GLOVO_LINK_MAX_AUTH_AGE", "0s"},
+		"age negative":                 {"GLOVO_LINK_MAX_AUTH_AGE", "-1m"},
+		"age not a duration":           {"GLOVO_LINK_MAX_AUTH_AGE", "300"},
+	} {
+		bad := fullEnv()
+		bad[kv[0]] = kv[1]
+		if _, err := loadC2(env(bad)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+// The link verifier is a different audience from the MCP one, needs no grant,
+// and carries the freshness bound; the MCP verifier is untouched.
+func TestC2LinkVerifierConfig(t *testing.T) {
+	e := fullEnv()
+	e["GLOVO_LINK_RESOURCE"] = "https://glovo.mctl.ai/link"
+	c, err := loadC2(env(e))
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := linkVerifierConfig(c, nil, false)
+	mcp := verifierConfig(c, nil, false)
+	if link.Resource != "https://glovo.mctl.ai/link" || link.Resource == mcp.Resource ||
+		link.RequireGrant || link.MaxAuthAge != 5*time.Minute || link.Issuer != mcp.Issuer {
+		t.Fatalf("link %+v mcp %+v", link, mcp)
+	}
+	if mcp.MaxAuthAge != 0 || !mcp.RequireGrant || mcp.Resource != config.Resource {
+		t.Fatalf("the MCP verifier changed: %+v", mcp)
+	}
+}
+
+// The store is wired with mctl-api's masked-identity lookup only when the
+// consent route is configured; without it the preview refuses. The upload
+// re-check is wired in both modes.
+func TestC2StoreConfigWiresMaskedIdentity(t *testing.T) {
+	c, err := loadC2(env(fullEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	gate, err := consentgate.New(consentgate.Config{Source: linkflow.UnavailableConsent{}, Version: linkflow.ConsentVersion})
+	if err != nil {
+		t.Fatal(err)
+	}
+	none := storeConfig(c, nil, nil, nil, nil, linkflow.UnavailableConsent{}, gate, log)
+	if none.MaskIdentity != nil || none.LinkConsent == nil {
+		t.Fatalf("allowlist mode: mask=%v linkConsent=%v", none.MaskIdentity != nil, none.LinkConsent != nil)
+	}
+	api, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: "https://api.example", TokenFile: "/etc/mctl/consent-reader"}) //nolint:gosec // fake test path, not a credential
+	if err != nil {
+		t.Fatal(err)
+	}
+	with := storeConfig(c, nil, nil, nil, nil, api, gate, log)
+	if with.MaskIdentity == nil || with.LinkConsent == nil {
+		t.Fatalf("consent mode: mask=%v linkConsent=%v", with.MaskIdentity != nil, with.LinkConsent != nil)
 	}
 }

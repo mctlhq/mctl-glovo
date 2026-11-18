@@ -46,7 +46,7 @@ func TestPostgresAuditIsInsertOnlyAndErasable(t *testing.T) {
 			t.Fatal(err)
 		}
 		if i == 0 {
-			if _, _, err := p.RedeemLinkCode(ctx, h); err != nil {
+			if _, _, err := p.RedeemLinkCode(ctx, h, pidA); err != nil {
 				t.Fatal(err)
 			}
 		}

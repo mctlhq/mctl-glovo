@@ -24,14 +24,17 @@ type Store interface {
 	// stored with the code and lands on the link row.
 	CreateLinkCode(ctx context.Context, pid PID, consentVersion string) (code string, expires time.Time, err error)
 	// PreviewLink returns the masked identity a code belongs to, without
-	// burning it.
-	PreviewLink(ctx context.Context, code string) (maskedIdentity string, err error)
+	// burning it. caller is the verified principal making the request: a
+	// code that belongs to anyone else is ErrCodeRefused, the same answer as
+	// an unknown code, so a code is never an oracle for another pid.
+	PreviewLink(ctx context.Context, caller PID, code string) (maskedIdentity string, err error)
 	// LinkAttempt charges one /link/preview or /link/upload attempt from ip
 	// against the link caps. The /link handlers call it first.
 	LinkAttempt(ip string) error
 	// Link burns code and stores sess for the code's pid, replacing any
-	// previous link.
-	Link(ctx context.Context, code string, sess glovoapi.Session) error
+	// previous link. caller is the verified principal making the request; a
+	// code that belongs to anyone else is ErrCodeRefused and is NOT burned.
+	Link(ctx context.Context, caller PID, code string, sess glovoapi.Session) error
 	// Get decrypts pid's session. ErrNotLinked only for a documented
 	// absence (no row).
 	Get(ctx context.Context, pid PID) (*Lease, error)
@@ -665,7 +668,10 @@ func (s *store) LinkAttempt(ip string) error {
 }
 
 // PreviewLink implements Store.
-func (s *store) PreviewLink(ctx context.Context, code string) (string, error) {
+func (s *store) PreviewLink(ctx context.Context, caller PID, code string) (string, error) {
+	if !caller.valid() {
+		return "", ErrInvalidPID
+	}
 	if err := s.kill.Check(ctx); err != nil {
 		return "", ErrKilled
 	}
@@ -673,12 +679,17 @@ func (s *store) PreviewLink(ctx context.Context, code string) (string, error) {
 	if !ok {
 		return "", ErrCodeRefused
 	}
-	pid, err := s.db.PeekLinkCode(ctx, h)
+	pid, err := s.db.PeekLinkCode(ctx, h, caller.id)
 	if errors.Is(err, errNoRow) {
 		return "", ErrCodeRefused
 	}
 	if err != nil || s.maskIdentity == nil {
 		return "", ErrUnavailable
+	}
+	if pid != caller.id {
+		// The database is asked for the caller's codes only; an answer for
+		// another pid is refused here too, never shown.
+		return "", ErrCodeRefused
 	}
 	masked, err := s.maskIdentity(ctx, pid)
 	if err != nil || masked == "" {
@@ -689,7 +700,10 @@ func (s *store) PreviewLink(ctx context.Context, code string) (string, error) {
 }
 
 // Link implements Store, in the order of design 4.1.
-func (s *store) Link(ctx context.Context, code string, sess glovoapi.Session) error {
+func (s *store) Link(ctx context.Context, caller PID, code string, sess glovoapi.Session) error {
+	if !caller.valid() {
+		return ErrInvalidPID
+	}
 	if err := s.kill.Check(ctx); err != nil {
 		return ErrKilled
 	}
@@ -698,7 +712,7 @@ func (s *store) Link(ctx context.Context, code string, sess glovoapi.Session) er
 		_ = s.audit(ctx, AuditEvent{Event: "link_refused", Outcome: outcomeRefused, Reason: "code_invalid", Actor: actorUser})
 		return ErrCodeRefused
 	}
-	pidStr, consent, err := s.db.RedeemLinkCode(ctx, h)
+	pidStr, consent, err := s.db.RedeemLinkCode(ctx, h, caller.id)
 	if errors.Is(err, errNoRow) {
 		_ = s.audit(ctx, AuditEvent{Event: "link_refused", Outcome: outcomeRefused, Reason: "code_invalid", Actor: actorUser})
 		return ErrCodeRefused
@@ -714,6 +728,12 @@ func (s *store) Link(ctx context.Context, code string, sess glovoapi.Session) er
 	}
 	if !pid.valid() {
 		return refuse("pid_malformed", ErrIntegrity)
+	}
+	if pid != caller {
+		// Unreachable while the redeem is bound to the caller; kept so a
+		// regression there can never store one principal's session under
+		// another's row: nothing past this point is done for a stranger.
+		return refuse("pid_mismatch", ErrCodeRefused)
 	}
 	if s.linkConsent != nil {
 		switch err := s.linkConsent(ctx, pid); {

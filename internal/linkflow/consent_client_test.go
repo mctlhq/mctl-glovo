@@ -238,3 +238,73 @@ func TestAPIConsentDoesNotFollowRedirects(t *testing.T) {
 		t.Fatalf("302 = %q %v (target hit %d), want ErrConsentUnavailable and no hop", v, err, target)
 	}
 }
+
+// maskedServer answers every read with body and records the raw queries.
+func maskedServer(t *testing.T, body string) (*APIConsent, *[]string) {
+	t.Helper()
+	var queries []string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, r.URL.RawQuery)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	tf := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tf, []byte(testToken+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewAPIConsent(APIConsentConfig{BaseURL: srv.URL, TokenFile: tf, Client: srv.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c, &queries
+}
+
+func activeWith(label string) string {
+	return `{"principal_id":"` + testPID + `","state":"active","consent_version":"c2-link-v1","masked_identity":"` + label + `"}`
+}
+
+// The label is asked for only by the preview, and only a label of the exact
+// expected shape is returned.
+func TestAPIConsentMaskedIdentity(t *testing.T) {
+	c, queries := maskedServer(t, activeWith("github:a***"))
+	got, err := c.MaskedIdentity(context.Background(), pidOf(testPID))
+	if err != nil || got != "github:a***" {
+		t.Fatalf("= %q %v", got, err)
+	}
+	if _, err := c.RecordedConsent(context.Background(), pidOf(testPID)); err != nil {
+		t.Fatal(err)
+	}
+	if len(*queries) != 2 || (*queries)[0] != "include=masked_identity" || (*queries)[1] != "" {
+		t.Fatalf("queries %q: only the preview may ask for the label", *queries)
+	}
+}
+
+func TestAPIConsentMaskedIdentityRefusesAnythingUnexpected(t *testing.T) {
+	for name, body := range map[string]string{
+		"raw login":              activeWith("alice-the-real-login"),
+		"more than one char":     activeWith("github:ab***"),
+		"no stars":               activeWith("github:a"),
+		"raw email":              activeWith("alice@example.com"),
+		"unknown provider":       activeWith("zitadel:a***"),
+		"empty":                  activeWith(""),
+		"missing":                `{"principal_id":"` + testPID + `","state":"active","consent_version":"c2-link-v1"}`,
+		"newline smuggled":       activeWith(`github:a***\nX`),
+		"prefix then raw":        activeWith("github:a***alice"),
+		"star as the character":  activeWith("github:****"),
+		"state none with label":  `{"principal_id":"` + testPID + `","state":"none","masked_identity":"github:a***"}`,
+		"another principal":      `{"principal_id":"` + otherPID + `","state":"active","consent_version":"c2-link-v1","masked_identity":"github:a***"}`,
+		"unknown state":          `{"principal_id":"` + testPID + `","state":"pending","masked_identity":"github:a***"}`,
+		"state none without one": `{"principal_id":"` + testPID + `","state":"none"}`,
+	} {
+		c, _ := maskedServer(t, body)
+		got, err := c.MaskedIdentity(context.Background(), pidOf(testPID))
+		if got != "" || !errors.Is(err, ErrConsentUnavailable) {
+			t.Errorf("%s: = %q %v, want no label and ErrConsentUnavailable", name, got, err)
+		}
+	}
+	// Unicode letters are fine, one rune only.
+	c, _ := maskedServer(t, activeWith("google:Ä***"))
+	if got, err := c.MaskedIdentity(context.Background(), pidOf(testPID)); err != nil || got != "google:Ä***" {
+		t.Fatalf("one non-ASCII letter = %q %v", got, err)
+	}
+}

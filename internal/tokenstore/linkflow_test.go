@@ -52,6 +52,27 @@ func (fakeVerifier) Verify(_ context.Context, tok string) (*authn.Principal, err
 	return nil, &authn.Error{Reason: "bad_token", Status: http.StatusUnauthorized}
 }
 
+// fakeLinkVerifier stands for the link-audience verifier: it knows only
+// fresh link tokens. An MCP token (tok-*) is the wrong audience here, a stale
+// or auth_time-less one is a fresh-login failure. The real claim checks are
+// authn's own tests; the wiring of the two verifiers is TestLinkRoutesUse...
+type fakeLinkVerifier struct{ calls atomic.Int64 }
+
+func (f *fakeLinkVerifier) Verify(_ context.Context, tok string) (*authn.Principal, error) {
+	f.calls.Add(1)
+	switch tok {
+	case "link-owner":
+		return &authn.Principal{ID: pidOwner}, nil
+	case "link-other":
+		return &authn.Principal{ID: pidOther}, nil
+	case "link-stale", "link-no-auth-time":
+		return nil, &authn.Error{Reason: authn.ReasonFreshLogin, Status: http.StatusUnauthorized}
+	case "link-jwks-down":
+		return nil, &authn.Error{Reason: authn.ReasonJWKSDown, Status: http.StatusServiceUnavailable}
+	}
+	return nil, &authn.Error{Reason: authn.ReasonAudience, Status: http.StatusUnauthorized}
+}
+
 type fakeConsent struct {
 	mu       sync.Mutex
 	versions map[string]string
@@ -94,6 +115,7 @@ type env struct {
 	mux     *http.ServeMux
 	consent *fakeConsent
 	logs    *syncBuf
+	linkV   *fakeLinkVerifier
 
 	validations atomic.Int64
 	failGlovo   atomic.Bool
@@ -127,12 +149,14 @@ func newEnv(t *testing.T, caps tokenstore.Caps) *env {
 		return "x***@e***.com", nil
 	}
 	e.h = tokenstore.NewLinkHarness(t, caps, validate, mask)
+	e.linkV = &fakeLinkVerifier{}
 	lf, err := linkflow.New(linkflow.Config{
-		Enabled:  true,
-		Store:    e.h.Store,
-		Verifier: fakeVerifier{},
-		Consent:  e.consent,
-		Log:      slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Enabled:      true,
+		Store:        e.h.Store,
+		Verifier:     fakeVerifier{},
+		LinkVerifier: e.linkV,
+		Consent:      e.consent,
+		Log:          slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -177,9 +201,14 @@ func (e *env) issue(tok string) string {
 	return r.body["code"]
 }
 
+// jsonReq builds a JSON POST. The preview and upload routes carry the owner's
+// fresh link token by default; a test about authentication replaces it.
 func jsonReq(path string, body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	if path == "/link/preview" || path == "/link/upload" {
+		req.Header.Set("Authorization", "Bearer link-owner")
+	}
 	return req
 }
 
@@ -476,6 +505,7 @@ func TestLinkUploadBodyChecksComeFirst(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/link/upload", strings.NewReader(tc.body))
 			req.Header.Set("Content-Type", tc.ctype)
+			req.Header.Set("Authorization", "Bearer link-owner")
 			wantRefusal(t, e.do(req), tc.status, tc.errCode)
 		})
 	}
@@ -696,7 +726,7 @@ func TestLinkUploadAnswerCarriesNoSessionData(t *testing.T) {
 func TestLinkPreviewMaskUnavailable(t *testing.T) {
 	e := newEnv(t, defaultCaps())
 	h := tokenstore.NewLinkHarness(t, defaultCaps(), func(context.Context, glovoapi.Session) error { return nil }, nil)
-	lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: h.Store, Verifier: fakeVerifier{}, Consent: e.consent})
+	lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: h.Store, Verifier: fakeVerifier{}, LinkVerifier: e.linkV, Consent: e.consent})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -775,5 +805,214 @@ func TestLinkCodeAdmissionRefusals(t *testing.T) {
 	}
 	if e.h.Codes() != 0 {
 		t.Fatal("code issued")
+	}
+}
+
+// --- fresh login and principal binding (mctl-glovo#42) ---------------------
+
+// previewAndUploadWith sends both routes with the given Authorization value
+// ("" sends none) and returns both answers.
+func (e *env) previewAndUploadWith(code, auth string) (resp, resp) {
+	e.t.Helper()
+	pv := jsonReq("/link/preview", previewBody(code))
+	up := jsonReq("/link/upload", uploadBody(code, session("x")))
+	for _, r := range []*http.Request{pv, up} {
+		r.Header.Del("Authorization")
+		if auth != "" {
+			r.Header.Set("Authorization", auth)
+		}
+	}
+	return e.do(pv), e.do(up)
+}
+
+// Preview and upload take a fresh LINK token, nothing else: not no token, not
+// an MCP-audience token (a connector token, a refresh-derived or GitHub-
+// derived MCTL token all look like one), not a stale or auth_time-less link
+// token, not a token in the query. Every refusal leaves the code usable.
+func TestLinkPreviewAndUploadNeedAFreshLinkToken(t *testing.T) {
+	for _, tc := range []struct {
+		name, auth, query string
+		status            int
+		code              string
+	}{
+		{"no token", "", "", 401, "invalid_token"},
+		{"not a bearer", "Basic abc", "", 401, "invalid_token"},
+		{"the code alone is not enough", "", "", 401, "invalid_token"},
+		{"MCP-audience token of the owner", "Bearer tok-owner", "", 401, "invalid_token"},
+		{"forged", "Bearer link-forged", "", 401, "invalid_token"},
+		{"stale login", "Bearer link-stale", "", 401, "fresh_login_required"},
+		{"no auth_time", "Bearer link-no-auth-time", "", 401, "fresh_login_required"},
+		{"keys unreachable", "Bearer link-jwks-down", "", 503, "temporarily_unavailable"},
+		{"token in the query", "Bearer link-owner", "?access_token=link-owner", 401, "invalid_token"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, defaultCaps())
+			code := e.issue("tok-owner")
+			for _, path := range []string{"/link/preview", "/link/upload"} {
+				body := previewBody(code)
+				if path == "/link/upload" {
+					body = uploadBody(code, session("x"))
+				}
+				req := httptest.NewRequest(http.MethodPost, path+tc.query, strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				if tc.auth != "" {
+					req.Header.Set("Authorization", tc.auth)
+				}
+				wantRefusal(t, e.do(req), tc.status, tc.code)
+			}
+			if e.validations.Load() != 0 {
+				t.Fatal("a refused token reached Glovo")
+			}
+			if _, _, ok := e.h.LinkRow(pidOwner); ok {
+				t.Fatal("a refused token produced a link")
+			}
+			// The code was not touched: a good fresh token still uses it.
+			if r := e.preview(code); r.status != 200 {
+				t.Fatalf("code burned by a refused token: %d %s", r.status, r.raw)
+			}
+		})
+	}
+}
+
+// The link audience is its own verifier: no fallback to the MCP one, and the
+// MCP route that mints a code never accepts a link token.
+func TestLinkRoutesUseTheirOwnVerifier(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	code := e.issue("tok-owner")
+	// A link token cannot mint a code.
+	req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
+	req.Header.Set("Authorization", "Bearer link-owner")
+	wantRefusal(t, e.do(req), 401, "invalid_token")
+	// A missing link verifier refuses; it never falls back to the MCP one.
+	lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: e.h.Store, Verifier: fakeVerifier{}, Consent: e.consent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.mux = http.NewServeMux()
+	lf.Register(e.mux)
+	for _, tok := range []string{"link-owner", "tok-owner"} {
+		pv, up := e.previewAndUploadWith(code, "Bearer "+tok)
+		wantRefusal(t, pv, 503, "unavailable")
+		wantRefusal(t, up, 503, "unavailable")
+	}
+	if e.validations.Load() != 0 {
+		t.Fatal("reached Glovo without a link verifier")
+	}
+}
+
+// A code is for the principal it was issued to. Another principal's FRESH,
+// valid link token gets the unknown-code answer, sees no identity, stores
+// nothing and does not burn the owner's code.
+func TestLinkCodeOfAnotherPrincipalIsRefused(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	code := e.issue("tok-owner")
+	pv, up := e.previewAndUploadWith(code, "Bearer link-other")
+	wantRefusal(t, pv, 400, "code_refused")
+	wantRefusal(t, up, 400, "code_refused")
+	if strings.Contains(pv.raw, "***") {
+		t.Fatalf("a stranger was shown an identity: %s", pv.raw)
+	}
+	if _, _, ok := e.h.LinkRow(pidOther); ok {
+		t.Fatal("a link was stored for the stranger")
+	}
+	if _, _, ok := e.h.LinkRow(pidOwner); ok || e.validations.Load() != 0 {
+		t.Fatal("the stranger's upload linked or reached Glovo")
+	}
+	if r := e.preview(code); r.status != 200 || r.body["identity"] != "o***@e***.com" {
+		t.Fatalf("the owner's preview after the attempt: %d %s", r.status, r.raw)
+	}
+	if r := e.upload(code, session("mine")); r.status != 200 {
+		t.Fatalf("the owner's upload after the attempt: %d %s", r.status, r.raw)
+	}
+	if got := e.h.Stored(pidOwner)["refreshToken"]; got != "refresh-mine" {
+		t.Fatalf("stored %v", got)
+	}
+}
+
+// A code works once, and a replay by the owner changes nothing.
+func TestLinkReplayIsRefused(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	code := e.issue("tok-owner")
+	if r := e.upload(code, session("one")); r.status != 200 {
+		t.Fatalf("%d %s", r.status, r.raw)
+	}
+	wantRefusal(t, e.upload(code, session("two")), 400, "code_refused")
+	wantRefusal(t, e.preview(code), 400, "code_refused")
+	if got := e.h.Stored(pidOwner)["refreshToken"]; got != "refresh-one" {
+		t.Fatalf("replay overwrote the link: %v", got)
+	}
+}
+
+// The identity is shown only while the consent holds now; a consent that
+// cannot be read shows nothing.
+func TestLinkPreviewNeedsLiveConsent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		set    func(c *fakeConsent)
+		status int
+		code   string
+	}{
+		{"withdrawn", func(c *fakeConsent) { delete(c.versions, pidOwner) }, 403, "consent_required"},
+		{"another text", func(c *fakeConsent) { c.versions[pidOwner] = "c2-link-v0" }, 403, "consent_required"},
+		{"unreadable", func(c *fakeConsent) { c.err = errors.New("mctl-api down") }, 503, "unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, defaultCaps())
+			code := e.issue("tok-owner")
+			e.consent.mu.Lock()
+			tc.set(e.consent)
+			e.consent.mu.Unlock()
+			r := e.preview(code)
+			wantRefusal(t, r, tc.status, tc.code)
+			if strings.Contains(r.raw, "***") {
+				t.Fatalf("identity shown without consent: %s", r.raw)
+			}
+		})
+	}
+}
+
+// Consent withdrawn between the preview and the store, with a positive answer
+// still cached by the gate: the upload reads the source again, refuses, and
+// stores nothing. (The cache is what the token check uses; the upload must not.)
+func TestLinkUploadIgnoresACachedConsent(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	g, err := consentgate.New(consentgate.Config{Source: e.consent, Version: linkflow.ConsentVersion})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.h.LinkConsent = g.LinkConsent
+	code := e.issue("tok-owner")
+	if r := e.preview(code); r.status != 200 {
+		t.Fatalf("preview: %d %s", r.status, r.raw)
+	}
+	if err := g.Admit(context.Background(), pidOwner); err != nil { // the cache is warm
+		t.Fatal(err)
+	}
+	e.consent.mu.Lock()
+	delete(e.consent.versions, pidOwner)
+	e.consent.mu.Unlock()
+	wantRefusal(t, e.upload(code, session("late")), 403, "consent_required")
+	if _, _, ok := e.h.LinkRow(pidOwner); ok || e.validations.Load() != 0 {
+		t.Fatalf("linked on a cached consent (validations %d)", e.validations.Load())
+	}
+}
+
+// No refusal or answer of the new checks carries a token, a code, a pid or a
+// session.
+func TestLinkNewRefusalsLeakNothing(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	code := e.issue("tok-owner")
+	var seen []string
+	for _, tok := range []string{"link-stale", "link-other", "tok-owner", "link-forged"} {
+		pv, up := e.previewAndUploadWith(code, "Bearer "+tok)
+		seen = append(seen, pv.raw, up.raw)
+	}
+	seen = append(seen, e.logs.String())
+	for _, s := range seen {
+		for _, secret := range []string{code, pidOwner, pidOther, "link-stale", "link-other", "tok-owner", "link-forged", "access-x"} {
+			if strings.Contains(s, secret) {
+				t.Fatalf("%q appears in %q", secret, s)
+			}
+		}
 	}
 }

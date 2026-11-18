@@ -48,6 +48,14 @@ type c2Config struct {
 	// control is the kill switch endpoint's identity (slice 5); zero value
 	// means the route is not mounted.
 	control controlConfig
+	// linkResource is the dedicated audience of the fresh-login token the
+	// glovo-link helper sends to /link/preview and /link/upload
+	// (GLOVO_LINK_RESOURCE, e.g. https://glovo.mctl.ai/link). Unset: those two
+	// routes answer 503 and no session can be linked; the MCP data plane and
+	// code issuing are unaffected. linkMaxAuthAge bounds the age of the
+	// token's auth_time (GLOVO_LINK_MAX_AUTH_AGE, default 5m, at most 15m).
+	linkResource   string
+	linkMaxAuthAge time.Duration
 	// basketWrites serves the basket mutation tools. No loader sets it (the
 	// environment cannot: see loadBasketWrites); it is the code seam of a
 	// future approval-gated change, and it needs basketApprover too.
@@ -56,6 +64,36 @@ type c2Config struct {
 	// write (mctl-api#1011/#1012). Nil: there is none, and newMCPRoutes then
 	// refuses to serve the write tools.
 	basketApprover basketApprover
+}
+
+// defaultLinkMaxAuthAge is how old a login may be when a session is
+// previewed or uploaded.
+const defaultLinkMaxAuthAge = 5 * time.Minute
+
+// loadLinkLogin reads GLOVO_LINK_RESOURCE and GLOVO_LINK_MAX_AUTH_AGE. A value
+// that is set but wrong stops the boot: it never falls back to the MCP
+// audience or a longer age.
+func loadLinkLogin(getenv func(string) string) (string, time.Duration, error) {
+	age := defaultLinkMaxAuthAge
+	if raw := strings.TrimSpace(getenv("GLOVO_LINK_MAX_AUTH_AGE")); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 || d > authn.MaxFreshLoginAge {
+			return "", 0, fmt.Errorf("GLOVO_LINK_MAX_AUTH_AGE: %q must be a duration within (0, %s]", raw, authn.MaxFreshLoginAge)
+		}
+		age = d
+	}
+	res := strings.TrimSpace(getenv("GLOVO_LINK_RESOURCE"))
+	if res == "" {
+		return "", age, nil
+	}
+	u, err := url.Parse(res)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", 0, errors.New("GLOVO_LINK_RESOURCE must be an absolute https URL without userinfo, query or fragment")
+	}
+	if res == config.Resource {
+		return "", 0, errors.New("GLOVO_LINK_RESOURCE must differ from the MCP resource: a link token must not open the MCP data plane")
+	}
+	return res, age, nil
 }
 
 // errBasketWritesNoGate is the startup error for GLOVO_C2_BASKET_WRITES=true.
@@ -127,6 +165,9 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 		c.vaultRole = "mctl-glovo"
 	}
 	if c.control, err = loadControl(getenv); err != nil {
+		return c2Config{}, err
+	}
+	if c.linkResource, c.linkMaxAuthAge, err = loadLinkLogin(getenv); err != nil {
 		return c2Config{}, err
 	}
 	if c.basketWrites, err = loadBasketWrites(getenv); err != nil { // never true: see loadBasketWrites
@@ -258,18 +299,7 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		closeDB()
 		return nil, noop, err
 	}
-	scfg := tokenstore.Config{
-		DB:           pg,
-		Transit:      transit,
-		Kill:         kill,
-		Logger:       log.With("component", "tokenstore"),
-		ValidateLink: validate,
-		// MaskIdentity needs mctl-api's identity lookup (C2-1c). Until
-		// then PreviewLink refuses, so the helper never uploads.
-		MaskIdentity:  nil,
-		ClientOptions: append([]glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()}, basketWriteOptions(c)...),
-	}
-	withLinkConsent(&scfg, gate)
+	scfg := storeConfig(c, pg, transit, kill, validate, consent, gate, log)
 	if err := withCaps(&scfg, c); err != nil {
 		closeDB()
 		return nil, noop, err
@@ -324,10 +354,16 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		return nil, noop, err
 	}
 	go sweepSessions(ctx, sessions)
+	linkVerifier, err := buildLinkVerifier(ctx, c, gate, admit, log)
+	if err != nil {
+		closeDB()
+		return nil, noop, err
+	}
 	h, err := linkflow.New(linkflow.Config{
 		Enabled:        true,
 		Store:          store,
 		Verifier:       verifier,
+		LinkVerifier:   linkVerifier,
 		Consent:        consent,
 		TrustedProxies: c.trustedProxies,
 		Log:            log.With("component", "linkflow"),
@@ -395,6 +431,68 @@ func verifierConfig(c c2Config, gate authn.Admitter, admit bool) authn.Config {
 		vcfg.Admitter = gate
 	}
 	return vcfg
+}
+
+// storeConfig is the token store's configuration without the caps: the
+// masked-identity lookup comes from mctl-api's consent route (nil without it,
+// so the preview refuses) and the upload re-checks consent through gate.
+func storeConfig(c c2Config, db tokenstore.DB, transit tokenstore.Transit, kill *tokenstore.KillSwitch,
+	validate func(context.Context, glovoapi.Session) error, consent linkflow.ConsentSource, gate *consentgate.Gate, log *slog.Logger) tokenstore.Config {
+	scfg := tokenstore.Config{
+		DB:            db,
+		Transit:       transit,
+		Kill:          kill,
+		Logger:        log.With("component", "tokenstore"),
+		ValidateLink:  validate,
+		MaskIdentity:  maskIdentityFrom(consent),
+		ClientOptions: append([]glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()}, basketWriteOptions(c)...),
+	}
+	withLinkConsent(&scfg, gate)
+	return scfg
+}
+
+// maskIdentityFrom is the store's masked-identity lookup: mctl-api's label
+// when the consent route is configured, nil otherwise (the preview then
+// refuses). pid is a string only because the store's seam takes one; it is
+// re-validated into a PID before the read.
+func maskIdentityFrom(src linkflow.ConsentSource) func(context.Context, string) (string, error) {
+	api, ok := src.(*linkflow.APIConsent)
+	if !ok {
+		return nil
+	}
+	return func(ctx context.Context, pid string) (string, error) {
+		return api.MaskedIdentity(ctx, tokenstore.PIDFrom(&authn.Principal{ID: pid}))
+	}
+}
+
+// linkVerifierConfig is the check on a preview or an upload: the dedicated
+// link audience and a fresh login. No grant is required (a link token is not
+// a data-plane token); the allowlist and the consent admission still apply.
+func linkVerifierConfig(c c2Config, gate authn.Admitter, admit bool) authn.Config {
+	vcfg := verifierConfig(c, gate, admit)
+	vcfg.Resource = c.linkResource
+	vcfg.RequireGrant = false
+	vcfg.MaxAuthAge = c.linkMaxAuthAge
+	return vcfg
+}
+
+// buildLinkVerifier returns the link-route verifier, or nil when
+// GLOVO_LINK_RESOURCE is unset (preview and upload then refuse).
+func buildLinkVerifier(ctx context.Context, c c2Config, gate authn.Admitter, admit bool, log *slog.Logger) (linkflow.Verifier, error) {
+	if c.linkResource == "" {
+		log.Warn("GLOVO_LINK_RESOURCE is unset: /link/preview and /link/upload refuse every request")
+		return nil, nil
+	}
+	v, err := authn.New(linkVerifierConfig(c, gate, admit))
+	if err != nil {
+		return nil, err
+	}
+	startCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := v.Refresh(startCtx); err != nil {
+		log.Warn("initial link jwks fetch failed", "error", err)
+	}
+	return v, nil
 }
 
 // withLinkConsent makes /link/upload re-check the consent through gate after
