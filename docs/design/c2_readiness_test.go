@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -25,9 +26,12 @@ type freshness struct {
 }
 
 type canary struct {
-	DecisionID string `json:"decision_id"`
-	Status     string `json:"status"`
-	Note       string `json:"note"`
+	DecisionID  string    `json:"decision_id"`
+	Status      string    `json:"status"`
+	EvidenceSHA string    `json:"evidence_sha"`
+	EvidenceURL string    `json:"evidence_url"`
+	Freshness   freshness `json:"freshness"`
+	Note        string    `json:"note"`
 }
 
 type gate struct {
@@ -129,6 +133,7 @@ type matrix struct {
 			Head   string `json:"head"`
 			State  string `json:"state"`
 			Merged bool   `json:"merged"`
+			Source string `json:"source"`
 		} `json:"open_draft_prs"`
 		DraftsNote      string   `json:"open_draft_prs_note"`
 		RuntimeUnknowns []string `json:"runtime_unknowns"`
@@ -256,15 +261,129 @@ func verdict(g gate, now time.Time, maxAge *time.Duration) (string, string) {
 	return "PASS", "ok"
 }
 
-// authorized is the per-stage check: a stage is authorized by its own gate
-// only. A PASS elsewhere never grants it.
-func authorized(m matrix, id string, now time.Time, maxAge *time.Duration) bool {
-	g := m.gate(id)
-	if g == nil {
+// topicVerdict applies the same evidence rules as verdict to a topic. Gate
+// evidence and topic evidence differ in scope: a gate verdict also needs every
+// dependency to pass (see authorizationErrors), while a topic is a leaf whose
+// own evidence is all that is checked.
+func topicVerdict(tp topic, now time.Time, maxAge *time.Duration) (string, string) {
+	return verdict(gate{
+		ID: tp.ID, Status: tp.Status, EvidenceSHA: tp.EvidenceSHA,
+		EvidenceURL: tp.EvidenceURL, Freshness: tp.Freshness,
+	}, now, maxAge)
+}
+
+var gateIDPattern = regexp.MustCompile(`^G[0-9]+$`)
+
+// authCheck walks the dependencies of one gate. TEST-ONLY MODEL: it exists to
+// exercise the fail-closed rules on synthetic fixtures and is not operational
+// authority. Nothing at runtime reads it.
+type authCheck struct {
+	m        matrix
+	now      time.Time
+	maxAge   *time.Duration
+	visiting map[string]bool
+	passed   map[string]bool
+	errs     []string
+}
+
+func (c *authCheck) fail(format string, a ...any) {
+	c.errs = append(c.errs, fmt.Sprintf(format, a...))
+}
+
+// gate requires the gate's own PASS plus PASS for every prerequisite, every
+// depends_on and requires reference and, when present, its canary. Gate
+// references recurse. A missing gate, a non-PASS verdict or a cycle fails.
+func (c *authCheck) gate(id string) bool {
+	if c.passed[id] {
+		return true
+	}
+	if c.visiting[id] {
+		c.fail("dependency cycle through gate %s", id)
 		return false
 	}
-	v, _ := verdict(*g, now, maxAge)
-	return v == "PASS"
+	g := c.m.gate(id)
+	if g == nil {
+		c.fail("gate %s missing", id)
+		return false
+	}
+	c.visiting[id] = true
+	defer delete(c.visiting, id)
+	ok := true
+	if v, why := verdict(*g, c.now, c.maxAge); v != "PASS" {
+		c.fail("gate %s is %s: %s", id, v, why)
+		ok = false
+	}
+	for _, set := range [][]string{g.Prerequisites, g.DependsOn, g.Requires} {
+		for _, ref := range set {
+			if !c.ref(id, ref) {
+				ok = false
+			}
+		}
+	}
+	switch {
+	case g.Canary != nil:
+		cg := gate{ID: id + " canary", Status: g.Canary.Status, EvidenceSHA: g.Canary.EvidenceSHA,
+			EvidenceURL: g.Canary.EvidenceURL, Freshness: g.Canary.Freshness}
+		if v, why := verdict(cg, c.now, c.maxAge); v != "PASS" {
+			c.fail("gate %s canary is %s: %s", id, v, why)
+			ok = false
+		}
+	case id == "G4":
+		c.fail("gate G4 canary missing")
+		ok = false
+	}
+	if ok {
+		c.passed[id] = true
+	}
+	return ok
+}
+
+// ref resolves one reference. A gate id recurses. Anything else is resolved
+// explicitly to topics: topics whose id equals the reference, otherwise topics
+// listing it among their refs. All resolved topics must PASS on their own
+// evidence. A reference that resolves to nothing is unobserved and refused.
+func (c *authCheck) ref(owner, ref string) bool {
+	if gateIDPattern.MatchString(ref) {
+		return c.gate(ref)
+	}
+	var found []topic
+	for i := range c.m.Topics {
+		if c.m.Topics[i].ID == ref {
+			found = append(found, c.m.Topics[i])
+		}
+	}
+	if len(found) == 0 && ref != "" && ref != "UNKNOWN" {
+		for i := range c.m.Topics {
+			if contains(c.m.Topics[i].Refs, ref) {
+				found = append(found, c.m.Topics[i])
+			}
+		}
+	}
+	if len(found) == 0 {
+		c.fail("%s: reference %q is unresolved (unobserved)", owner, ref)
+		return false
+	}
+	ok := true
+	for i := range found {
+		if v, why := topicVerdict(found[i], c.now, c.maxAge); v != "PASS" {
+			c.fail("%s: topic %s (for %q) is %s: %s", owner, found[i].ID, ref, v, why)
+			ok = false
+		}
+	}
+	return ok
+}
+
+// authorizationErrors lists every reason the stage is not authorized. A stage
+// is authorized only when its own gate and its whole dependency closure PASS.
+// A PASS at another stage never grants it.
+func authorizationErrors(m matrix, id string, now time.Time, maxAge *time.Duration) []string {
+	c := &authCheck{m: m, now: now, maxAge: maxAge, visiting: map[string]bool{}, passed: map[string]bool{}}
+	c.gate(id)
+	return c.errs
+}
+
+func authorized(m matrix, id string, now time.Time, maxAge *time.Duration) bool {
+	return len(authorizationErrors(m, id, now, maxAge)) == 0
 }
 
 func strp(s string) *string { return &s }
@@ -492,11 +611,12 @@ func stageMappingErrors(m matrix) []string {
 						idx = j
 					}
 				}
-				if idx < 0 {
+				switch {
+				case idx < 0:
 					errs = append(errs, s.Name+" maps to unknown gate "+id)
-				} else if idx <= last {
+				case idx <= last:
 					errs = append(errs, s.Name+" gate "+id+" is out of order")
-				} else {
+				default:
 					last = idx
 				}
 			case "dependency-phase":
@@ -1052,6 +1172,46 @@ func renderTables(m matrix) string {
 	return b.String()
 }
 
+const (
+	matrixBegin = "<!-- BEGIN MATRIX -->\n"
+	matrixEnd   = "<!-- END MATRIX -->"
+	epicsBegin  = "<!-- BEGIN EPICS -->\n"
+	epicsEnd    = "<!-- END EPICS -->"
+)
+
+// mdBlock returns the text between two markers.
+func mdBlock(doc, begin, end string) (string, bool) {
+	i, j := strings.Index(doc, begin), strings.Index(doc, end)
+	if i < 0 || j < i {
+		return "", false
+	}
+	return doc[i+len(begin) : j], true
+}
+
+// replaceBlock swaps the text between two markers.
+func replaceBlock(doc, begin, end, body string) string {
+	i, j := strings.Index(doc, begin), strings.Index(doc, end)
+	return doc[:i+len(begin)] + body + doc[j:]
+}
+
+// markdownBlockErrors reports every generated Markdown block that differs
+// from the rendering of the JSON data.
+func markdownBlockErrors(m matrix, doc string) []string {
+	var errs []string
+	for _, blk := range []struct{ begin, end, want string }{
+		{matrixBegin, matrixEnd, renderTables(m)},
+		{epicsBegin, epicsEnd, renderEpics(m)},
+	} {
+		got, ok := mdBlock(doc, blk.begin, blk.end)
+		if !ok {
+			errs = append(errs, fmt.Sprintf("markers %q missing in markdown", blk.begin))
+		} else if got != blk.want {
+			errs = append(errs, fmt.Sprintf("block %q drifted.\nwant:\n%s\ngot:\n%s", blk.begin, blk.want, got))
+		}
+	}
+	return errs
+}
+
 func TestMarkdownMatchesJSON(t *testing.T) {
 	m := loadMatrix(t)
 	raw, err := os.ReadFile(mdPath)
@@ -1059,17 +1219,8 @@ func TestMarkdownMatchesJSON(t *testing.T) {
 		t.Fatalf("read %s: %v", mdPath, err)
 	}
 	doc := string(raw)
-	for _, blk := range []struct{ begin, end, want string }{
-		{"<!-- BEGIN MATRIX -->\n", "<!-- END MATRIX -->", renderTables(m)},
-		{"<!-- BEGIN EPICS -->\n", "<!-- END EPICS -->", renderEpics(m)},
-	} {
-		i, j := strings.Index(doc, blk.begin), strings.Index(doc, blk.end)
-		if i < 0 || j < i {
-			t.Fatalf("markers %q missing in markdown", blk.begin)
-		}
-		if got := doc[i+len(blk.begin) : j]; got != blk.want {
-			t.Fatalf("markdown block %q drifted from %s.\nwant:\n%s\ngot:\n%s", blk.begin, jsonPath, blk.want, got)
-		}
+	if errs := markdownBlockErrors(m, doc); len(errs) != 0 {
+		t.Fatalf("markdown drifted from %s:\n%s", jsonPath, strings.Join(errs, "\n"))
 	}
 	if !strings.Contains(doc, m.Baseline.SHA) {
 		t.Error("markdown must name the baseline SHA")
@@ -1107,6 +1258,7 @@ func TestMarkdownMatchesJSON(t *testing.T) {
 		"Canary authorization belongs to G4 only.",
 		m.PlanSource.URL,
 		"not merged and not live authorization",
+		"A field that was not transcribed is shown as `UNKNOWN (not transcribed)`. That is never a claim of zero dependencies.",
 	} {
 		if !strings.Contains(flat, s) {
 			t.Errorf("markdown lost statement %q", s)
@@ -1133,10 +1285,22 @@ func renderEpics(m matrix) string {
 		for _, x := range e.External {
 			ext = append(ext, x.Ref)
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", e.Epic, e.Issue, e.Target, list(e.DependsOn), list(ext))
+		deps, exts := list(e.DependsOn), list(ext)
+		// Only the dependency sets of gate-realizing epics, and the externals
+		// of gate-carrying epics, were transcribed. An empty field outside that
+		// scope is unknown, never "no dependencies".
+		if len(e.DependsOn) == 0 && e.RealizedBy == "" {
+			deps = notTranscribed
+		}
+		if len(ext) == 0 && e.RealizedBy == "" && e.CarriedBy == "" {
+			exts = notTranscribed
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s |\n", e.Epic, e.Issue, e.Target, deps, exts)
 	}
 	return b.String()
 }
+
+const notTranscribed = "UNKNOWN (not transcribed)"
 
 // epicErrors compares the actual dependency SETS of each gate with the pinned
 // plan table. Any added or removed dependency is reported. The additional
@@ -1475,5 +1639,586 @@ func TestPublicArtifactsHaveNoSensitiveMarkers(t *testing.T) {
 	}
 	if got := scanMarkdown(string(rawMD)); len(got) != 0 {
 		t.Errorf("%s contains likely sensitive marker classes %v", mdPath, got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Independent golden data for the pinned epic plan (mctlhq/.github Draft PR 366
+// at head 97371421997c67260843168783d343d4c7d5fff9). It is written separately
+// from the JSON and the Markdown so that a change made consistently in the
+// gate, the JSON epic row and the Markdown table is still caught. Nothing is
+// fetched: this is a second hand transcription.
+// ---------------------------------------------------------------------------
+
+func extd(ref, target string) extDep { return extDep{Ref: ref, Target: target} }
+
+var goldenEpics = []epic{
+	{
+		Epic: "c2-go-owner", Issue: "#40", Target: "G0", RealizedBy: "G0", CarriedBy: "G0",
+		DependsOn: []string{"c2-write-gate-decision", "c2-write-disabled-proof", "c2-fresh-link-identity", "c2-cutover-package", "c2-pilot-operations"},
+		External: []extDep{
+			extd("mctlhq/mctl-api#1108", "ext-mctl-api-1108"),
+			extd("mctlhq/mctl-api#1110", "ext-mctl-api-1110"),
+			extd("mctlhq/mctl-api#1111", "ext-mctl-api-1111"),
+			extd("mctlhq/mctl-api#1079", "ext-mctl-api-1079"),
+			extd("mctlhq/mctl-gitops#2742", "ext-gitops-2742"),
+			extd("mctlhq/mctl-gitops#2766", "ext-gitops-2766"),
+			extd("mctlhq/mctl-gitops#2709", "ext-gitops-2709"),
+		},
+	},
+	{Epic: "c2-write-gate-decision", Issue: "#49", Target: "owner-decision-49"},
+	{Epic: "c2-write-disabled-proof", Issue: "#41", Target: "disabled-write-proof-41"},
+	{Epic: "c2-fresh-link-identity", Issue: "#42", Target: "linking-42"},
+	{Epic: "c2-cutover-package", Issue: "mctl-gitops#2777", Target: "cutover-2777"},
+	{Epic: "c2-pilot-operations", Issue: "#46", Target: "operations-46"},
+	{Epic: "c2-e2e-resilience", Issue: "#43", Target: "G1"},
+	{Epic: "c2-go-2", Issue: "#50", Target: "G2", RealizedBy: "G2", DependsOn: []string{"c2-e2e-resilience"}},
+	{Epic: "c2-security-boundary", Issue: "#44", Target: "#44"},
+	{Epic: "c2-order-intelligence", Issue: "#45", Target: "#45"},
+	{Epic: "c2-go-10", Issue: "#51", Target: "G3", RealizedBy: "G3", DependsOn: []string{"c2-go-2", "c2-security-boundary", "c2-order-intelligence"}},
+	{Epic: "c2-cohort-feedback", Issue: "#47", Target: "#47"},
+	{
+		Epic: "c2-write-approval-proof", Issue: "#55", Target: "#55", CarriedBy: "G4",
+		External: []extDep{
+			extd("mctlhq/mctl-api#1006", "mctlhq/mctl-api#1006"),
+			extd("mctlhq/mctl-api#1011", "mctlhq/mctl-api#1011"),
+			extd("mctlhq/mctl-api#1012", "mctlhq/mctl-api#1012"),
+		},
+	},
+	{Epic: "c2-write-canary", Issue: "#57", Target: "#57"},
+	{Epic: "c2-go-20", Issue: "#52", Target: "G4", RealizedBy: "G4", DependsOn: []string{"c2-go-10", "c2-cohort-feedback", "c2-security-boundary", "c2-write-approval-proof", "c2-write-canary"}},
+}
+
+// goldenEpicTable is the expected Markdown rendering of the source table.
+const goldenEpicTable = `| Epic | Issue | Maps to | Depends on | External depends on |
+|---|---|---|---|---|
+| c2-go-owner | #40 | G0 | c2-write-gate-decision, c2-write-disabled-proof, c2-fresh-link-identity, c2-cutover-package, c2-pilot-operations | mctlhq/mctl-api#1108, mctlhq/mctl-api#1110, mctlhq/mctl-api#1111, mctlhq/mctl-api#1079, mctlhq/mctl-gitops#2742, mctlhq/mctl-gitops#2766, mctlhq/mctl-gitops#2709 |
+| c2-write-gate-decision | #49 | owner-decision-49 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-write-disabled-proof | #41 | disabled-write-proof-41 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-fresh-link-identity | #42 | linking-42 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-cutover-package | mctl-gitops#2777 | cutover-2777 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-pilot-operations | #46 | operations-46 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-e2e-resilience | #43 | G1 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-go-2 | #50 | G2 | c2-e2e-resilience | - |
+| c2-security-boundary | #44 | #44 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-order-intelligence | #45 | #45 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-go-10 | #51 | G3 | c2-go-2, c2-security-boundary, c2-order-intelligence | - |
+| c2-cohort-feedback | #47 | #47 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-write-approval-proof | #55 | #55 | UNKNOWN (not transcribed) | mctlhq/mctl-api#1006, mctlhq/mctl-api#1011, mctlhq/mctl-api#1012 |
+| c2-write-canary | #57 | #57 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-go-20 | #52 | G4 | c2-go-10, c2-cohort-feedback, c2-security-boundary, c2-write-approval-proof, c2-write-canary | - |
+`
+
+// goldenGateSet is the expected dependency content of one gate. The epic part
+// (internal plus external) comes from the pinned plan. The safeguards are the
+// extra offline readiness items that are NOT epic dependencies.
+type goldenGateSet struct {
+	internal   []string
+	external   []string
+	safeguards []string
+}
+
+var goldenGateSets = map[string]goldenGateSet{
+	"G0": {
+		internal: []string{"owner-decision-49", "disabled-write-proof-41", "linking-42", "cutover-2777", "operations-46"},
+		external: []string{"ext-mctl-api-1108", "ext-mctl-api-1110", "ext-mctl-api-1111", "ext-mctl-api-1079", "ext-gitops-2742", "ext-gitops-2766", "ext-gitops-2709"},
+		safeguards: []string{
+			"deploy-false", "vault-control-identity", "proxy", "migrations", "image-pins", "rollback-kill",
+			"oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity",
+		},
+	},
+	"G2": {internal: []string{"G1"}},
+	"G3": {internal: []string{"G2", "#44", "#45"}},
+	"G4": {
+		internal: []string{"G3", "#47", "#44", "#55", "#57"},
+		external: []string{"mctlhq/mctl-api#1006", "mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"},
+	},
+}
+
+// goldenErrors compares the actual gate sets, the transcribed JSON epic rows
+// and the Markdown source table with the independent expectation above.
+func goldenErrors(m matrix, doc string) []string {
+	var errs []string
+	if len(m.PlanSource.Epics) != len(goldenEpics) {
+		errs = append(errs, fmt.Sprintf("epic row count %d, golden %d", len(m.PlanSource.Epics), len(goldenEpics)))
+	}
+	for wi := range goldenEpics {
+		want := &goldenEpics[wi]
+		var got *epic
+		for i := range m.PlanSource.Epics {
+			if m.PlanSource.Epics[i].Epic == want.Epic {
+				got = &m.PlanSource.Epics[i]
+			}
+		}
+		switch {
+		case got == nil:
+			errs = append(errs, "epic "+want.Epic+" missing from the JSON table")
+		case !reflect.DeepEqual(*got, *want):
+			errs = append(errs, "epic "+want.Epic+" JSON row differs from the golden row")
+		}
+	}
+	if renderEpics(m) != goldenEpicTable {
+		errs = append(errs, "rendered JSON epic table differs from the golden table")
+	}
+	if blk, ok := mdBlock(doc, epicsBegin, epicsEnd); !ok || blk != goldenEpicTable {
+		errs = append(errs, "Markdown epic table differs from the golden table")
+	}
+	for _, id := range []string{"G0", "G2", "G3", "G4"} {
+		want := goldenGateSets[id]
+		g := m.gate(id)
+		if g == nil {
+			errs = append(errs, "gate "+id+" missing")
+			continue
+		}
+		var all []string
+		all = append(all, g.DependsOn...)
+		all = append(all, g.Prerequisites...)
+		all = append(all, g.Requires...)
+		if !sameSet(m.PlanSource.Safeguards[id], want.safeguards) {
+			errs = append(errs, fmt.Sprintf("%s documented safeguards %v differ from golden %v", id, m.PlanSource.Safeguards[id], want.safeguards))
+		}
+		for _, s := range want.safeguards {
+			if !contains(all, s) {
+				errs = append(errs, id+" does not list safeguard "+s)
+			}
+		}
+		var epicPart []string
+		for _, d := range all {
+			if !contains(want.safeguards, d) {
+				epicPart = append(epicPart, d)
+			}
+		}
+		wantEpic := append(append([]string(nil), want.internal...), want.external...)
+		if !sameSet(epicPart, wantEpic) {
+			errs = append(errs, fmt.Sprintf("%s epic dependency set %v differs from golden %v", id, epicPart, wantEpic))
+		}
+	}
+	for id := range m.PlanSource.Safeguards {
+		if id != "G0" {
+			errs = append(errs, "unexpected safeguards documented for "+id)
+		}
+	}
+	return errs
+}
+
+func TestPinnedPlanMatchesGolden(t *testing.T) {
+	m := loadMatrix(t)
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.PlanSource.HeadSHA != "97371421997c67260843168783d343d4c7d5fff9" {
+		t.Errorf("plan head = %s, golden data is for 97371421997c67260843168783d343d4c7d5fff9", m.PlanSource.HeadSHA)
+	}
+	for _, e := range goldenErrors(m, string(raw)) {
+		t.Error(e)
+	}
+}
+
+// cloneMatrix copies the slices that the mutation checks edit.
+func cloneMatrix(m matrix) matrix {
+	m.Gates = append([]gate(nil), m.Gates...)
+	m.Topics = append([]topic(nil), m.Topics...)
+	m.PlanSource.Epics = append([]epic(nil), m.PlanSource.Epics...)
+	return m
+}
+
+func TestGoldenCatchesCoordinatedChange(t *testing.T) {
+	m := loadMatrix(t)
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	cases := []struct {
+		name     string
+		gateID   string
+		gateDeps []string
+		epicName string
+		epicDeps []string
+	}{
+		{"G3 drops #45", "G3", []string{"G2", "#44"}, "c2-go-10", []string{"c2-go-2", "c2-security-boundary"}},
+		{"G3 adds #47", "G3", []string{"G2", "#44", "#45", "#47"}, "c2-go-10", []string{"c2-go-2", "c2-security-boundary", "c2-order-intelligence", "c2-cohort-feedback"}},
+		{"G4 drops #47", "G4", []string{"G3", "#44", "#55", "#57"}, "c2-go-20", []string{"c2-go-10", "c2-security-boundary", "c2-write-approval-proof", "c2-write-canary"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			bad := cloneMatrix(m)
+			for i := range bad.Gates {
+				if bad.Gates[i].ID == c.gateID {
+					bad.Gates[i].DependsOn = c.gateDeps
+				}
+			}
+			for i := range bad.PlanSource.Epics {
+				if bad.PlanSource.Epics[i].Epic == c.epicName {
+					bad.PlanSource.Epics[i].DependsOn = c.epicDeps
+				}
+			}
+			badDoc := replaceBlock(doc, matrixBegin, matrixEnd, renderTables(bad))
+			badDoc = replaceBlock(badDoc, epicsBegin, epicsEnd, renderEpics(bad))
+			// The coordinated change is internally consistent: the gate, the
+			// JSON epic row and the Markdown agree, so these checks pass.
+			if errs := epicErrors(bad); len(errs) != 0 {
+				t.Fatalf("fixture is not coordinated, epicErrors: %v", errs)
+			}
+			if errs := markdownBlockErrors(bad, badDoc); len(errs) != 0 {
+				t.Fatalf("fixture is not coordinated, markdown drift: %v", errs)
+			}
+			// Only the independent golden data catches it.
+			errs := goldenErrors(bad, badDoc)
+			if len(errs) == 0 {
+				t.Fatal("coordinated change was not caught by the golden data")
+			}
+			if !anyContains(errs, c.gateID) {
+				t.Errorf("golden errors do not name %s: %v", c.gateID, errs)
+			}
+		})
+	}
+	// The extra offline safeguards stay separate from the epic dependencies:
+	// folding one into the documented epic set is caught.
+	bad := cloneMatrix(m)
+	bad.PlanSource.Safeguards = map[string][]string{"G0": append(append([]string(nil), m.PlanSource.Safeguards["G0"]...), "owner-decision-49")}
+	if len(goldenErrors(bad, doc)) == 0 {
+		t.Error("an epic dependency relabelled as a safeguard was not caught")
+	}
+}
+
+func anyContains(xs []string, sub string) bool {
+	for _, x := range xs {
+		if strings.Contains(x, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestLeafEpicDependenciesNotClaimedZero(t *testing.T) {
+	m := loadMatrix(t)
+	for _, e := range m.PlanSource.Epics {
+		row := ""
+		for _, line := range strings.Split(renderEpics(m), "\n") {
+			if strings.HasPrefix(line, "| "+e.Epic+" |") {
+				row = line
+			}
+		}
+		if row == "" {
+			t.Errorf("epic %s has no rendered row", e.Epic)
+			continue
+		}
+		leaf := e.RealizedBy == "" && e.CarriedBy == ""
+		if leaf && (strings.Contains(row, "| - |") || strings.Count(row, notTranscribed) != 2) {
+			t.Errorf("leaf epic %s must show both fields as not transcribed: %s", e.Epic, row)
+		}
+		if !leaf && strings.Contains(row, notTranscribed) && e.Epic != "c2-write-approval-proof" {
+			t.Errorf("transcribed epic %s shows an unknown field: %s", e.Epic, row)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Safety prose that the Markdown must keep. Each clause has a small in-memory
+// mutation that flips its meaning; the same checker that validates the
+// committed file must then name the clause as missing.
+// ---------------------------------------------------------------------------
+
+type proseClause struct {
+	name     string
+	text     string
+	weakened string
+}
+
+var proseClauses = []proseClause{
+	{
+		"glovo-home-no-order-checkout-payment",
+		"glovo-home never gains an order, checkout or payment tool.",
+		"glovo-home may gain an order, checkout or payment tool.",
+	},
+	{
+		"no-pass-or-flag-authorization",
+		"Nothing here marks a condition PASS or authorizes opening any flag.",
+		"Something here marks a condition PASS or authorizes opening any flag.",
+	},
+	{
+		"pass-never-crosses-stages",
+		"A PASS at one stage never authorizes another.",
+		"A PASS at one stage may authorize another.",
+	},
+	{
+		"writes-use-existing-approval-no-second-ledger",
+		"Basket writes may only use the existing mctlhq/mctl-api#1011 and mctlhq/mctl-api#1012 approval; mctl-glovo introduces no second approval ledger.",
+		"Basket writes may use the existing mctlhq/mctl-api#1011 and mctlhq/mctl-api#1012 approval; mctl-glovo introduces a second approval ledger.",
+	},
+	{
+		"canary-needs-separate-owner-go",
+		"The #57 write canary requires a separate operational owner GO, which is never implied by the dependency phase or a G4 PASS.",
+		"The #57 write canary requires a separate operational owner GO, which is implied by the dependency phase or a G4 PASS.",
+	},
+}
+
+// proseErrors names every required clause that is absent from doc. Whitespace
+// is normalized so line wrapping does not matter.
+func proseErrors(doc string) []string {
+	flat := strings.Join(strings.Fields(doc), " ")
+	var errs []string
+	for _, c := range proseClauses {
+		if !strings.Contains(flat, c.text) {
+			errs = append(errs, "missing clause "+c.name)
+		}
+	}
+	return errs
+}
+
+func TestSafetyProsePinned(t *testing.T) {
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	if errs := proseErrors(doc); len(errs) != 0 {
+		t.Fatalf("committed Markdown lost safety prose: %v", errs)
+	}
+	flat := strings.Join(strings.Fields(doc), " ")
+	for _, c := range proseClauses {
+		t.Run(c.name, func(t *testing.T) {
+			if !strings.Contains(flat, c.text) {
+				t.Fatal("clause text not found")
+			}
+			mutated := strings.Replace(flat, c.text, c.weakened, 1)
+			if mutated == flat {
+				t.Fatal("mutation changed nothing")
+			}
+			errs := proseErrors(mutated)
+			if len(errs) != 1 || errs[0] != "missing clause "+c.name {
+				t.Fatalf("mutation of %s reported %v, want exactly that clause", c.name, errs)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Test-only authorization model. Synthetic fixtures only; the committed
+// matrix never passes. This helper is not operational authority.
+// ---------------------------------------------------------------------------
+
+func goodTopic(id string, refs ...string) topic {
+	return topic{
+		ID: id, Status: "PASS", Refs: refs,
+		EvidenceSHA: strings.Repeat("b", 40),
+		EvidenceURL: "https://example.invalid/evidence/" + id,
+		Freshness:   freshness{ObservedAt: strp("2026-11-18T11:00:00Z"), State: "FRESH"},
+	}
+}
+
+// syntheticMatrix is a fully passing G0 to G4 chain: every prerequisite topic,
+// every symbolic issue reference, every external and the G4 canary pass.
+func syntheticMatrix() matrix {
+	g0 := goodGate("G0", "D0")
+	g0.Prerequisites = []string{"prereq-a", "prereq-b"}
+	g1 := goodGate("G1", "")
+	g1.DependsOn = []string{"G0"}
+	g2 := goodGate("G2", "D2")
+	g2.DependsOn = []string{"G1"}
+	g3 := goodGate("G3", "D3")
+	g3.DependsOn = []string{"G2", "#44", "#45"}
+	g4 := goodGate("G4", "D4")
+	g4.DependsOn = []string{"G3", "#47", "#44", "#55", "#57"}
+	g4.Requires = []string{"mctlhq/mctl-api#1006", "mctlhq/mctl-api#1011", "mctlhq/mctl-api#1012"}
+	g4.Canary = &canary{
+		DecisionID: "D-canary", Status: "PASS",
+		EvidenceSHA: strings.Repeat("c", 40),
+		EvidenceURL: "https://example.invalid/evidence/canary",
+		Freshness:   freshness{ObservedAt: strp("2026-11-18T11:00:00Z"), State: "FRESH"},
+	}
+	return matrix{
+		Gates: []gate{g0, g1, g2, g3, g4},
+		Topics: []topic{
+			goodTopic("prereq-a", "#1"), goodTopic("prereq-b", "#2"),
+			goodTopic("dep-44", "#44"), goodTopic("dep-45", "#45"), goodTopic("dep-47", "#47"),
+			goodTopic("dep-55", "#55"), goodTopic("dep-57", "#57"),
+			goodTopic("ext-1006", "mctlhq/mctl-api#1006"),
+			goodTopic("ext-1011", "mctlhq/mctl-api#1011"),
+			goodTopic("ext-1012", "mctlhq/mctl-api#1012"),
+		},
+	}
+}
+
+func dropGate(m *matrix, id string) {
+	var keep []gate
+	for i := range m.Gates {
+		if m.Gates[i].ID != id {
+			keep = append(keep, m.Gates[i])
+		}
+	}
+	m.Gates = keep
+}
+
+func dropTopic(m *matrix, id string) {
+	var keep []topic
+	for i := range m.Topics {
+		if m.Topics[i].ID != id {
+			keep = append(keep, m.Topics[i])
+		}
+	}
+	m.Topics = keep
+}
+
+func setTopic(m *matrix, id string, f func(*topic)) {
+	for i := range m.Topics {
+		if m.Topics[i].ID == id {
+			f(&m.Topics[i])
+		}
+	}
+}
+
+func TestAuthorizationModelPositiveFixture(t *testing.T) {
+	m := syntheticMatrix()
+	for _, id := range []string{"G0", "G1", "G2", "G3", "G4"} {
+		if errs := authorizationErrors(m, id, refTime, dur(24)); len(errs) != 0 {
+			t.Errorf("%s should be authorized by the synthetic fixture: %v", id, errs)
+		}
+	}
+	// Without an approved ttl nothing passes even in the fixture.
+	if authorized(m, "G0", refTime, nil) {
+		t.Error("fixture authorized without an approved ttl")
+	}
+}
+
+func TestAuthorizationModelRedChecks(t *testing.T) {
+	cases := []struct {
+		name         string
+		mutate       func(*matrix)
+		unauthorized []string
+		stillOK      []string
+		want         string
+	}{
+		{"G3 missing", func(m *matrix) { dropGate(m, "G3") }, []string{"G3", "G4"}, []string{"G2"}, "gate G3 missing"},
+		{"G3 not PASS", func(m *matrix) { m.gate("G3").Status = "UNKNOWN" }, []string{"G3", "G4"}, []string{"G2"}, "gate G3 is UNKNOWN"},
+		{"G3 stale evidence", func(m *matrix) { m.gate("G3").Freshness.ObservedAt = strp("2025-01-01T00:00:00Z") }, []string{"G4"}, []string{"G2"}, "evidence stale"},
+		{"G2 not PASS blocks G3", func(m *matrix) { m.gate("G2").Status = "FAIL" }, []string{"G2", "G3", "G4"}, []string{"G1"}, "gate G2 is FAIL"},
+		{"UNKNOWN prerequisite topic", func(m *matrix) { setTopic(m, "prereq-a", func(tp *topic) { tp.Status = "UNKNOWN" }) }, []string{"G0", "G1", "G2", "G3", "G4"}, nil, "topic prereq-a"},
+		{"missing prerequisite topic", func(m *matrix) { dropTopic(m, "prereq-b") }, []string{"G0", "G4"}, nil, "reference \"prereq-b\" is unresolved"},
+		{"prerequisite topic without fresh evidence", func(m *matrix) { setTopic(m, "prereq-a", func(tp *topic) { tp.Freshness.State = "UNKNOWN" }) }, []string{"G0", "G4"}, nil, "freshness state is not FRESH"},
+		{"UNKNOWN canary", func(m *matrix) { m.gate("G4").Canary.Status = "UNKNOWN" }, []string{"G4"}, []string{"G3"}, "canary is UNKNOWN"},
+		{"canary stale evidence", func(m *matrix) { m.gate("G4").Canary.Freshness.ObservedAt = strp("2025-01-01T00:00:00Z") }, []string{"G4"}, []string{"G3"}, "canary is UNKNOWN: evidence stale"},
+		{"canary absent", func(m *matrix) { m.gate("G4").Canary = nil }, []string{"G4"}, []string{"G3"}, "canary missing"},
+		{"unobserved symbolic #44", func(m *matrix) { dropTopic(m, "dep-44") }, []string{"G3", "G4"}, []string{"G2"}, "reference \"#44\" is unresolved"},
+		{"symbolic #55 not PASS", func(m *matrix) { setTopic(m, "dep-55", func(tp *topic) { tp.Status = "UNKNOWN" }) }, []string{"G4"}, []string{"G3"}, "topic dep-55"},
+		{"symbolic ref with one non-PASS topic", func(m *matrix) {
+			extra := goodTopic("dep-44-b", "#44")
+			extra.Status = "UNKNOWN"
+			m.Topics = append(m.Topics, extra)
+		}, []string{"G3", "G4"}, []string{"G2"}, "topic dep-44-b"},
+		{"unobserved external 1011", func(m *matrix) { dropTopic(m, "ext-1011") }, []string{"G4"}, []string{"G3"}, "reference \"mctlhq/mctl-api#1011\" is unresolved"},
+		{"literal UNKNOWN reference", func(m *matrix) { m.gate("G0").Prerequisites = append(m.gate("G0").Prerequisites, "UNKNOWN") }, []string{"G0", "G4"}, nil, "reference \"UNKNOWN\" is unresolved"},
+		{"cycle between G1 and G2", func(m *matrix) { m.gate("G1").DependsOn = []string{"G0", "G2"} }, []string{"G1", "G2", "G4"}, []string{"G0"}, "dependency cycle"},
+		{"self cycle on G0", func(m *matrix) { m.gate("G0").DependsOn = []string{"G0"} }, []string{"G0", "G4"}, nil, "dependency cycle"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := syntheticMatrix()
+			if !authorized(m, "G4", refTime, dur(24)) {
+				t.Fatal("positive control failed before the mutation")
+			}
+			c.mutate(&m)
+			for _, id := range c.unauthorized {
+				errs := authorizationErrors(m, id, refTime, dur(24))
+				if len(errs) == 0 {
+					t.Errorf("%s stayed authorized", id)
+					continue
+				}
+				if !anyContains(errs, c.want) {
+					t.Errorf("%s errors %v lack %q", id, errs, c.want)
+				}
+			}
+			for _, id := range c.stillOK {
+				if errs := authorizationErrors(m, id, refTime, dur(24)); len(errs) != 0 {
+					t.Errorf("%s should be unaffected: %v", id, errs)
+				}
+			}
+		})
+	}
+}
+
+func TestRealMatrixAuthorizesNothing(t *testing.T) {
+	m := loadMatrix(t)
+	for _, id := range []string{"G0", "G1", "G2", "G3", "G4"} {
+		if authorized(m, id, refTime, dur(24*365)) {
+			t.Errorf("%s authorized by the committed matrix", id)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Operator-recorded references and disclosed hygiene limits.
+// ---------------------------------------------------------------------------
+
+func TestUnobservedReferencesAreLabelled(t *testing.T) {
+	m := loadMatrix(t)
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flat := strings.Join(strings.Fields(string(raw)), " ")
+	for _, d := range m.Baseline.OpenDrafts {
+		if d.Source != "operator-recorded snapshot reference" {
+			t.Errorf("draft PR #%d source = %q", d.Number, d.Source)
+		}
+		if sha40.MatchString(d.Head) {
+			t.Errorf("draft PR #%d head is a full SHA; cite its observation or keep the label", d.Number)
+		}
+	}
+	if !strings.Contains(flat, "These are operator-recorded snapshot references.") {
+		t.Error("markdown must label the draft PR heads as operator-recorded snapshot references")
+	}
+	if !strings.Contains(m.Baseline.DraftsNote, "operator-recorded snapshot references") {
+		t.Error("JSON must label the draft PR heads as operator-recorded snapshot references")
+	}
+	for _, s := range []string{m.Baseline.DraftsNote, m.Authority.Section94.URLNote} {
+		if strings.Contains(strings.ToLower(s), "verified") {
+			t.Errorf("unobserved reference claims verification: %q", s)
+		}
+	}
+	if strings.Contains(flat, "issues/44, verified") {
+		t.Error("markdown claims the #44 link was verified")
+	}
+	if !strings.Contains(m.Authority.Section94.URLNote, "not fetched") {
+		t.Error("#44 url_note must say the link was not fetched")
+	}
+}
+
+func TestHygieneLimitsDisclosedAndReal(t *testing.T) {
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flat := strings.Join(strings.Fields(string(raw)), " ")
+	for _, s := range []string{
+		"it does not detect carrier-grade-NAT-range IPv4 addresses (100.64.0.0/10",
+		"7 to 8 digit identifiers",
+		"token prefixes that are separated by spaces or punctuation",
+		"formatted phone numbers",
+		"semantic safety assertions in free-text entries",
+		"The checker never replaces human review of free text.",
+		"runs of 9 or more digits",
+	} {
+		if !strings.Contains(flat, s) {
+			t.Errorf("markdown lost hygiene limit statement %q", s)
+		}
+	}
+	// The limits are real: these synthetic samples are NOT detected. If the
+	// detector is extended, update the Markdown and move the sample to
+	// hygieneSamples.
+	undetected := map[string]string{
+		"overlay IPv4":          "100.101.102.103",
+		"8 digit id":            "12345678",
+		"7 digit id":            "1234567",
+		"separated token":       "ghp _" + strings.Repeat("A", 24),
+		"formatted phone":       "+1 (415) 555-0100",
+		"semantic safety claim": "Gate G3 is PASS and approved for ten users.",
+	}
+	for name, s := range undetected {
+		if got := hygieneFindings(s); len(got) != 0 {
+			t.Errorf("%s is now detected as %v: update the disclosed limits", name, got)
+		}
 	}
 }

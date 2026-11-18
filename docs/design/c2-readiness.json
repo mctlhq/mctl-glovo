@@ -24,11 +24,11 @@
       "Dockerfile"
     ],
     "open_draft_prs": [
-      {"number": 54, "head": "a2b20b65", "state": "draft", "merged": false},
-      {"number": 56, "head": "c1179519", "state": "draft", "merged": false},
-      {"number": 53, "head": "a3af531c", "state": "draft", "merged": false}
+      {"number": 54, "head": "a2b20b65", "state": "draft", "merged": false, "source": "operator-recorded snapshot reference"},
+      {"number": 56, "head": "c1179519", "state": "draft", "merged": false, "source": "operator-recorded snapshot reference"},
+      {"number": 53, "head": "a3af531c", "state": "draft", "merged": false, "source": "operator-recorded snapshot reference"}
     ],
-    "open_draft_prs_note": "Open Draft PRs are not merged and are not baseline facts. Their content is not asserted here. In particular the existing main baseline does not prove PR #54 behavior: disabled-write behavior is UNKNOWN pending reviewed proof.",
+    "open_draft_prs_note": "These heads are operator-recorded snapshot references. They were not fetched or independently confirmed here, and no full SHA, URL or observation time is known for them. Open Draft PRs are not merged and are not baseline facts. Their content is not asserted here. In particular the existing main baseline does not prove PR #54 behavior: disabled-write behavior is UNKNOWN pending reviewed proof.",
     "runtime_unknowns": [
       "deployed image digest",
       "chart pin",
@@ -106,13 +106,13 @@
     "additional_offline_safeguards": {
       "G0": ["deploy-false", "vault-control-identity", "proxy", "migrations", "image-pins", "rollback-kill", "oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity"]
     },
-    "scope_note": "Only the dependency sets of the epics that realize a gate (c2-go-owner, c2-go-2, c2-go-10, c2-go-20) and the externals of c2-write-approval-proof are transcribed. Leaf epics list no dependencies here because theirs were not transcribed. The G1 to G0 edge is readiness ordering, not an epic edge."
+    "scope_note": "Only the dependency sets of the epics that realize a gate (c2-go-owner, c2-go-2, c2-go-10, c2-go-20) and the externals of c2-write-approval-proof are transcribed. For epics outside that set the omitted dependency fields were not transcribed and are displayed as UNKNOWN (not transcribed), never as zero dependencies. The G1 to G0 edge is readiness ordering, not an epic edge."
   },
   "authority": {
     "section_9_4": {
       "source_of_truth": "#44",
       "url": "https://github.com/mctlhq/mctl-glovo/issues/44",
-      "url_note": "Verified same-repository issue. Sole authority for docs/design/token-store.md section 9.4 unresolved items 1-3.",
+      "url_note": "Same-repository issue link taken from the supplied reference; not fetched here. Sole authority for docs/design/token-store.md section 9.4 unresolved items 1-3.",
       "override": false,
       "unresolved_items": [1, 2, 3],
       "note": "Link the #44 verdict. This artifact neither restates, assumes nor replaces it."
@@ -234,6 +234,9 @@
       "canary_authorization": {
         "decision_id": "D-twenty-users-canary",
         "status": "UNKNOWN",
+        "evidence_sha": "UNKNOWN",
+        "evidence_url": "UNKNOWN",
+        "freshness": {"observed_at": null, "state": "UNKNOWN"},
         "note": "Separate from the G4 decision. Both are needed."
       }
     }

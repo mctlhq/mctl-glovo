@@ -53,9 +53,20 @@ Issue: https://github.com/mctlhq/mctl-glovo/issues/40.
 - The order, checkout, payment and place_order surfaces are forbidden at every stage.
 - Allowed surfaces are explicit allowlists: G0 none, G1 to G3 read only, G4
   read and basket-write only.
+- Basket writes may only use the existing mctlhq/mctl-api#1011 and
+  mctlhq/mctl-api#1012 approval; mctl-glovo introduces no second approval
+  ledger.
+- The #57 write canary requires a separate operational owner GO, which is
+  never implied by the dependency phase or a G4 PASS.
 - Public-artifact hygiene is a heuristic test of this file and the JSON
-  (principal identifiers, private-network host suffixes, token prefixes, long
-  digit runs, order-content markers). It does not claim to find all private data.
+  (principal identifiers, private-network host suffixes, token prefixes, runs
+  of 9 or more digits, order-content markers). It does not claim to find all
+  private data. Known limits: it does not detect carrier-grade-NAT-range IPv4
+  addresses (100.64.0.0/10, used by private overlay networks), 7 to 8 digit
+  identifiers, token prefixes that are separated by spaces or punctuation,
+  formatted phone numbers, or semantic safety assertions in free-text entries
+  (for example a note claiming that something passed or is approved). The
+  checker never replaces human review of free text.
 
 ## 2. Evidence freshness (proposals, not approved)
 
@@ -94,7 +105,9 @@ SHA. A path existing is not proof of deployed or runtime behavior:
 - `deploy/mac-mini/tinyproxy.conf`
 - `Dockerfile`
 
-Open Draft PRs, separate from the baseline and not merged:
+Open Draft PRs, separate from the baseline and not merged. These are
+operator-recorded snapshot references. They were not fetched or independently
+confirmed here: no full SHA, URL or observation time is known for them.
 
 - #54 (head `a2b20b65`)
 - #56 (head `c1179519`)
@@ -182,23 +195,27 @@ dependency sets of the epics that realize a gate, and the externals of
 c2-write-approval-proof, are transcribed. The G1 to G0 edge is readiness
 ordering, not an epic edge.
 
+A field that was not transcribed is shown as `UNKNOWN (not transcribed)`. That
+is never a claim of zero dependencies. A `-` appears only where the field was
+transcribed and is empty.
+
 <!-- BEGIN EPICS -->
 | Epic | Issue | Maps to | Depends on | External depends on |
 |---|---|---|---|---|
 | c2-go-owner | #40 | G0 | c2-write-gate-decision, c2-write-disabled-proof, c2-fresh-link-identity, c2-cutover-package, c2-pilot-operations | mctlhq/mctl-api#1108, mctlhq/mctl-api#1110, mctlhq/mctl-api#1111, mctlhq/mctl-api#1079, mctlhq/mctl-gitops#2742, mctlhq/mctl-gitops#2766, mctlhq/mctl-gitops#2709 |
-| c2-write-gate-decision | #49 | owner-decision-49 | - | - |
-| c2-write-disabled-proof | #41 | disabled-write-proof-41 | - | - |
-| c2-fresh-link-identity | #42 | linking-42 | - | - |
-| c2-cutover-package | mctl-gitops#2777 | cutover-2777 | - | - |
-| c2-pilot-operations | #46 | operations-46 | - | - |
-| c2-e2e-resilience | #43 | G1 | - | - |
+| c2-write-gate-decision | #49 | owner-decision-49 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-write-disabled-proof | #41 | disabled-write-proof-41 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-fresh-link-identity | #42 | linking-42 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-cutover-package | mctl-gitops#2777 | cutover-2777 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-pilot-operations | #46 | operations-46 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-e2e-resilience | #43 | G1 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
 | c2-go-2 | #50 | G2 | c2-e2e-resilience | - |
-| c2-security-boundary | #44 | #44 | - | - |
-| c2-order-intelligence | #45 | #45 | - | - |
+| c2-security-boundary | #44 | #44 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-order-intelligence | #45 | #45 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
 | c2-go-10 | #51 | G3 | c2-go-2, c2-security-boundary, c2-order-intelligence | - |
-| c2-cohort-feedback | #47 | #47 | - | - |
-| c2-write-approval-proof | #55 | #55 | - | mctlhq/mctl-api#1006, mctlhq/mctl-api#1011, mctlhq/mctl-api#1012 |
-| c2-write-canary | #57 | #57 | - | - |
+| c2-cohort-feedback | #47 | #47 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
+| c2-write-approval-proof | #55 | #55 | UNKNOWN (not transcribed) | mctlhq/mctl-api#1006, mctlhq/mctl-api#1011, mctlhq/mctl-api#1012 |
+| c2-write-canary | #57 | #57 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
 | c2-go-20 | #52 | G4 | c2-go-10, c2-cohort-feedback, c2-security-boundary, c2-write-approval-proof, c2-write-canary | - |
 <!-- END EPICS -->
 
@@ -206,7 +223,8 @@ ordering, not an epic edge.
 
 - Section 9.4 of `docs/design/token-store.md` and its unresolved items 1 to 3
   belong solely to #44 (https://github.com/mctlhq/mctl-glovo/issues/44,
-  verified). That verdict is linked here once. This document does not assume,
+  a same-repository link taken from the supplied reference and not fetched
+  here). That verdict is linked here once. This document does not assume,
   restate, replace or override it.
 - Correcting the text of #11 is a lead-owned follow-up. It is not done here
   and no GitHub issue is edited from this artifact.
