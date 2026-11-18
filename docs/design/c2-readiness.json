@@ -11,6 +11,8 @@
     "code_facts_note": "Verified code facts are limited to the listed source paths existing at the baseline SHA. A path existing is not proof of deployed or runtime behavior.",
     "source_paths": [
       "cmd/glovo-home/main.go",
+      "cmd/mctl-glovo/mcp.go",
+      "internal/glovotools/hosted.go",
       "cmd/glovo-migrate/main.go",
       "internal/authn/verifier.go",
       "internal/consentgate/gate.go",
@@ -26,7 +28,7 @@
       {"number": 56, "head": "c1179519", "state": "draft", "merged": false},
       {"number": 53, "head": "a3af531c", "state": "draft", "merged": false}
     ],
-    "open_draft_prs_note": "Open Draft PRs are not merged and are not baseline facts. Their content is not asserted here.",
+    "open_draft_prs_note": "Open Draft PRs are not merged and are not baseline facts. Their content is not asserted here. In particular the existing main baseline does not prove PR #54 behavior: disabled-write behavior is UNKNOWN pending reviewed proof.",
     "runtime_unknowns": [
       "deployed image digest",
       "chart pin",
@@ -96,7 +98,8 @@
       "prerequisites": [
         "owner-decision-49", "disabled-write-proof-41", "linking-42", "cutover-2777",
         "operations-46", "deploy-false", "vault-control-identity", "proxy",
-        "migrations", "image-pins", "rollback-kill"
+        "migrations", "image-pins", "rollback-kill", "oauth", "scopes",
+        "glovo-home-writes", "consent-versions", "isolation", "capacity"
       ]
     },
     {
@@ -183,7 +186,7 @@
   ],
   "topics": [
     {"id": "owner-decision-49", "name": "Owner decision #49", "status": "UNKNOWN", "role": "owner", "refs": ["#49"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Withdraw the decision. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": []},
-    {"id": "disabled-write-proof-41", "name": "Disabled-write proof #41", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#41"], "source_paths": ["cmd/glovo-home/main.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Keep writes disabled. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "disabled-write-proof-41", "name": "Disabled-write proof #41", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#41", "#54 (draft, behavior UNKNOWN)"], "source_paths": ["cmd/mctl-glovo/mcp.go", "internal/glovotools/hosted.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Keep writes disabled. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
     {"id": "linking-42", "name": "Linking #42", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#42"], "source_paths": ["internal/linkflow/consent.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Unlink the owner account. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
     {"id": "cutover-2777", "name": "mctl-gitops#2777 cutover plan", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctl-gitops#2777"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Revert the cutover change. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1"]},
     {"id": "operations-46", "name": "Operations #46", "status": "UNKNOWN", "role": "platform-operator", "refs": ["#46"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
@@ -193,11 +196,11 @@
     {"id": "migrations", "name": "Database and migrations", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["cmd/glovo-migrate/main.go", "internal/tokenstore/migrations/0001_tokenstore.sql"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
     {"id": "image-pins", "name": "Image and chart pins", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": ["Dockerfile"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Revert to the previous pins. Exact pins UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
     {"id": "rollback-kill", "name": "Rollback and kill switch readiness", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": ["internal/tokenstore/killswitch.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "This is the rollback mechanism. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
-    {"id": "oauth", "name": "OAuth", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/authn/verifier.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G1", "carried_to": ["G2", "G3", "G4"]},
-    {"id": "scopes", "name": "Scopes", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/authn/verifier.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G1", "carried_to": ["G2", "G3", "G4"]},
-    {"id": "glovo-home-writes", "name": "Existing glovo-home writes", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#41"], "source_paths": ["cmd/glovo-home/main.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Disable basket writes. Exact procedure UNKNOWN.", "earliest_gate": "G1", "carried_to": ["G4"]},
-    {"id": "consent-versions", "name": "Consent versions", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/linkflow/consent.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G2", "carried_to": ["G3", "G4"]},
-    {"id": "isolation", "name": "Isolation", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/tokenstore/isolation_pg_test.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G2", "carried_to": ["G3", "G4"]},
-    {"id": "capacity", "name": "Capacity", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G3", "carried_to": ["G4"]}
+    {"id": "oauth", "name": "OAuth", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/authn/verifier.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "scopes", "name": "Scopes", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/authn/verifier.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "glovo-home-writes", "name": "Existing glovo-home writes", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["#41"], "source_paths": ["cmd/glovo-home/main.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "Disable basket writes. Exact procedure UNKNOWN.", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "consent-versions", "name": "Consent versions", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/linkflow/consent.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "isolation", "name": "Isolation", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["UNKNOWN"], "source_paths": ["internal/tokenstore/isolation_pg_test.go"], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]},
+    {"id": "capacity", "name": "Capacity", "status": "UNKNOWN", "role": "platform-operator", "refs": ["UNKNOWN"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": ["G1", "G2", "G3", "G4"]}
   ]
 }

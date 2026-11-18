@@ -408,7 +408,8 @@ func TestPreGOPrerequisites(t *testing.T) {
 	want := []string{
 		"owner-decision-49", "disabled-write-proof-41", "linking-42", "cutover-2777",
 		"operations-46", "deploy-false", "vault-control-identity", "proxy",
-		"migrations", "image-pins", "rollback-kill",
+		"migrations", "image-pins", "rollback-kill", "oauth", "scopes",
+		"glovo-home-writes", "consent-versions", "isolation", "capacity",
 	}
 	for _, id := range want {
 		if !contains(g0.Prerequisites, id) {
@@ -454,6 +455,98 @@ func TestPreGOPrerequisites(t *testing.T) {
 		if tp.Earliest == "G0" && !contains(g0.Prerequisites, tp.ID) {
 			t.Errorf("topic %s has earliest gate G0 but is not a G0 prerequisite", tp.ID)
 		}
+	}
+}
+
+// orderingErrors reports prerequisite and evidence ordering violations: a G0
+// prerequisite postponed beyond G0, a G0 topic missing from the G0
+// prerequisites, a readiness topic not carried to every later phase, and live
+// results (G1, #43) leaking before or into G0.
+func orderingErrors(m matrix) []string {
+	var errs []string
+	g0, g1 := m.gate("G0"), m.gate("G1")
+	if g0 == nil || g1 == nil {
+		return []string{"G0 or G1 missing"}
+	}
+	for _, id := range g0.Prerequisites {
+		if tp := m.topic(id); tp == nil || tp.Earliest != "G0" {
+			errs = append(errs, "prerequisite "+id+" postponed beyond G0")
+		}
+	}
+	for _, tp := range m.Topics {
+		if tp.Earliest == "G0" && !contains(g0.Prerequisites, tp.ID) {
+			errs = append(errs, "topic "+tp.ID+" at G0 is not a G0 prerequisite")
+		}
+	}
+	for _, id := range []string{"oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity"} {
+		tp := m.topic(id)
+		if tp == nil {
+			errs = append(errs, "readiness topic "+id+" missing")
+			continue
+		}
+		if tp.Earliest != "G0" || !contains(g0.Prerequisites, id) {
+			errs = append(errs, "readiness topic "+id+" is not a G0 prerequisite")
+		}
+		for _, c := range []string{"G1", "G2", "G3", "G4"} {
+			if !contains(tp.CarriedTo, c) {
+				errs = append(errs, "readiness topic "+id+" not carried to "+c)
+			}
+		}
+	}
+	if len(g0.DependsOn) != 0 || contains(g0.Prerequisites, "G1") || contains(g0.Refs, "#43") || contains(g0.Requires, "#43") {
+		errs = append(errs, "live results required before G0")
+	}
+	if !contains(g1.DependsOn, "G0") || !contains(g1.Refs, "#43") {
+		errs = append(errs, "G1 must follow G0 and hold the #43 live results")
+	}
+	return errs
+}
+
+func TestPrerequisitePostponementRefused(t *testing.T) {
+	m := loadMatrix(t)
+	for _, e := range orderingErrors(m) {
+		t.Errorf("ordering: %s", e)
+	}
+	// Negative control on an in-memory copy: postponing consent-versions to G2
+	// and dropping its G0 prerequisite must be refused by name.
+	bad := m
+	bad.Topics = append([]topic(nil), m.Topics...)
+	bad.Gates = append([]gate(nil), m.Gates...)
+	for i := range bad.Topics {
+		if bad.Topics[i].ID == "consent-versions" {
+			bad.Topics[i].Earliest = "G2"
+		}
+	}
+	for i := range bad.Gates {
+		if bad.Gates[i].ID == "G0" {
+			var keep []string
+			for _, p := range bad.Gates[i].Prerequisites {
+				if p != "consent-versions" {
+					keep = append(keep, p)
+				}
+			}
+			bad.Gates[i].Prerequisites = keep
+		}
+	}
+	if len(orderingErrors(bad)) == 0 {
+		t.Fatal("postponing consent-versions beyond G0 was not refused")
+	}
+}
+
+func TestHostedProofPointerAndUnknownPR54(t *testing.T) {
+	m := loadMatrix(t)
+	tp := m.topic("disabled-write-proof-41")
+	if tp == nil || !contains(tp.SourcePaths, "cmd/mctl-glovo/mcp.go") || !contains(tp.SourcePaths, "internal/glovotools/hosted.go") {
+		t.Error("disabled-write-proof-41 must point at the hosted plane")
+	}
+	if tp != nil && contains(tp.SourcePaths, "cmd/glovo-home/main.go") {
+		t.Error("cmd/glovo-home belongs to the legacy glovo-home inventory only")
+	}
+	if gh := m.topic("glovo-home-writes"); gh == nil || !contains(gh.SourcePaths, "cmd/glovo-home/main.go") {
+		t.Error("glovo-home-writes must keep the legacy glovo-home pointer")
+	}
+	if !strings.Contains(m.Baseline.DraftsNote, "does not prove PR #54 behavior") || !strings.Contains(m.Baseline.DraftsNote, "UNKNOWN") {
+		t.Error("PR #54 behavior must be stated UNKNOWN")
 	}
 }
 
