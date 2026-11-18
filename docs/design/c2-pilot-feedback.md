@@ -39,8 +39,8 @@ anything for the other.
 
 | Group | Size | Gate | Issue | Required before any invitation |
 | --- | --- | --- | --- | --- |
-| Rehearsal | 2 to 3 people | G2, its own recorded GO | #50 | recorded GO, recorded capacity for the stage, G1 results confirmed under #43 |
-| Wave | 10 people | G3, its own recorded GO | #51 | recorded GO, recorded capacity for the stage, G2 confirmed, #44 and #45 dependencies as #40 records |
+| Rehearsal | at most 2 accounts (the G2 limit in #50) | G2, its own recorded GO | #50 | recorded GO, recorded capacity for the stage, G1 results confirmed under #43, exit path proven (rule 6) |
+| Wave | 10 people | G3, its own recorded GO | #51 | recorded GO, recorded capacity for the stage, G2 confirmed, #44 and #45 dependencies as #40 records, exit path proven (rule 6) |
 
 Rules:
 
@@ -54,7 +54,16 @@ Rules:
 4. The rehearsal and the wave use the same questions, so the two can be
    compared in aggregate. A change of questions between them is recorded.
 5. Who is eligible, how many are invited, the invitation wording and the
-   channel are PENDING (owner decision).
+   channel are PENDING (owner decision). The rehearsal never exceeds the
+   account limit recorded for G2 in #50 (two); issue #47 speaks of 2 to 3
+   participants, and the third is not admitted unless #50 raises its limit.
+6. Launch condition: before any invitation, a participant-usable exit is
+   proven for that group, that is revoking consent plus a working unlink and
+   erase path, with evidence recorded under #43. At this baseline no
+   operator or user unlink or erase route exists in this repository
+   (`c2-operations.md` sections 6.2 to 6.4), so this condition is NOT met
+   and no group may be invited until it is. Any pilot check (T1 to T8) run
+   in a rehearsal is read-only and uses the same exit path.
 
 What a participant is told before opting in (wording PENDING, content
 required):
