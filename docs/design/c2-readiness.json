@@ -1,0 +1,151 @@
+{
+  "schema_version": 1,
+  "kind": "planning-artifact-not-an-authorization-engine",
+  "issue": "https://github.com/mctlhq/mctl-glovo/issues/40",
+  "issue_40_fully_satisfied": false,
+  "baseline": {
+    "repo": "mctlhq/mctl-glovo",
+    "branch": "main",
+    "sha": "ca4a09aaf6b9b99f106177aee206726ff6b004b0",
+    "evidence_url": "https://github.com/mctlhq/mctl-glovo/commit/ca4a09aaf6b9b99f106177aee206726ff6b004b0"
+  },
+  "freshness": {
+    "owner_approved": false,
+    "effective_ttl": null,
+    "note": "No evidence TTL is owner-approved. The rules below are PROPOSALS only. Until an owner approves one, no gate can be PASS for freshness reasons.",
+    "proposals": [
+      {"id": "P1", "rule": "Evidence needs a full 40-hex SHA and an https evidence URL."},
+      {"id": "P2", "rule": "Evidence needs an observed_at timestamp (RFC 3339, UTC)."},
+      {"id": "P3", "rule": "Evidence older than an owner-approved maximum age is stale. The value is not set here."},
+      {"id": "P4", "rule": "Evidence observed after the reference time is ambiguous and refused."},
+      {"id": "P5", "rule": "Missing, aged, ambiguous or unobservable evidence yields UNKNOWN, never PASS."}
+    ]
+  },
+  "forbidden_surfaces": ["order", "checkout", "payment"],
+  "authority": {
+    "section_9_4": {
+      "source_of_truth": "#44",
+      "url": "https://github.com/mctlhq/mctl-glovo/issues/44",
+      "url_note": "Same-repository issue number assumed; lead to confirm.",
+      "override": false,
+      "unresolved_items": [1, 2, 3],
+      "note": "Link the #44 verdict. This artifact neither restates nor overrides it."
+    },
+    "issue_11_text_correction": {
+      "owner": "lead",
+      "status": "FOLLOW_UP_NOT_DONE",
+      "note": "Correction of the #11 issue text is lead-owned. No GitHub issue is edited from this artifact."
+    }
+  },
+  "decision_refs": [
+    {"id": "#50", "required": true, "stage": "UNKNOWN", "note": "Separate decision. Not merged with #51 or #52."},
+    {"id": "#51", "required": true, "stage": "UNKNOWN", "note": "Separate decision. Not merged with #50 or #52."},
+    {"id": "#52", "required": false, "stage": "UNKNOWN", "note": "Optional. Never implied by #50 or #51."}
+  ],
+  "gates": [
+    {
+      "id": "G0",
+      "name": "Owner pre-GO to perform the E2E",
+      "kind": "decision",
+      "phase": "pre-go",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-owner-pre-go",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": [],
+      "write_dependency": false,
+      "depends_on": [],
+      "requires": []
+    },
+    {
+      "id": "G1",
+      "name": "Owner live E2E results (read-only)",
+      "kind": "result",
+      "phase": "owner-read-only",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-owner-results",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Kill switch and credential revocation. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read"],
+      "write_dependency": false,
+      "depends_on": ["G0"],
+      "requires": []
+    },
+    {
+      "id": "G2",
+      "name": "Two-user admission (read-only)",
+      "kind": "decision",
+      "phase": "two-user-read-only",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-two-users",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Remove both users from the allowlist and revoke their tokens. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read"],
+      "write_dependency": false,
+      "depends_on": ["G1"],
+      "requires": []
+    },
+    {
+      "id": "G3",
+      "name": "Ten-user admission (read-only)",
+      "kind": "decision",
+      "phase": "ten-user-read-only",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-ten-users",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Return to the two-user allowlist. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read"],
+      "write_dependency": false,
+      "depends_on": ["G2"],
+      "requires": []
+    },
+    {
+      "id": "G4",
+      "name": "Twenty-user writes (separately authorized canary)",
+      "kind": "decision",
+      "phase": "twenty-user-write",
+      "status": "UNKNOWN",
+      "role": "owner",
+      "decision_id": "D-twenty-users-write",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "rollback": "Disable basket writes, return to the ten-user read-only allowlist. Exact procedure UNKNOWN.",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "allowed_surfaces": ["read", "basket-write"],
+      "write_dependency": true,
+      "depends_on": ["G3", "#55", "#57"],
+      "requires": ["#1011", "#1012"],
+      "canary_authorization": {
+        "decision_id": "D-twenty-users-canary",
+        "status": "UNKNOWN",
+        "note": "Separate from the G4 decision. Both are needed."
+      }
+    }
+  ],
+  "topics": [
+    {"id": "cutover-2777", "name": "#2777 cutover", "status": "UNKNOWN", "gates": ["G1"]},
+    {"id": "rollback-kill", "name": "Rollback and kill switch", "status": "UNKNOWN", "gates": ["G1", "G2", "G3", "G4"]},
+    {"id": "oauth", "name": "OAuth", "status": "UNKNOWN", "gates": ["G1"]},
+    {"id": "consent-versions", "name": "Consent versions", "status": "UNKNOWN", "gates": ["G2"]},
+    {"id": "scopes", "name": "Scopes", "status": "UNKNOWN", "gates": ["G1"]},
+    {"id": "vault-control-identity", "name": "Vault and control identity", "status": "UNKNOWN", "gates": ["G1"]},
+    {"id": "proxy", "name": "Proxy", "status": "UNKNOWN", "gates": ["G1"]},
+    {"id": "migrations", "name": "Migrations", "status": "UNKNOWN", "gates": ["G1"]},
+    {"id": "image-pins", "name": "Image pins", "status": "UNKNOWN", "gates": ["G1"]},
+    {"id": "capacity", "name": "Capacity", "status": "UNKNOWN", "gates": ["G3", "G4"]},
+    {"id": "glovo-home-writes", "name": "Existing glovo-home writes", "status": "UNKNOWN", "gates": ["G1", "G4"]},
+    {"id": "isolation", "name": "Isolation", "status": "UNKNOWN", "gates": ["G2", "G3"]}
+  ]
+}
