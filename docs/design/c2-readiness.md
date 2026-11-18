@@ -5,7 +5,7 @@ authorization engine or a runtime controller, and no code reads it. It does
 not satisfy issue #40 on its own.
 
 Source of truth for the data is `c2-readiness.json`. A test in this package
-fails if the table below drifts from it.
+fails if the tables below drift from it.
 
 Baseline: `main` at `ca4a09aaf6b9b99f106177aee206726ff6b004b0`
 (https://github.com/mctlhq/mctl-glovo/commit/ca4a09aaf6b9b99f106177aee206726ff6b004b0).
@@ -14,27 +14,38 @@ Issue: https://github.com/mctlhq/mctl-glovo/issues/40.
 ## 1. Rules
 
 - Every live value that has not been verified is `UNKNOWN`. No gate is PASS.
-- Missing, aged, ambiguous or unobservable evidence cannot produce PASS.
-- The owner pre-GO to perform the E2E (G0) is a decision. The later live
-  results (G1) are evidence. One never stands in for the other.
+  Known issue references are not proof of deployed behavior.
+- Missing, aged, ambiguous or unobservable evidence, including an UNKNOWN
+  freshness state, cannot produce PASS.
+- G0 is the owner pre-GO decision to perform the E2E. G1 is the later live
+  read-only results (#43). The results do not substitute for the decision.
+- G0 requires its pre-GO prerequisites (the topics listed in the matrix with
+  earliest gate G0: #49 decision, #41 disabled-write proof, #42 linking,
+  mctl-gitops#2777 cutover plan, #46 operations, and the readiness externals).
+  G0 never requires live G1 or #43 results, so there is no cycle.
+- Operator-recorded stage sequence: Owner-only, 10 read-only, Approval+Canary,
+  20 read+write. This is a recorded requirement, not a proposal.
 - The owner, two-user, ten-user and twenty-user decisions are separate
-  (G1, G2, G3, G4). Each has its own decision id. A PASS at one stage never
-  authorizes another.
-- #50 and #51 are separate required decisions. #52 is optional and is never
-  implied by them. Their stage mapping is UNKNOWN.
-- G1 to G3 are read-only and do not depend on #55 or #57. G4 (twenty-user
-  writes) requires the existing #1011 and #1012 proof and a separately
-  authorized canary.
+  (G1 results, G2, G3, G4). Each has its own decision id. A PASS at one stage
+  never authorizes another.
+- #50 maps to G2 (two users), #51 to G3 (ten users) and #52 to optional G4
+  (twenty users). They are separate decisions and none implies another.
+- G0 to G3 are read-only and do not depend on #55 or #57. G4 (twenty-user
+  writes) depends on G3, #55 and #57, requires the existing #1011 and #1012
+  proof, and needs a separately authorized canary.
+- Requirements carry forward to later phases through the "Carried to" column
+  without adding #55 or #57 to any phase up to G3.
 - The order, checkout and payment surfaces are forbidden at every stage.
-- The stage split above is a proposal for the lead and owner to confirm.
 
 ## 2. Evidence freshness (proposals, not approved)
 
 No evidence TTL is owner-approved, so there is no effective TTL. The rules
 below are proposals only:
 
-- P1: evidence needs a full 40-hex SHA and an https evidence URL.
-- P2: evidence needs an `observed_at` timestamp (RFC 3339, UTC).
+- P1: evidence needs a full 40-hex SHA and an https evidence URL with a
+  non-empty host.
+- P2: evidence needs an `observed_at` timestamp (RFC 3339, UTC) and a
+  freshness state of FRESH.
 - P3: evidence older than an owner-approved maximum age is stale. The value
   is not set here.
 - P4: evidence observed after the reference time is ambiguous and refused.
@@ -42,43 +53,91 @@ below are proposals only:
 
 Tests use a fixed reference time (2026-11-18T12:00:00Z) and synthetic
 fixtures. They use a synthetic maximum age only to exercise the refusal
-paths. They do not mark any live gate satisfied.
+paths. These are offline syntax and state checks: no evidence URL is fetched
+and no valid operational GO exists.
 
-## 3. Matrix
+## 3. Baseline facts and unknowns
+
+Verified code facts are limited to these source paths existing at the baseline
+SHA. A path existing is not proof of deployed or runtime behavior:
+
+- `cmd/glovo-home/main.go`
+- `cmd/glovo-migrate/main.go`
+- `internal/authn/verifier.go`
+- `internal/consentgate/gate.go`
+- `internal/linkflow/consent.go`
+- `internal/tokenstore/killswitch.go`
+- `internal/tokenstore/migrations/0001_tokenstore.sql`
+- `internal/tokenstore/isolation_pg_test.go`
+- `deploy/mac-mini/tinyproxy.conf`
+- `Dockerfile`
+
+Open Draft PRs, separate from the baseline and not merged:
+
+- #54 (head `a2b20b65`)
+- #56 (head `c1179519`)
+- #53 (head `a3af531c`)
+
+Their content is not asserted here.
+
+Runtime unknowns, all UNKNOWN until evidence exists:
+
+- deployed image digest
+- chart pin
+- Vault paths and policies
+- database and migration state
+- proxy egress state
+- kill switch state
+- consent-reader and control identity
+- deploy flag value
+
+## 4. Matrix
 
 <!-- BEGIN MATRIX -->
-| Gate | Status | Role | Phase | Evidence SHA | Evidence URL | Freshness | Rollback |
-|---|---|---|---|---|---|---|---|
-| G0 | UNKNOWN | owner | pre-go | UNKNOWN | UNKNOWN | UNKNOWN | Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran. |
-| G1 | UNKNOWN | owner | owner-read-only | UNKNOWN | UNKNOWN | UNKNOWN | Kill switch and credential revocation. Exact procedure UNKNOWN. |
-| G2 | UNKNOWN | owner | two-user-read-only | UNKNOWN | UNKNOWN | UNKNOWN | Remove both users from the allowlist and revoke their tokens. Exact procedure UNKNOWN. |
-| G3 | UNKNOWN | owner | ten-user-read-only | UNKNOWN | UNKNOWN | UNKNOWN | Return to the two-user allowlist. Exact procedure UNKNOWN. |
-| G4 | UNKNOWN | owner | twenty-user-write | UNKNOWN | UNKNOWN | UNKNOWN | Disable basket writes, return to the ten-user read-only allowlist. Exact procedure UNKNOWN. |
+| Ref | Required | Stage | Note |
+|---|---|---|---|
+| #50 | yes | G2 | Two-user admission. Separate from #51 and #52. |
+| #51 | yes | G3 | Ten-user admission. Separate from #50 and #52. |
+| #52 | no | G4 | Optional twenty-user. Never implied by #50 or #51. |
 
-| Topic | Status | Gates |
-|---|---|---|
-| #2777 cutover | UNKNOWN | G1 |
-| Rollback and kill switch | UNKNOWN | G1, G2, G3, G4 |
-| OAuth | UNKNOWN | G1 |
-| Consent versions | UNKNOWN | G2 |
-| Scopes | UNKNOWN | G1 |
-| Vault and control identity | UNKNOWN | G1 |
-| Proxy | UNKNOWN | G1 |
-| Migrations | UNKNOWN | G1 |
-| Image pins | UNKNOWN | G1 |
-| Capacity | UNKNOWN | G3, G4 |
-| Existing glovo-home writes | UNKNOWN | G1, G4 |
-| Isolation | UNKNOWN | G2, G3 |
+| Gate | Status | Role | Phase | Depends on | Prerequisites | Evidence SHA | Evidence URL | Freshness | Rollback |
+|---|---|---|---|---|---|---|---|---|---|
+| G0 | UNKNOWN | owner | pre-go | - | owner-decision-49, disabled-write-proof-41, linking-42, cutover-2777, operations-46, deploy-false, vault-control-identity, proxy, migrations, image-pins, rollback-kill | UNKNOWN | UNKNOWN | UNKNOWN | Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran. |
+| G1 | UNKNOWN | owner | owner-read-only | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | Kill switch and credential revocation. Exact procedure UNKNOWN. |
+| G2 | UNKNOWN | owner | two-user-read-only | G1 | - | UNKNOWN | UNKNOWN | UNKNOWN | Remove both users from the allowlist and revoke their tokens. Exact procedure UNKNOWN. |
+| G3 | UNKNOWN | owner | ten-user-read-only | G2 | - | UNKNOWN | UNKNOWN | UNKNOWN | Return to the two-user allowlist. Exact procedure UNKNOWN. |
+| G4 | UNKNOWN | owner | twenty-user-write | G3, #55, #57 | - | UNKNOWN | UNKNOWN | UNKNOWN | Disable basket writes, return to the ten-user read-only allowlist. Exact procedure UNKNOWN. |
+
+| Topic | Role | Refs | Earliest gate | Carried to | Status | Evidence SHA | Evidence URL | Freshness | Rollback |
+|---|---|---|---|---|---|---|---|---|---|
+| Owner decision #49 | owner | #49 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Withdraw the decision. Exact procedure UNKNOWN. |
+| Disabled-write proof #41 | service-maintainer | #41 | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Keep writes disabled. Exact procedure UNKNOWN. |
+| Linking #42 | service-maintainer | #42 | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Unlink the owner account. Exact procedure UNKNOWN. |
+| mctl-gitops#2777 cutover plan | platform-operator | mctl-gitops#2777 | G0 | G1 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Revert the cutover change. Exact procedure UNKNOWN. |
+| Operations #46 | platform-operator | #46 | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| deploy:false state | platform-operator | UNKNOWN | G0 | G1 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| Vault and consent-reader/control identity | platform-operator | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Revoke the identity. Exact procedure UNKNOWN. |
+| Proxy | platform-operator | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Remove proxy egress. Exact procedure UNKNOWN. |
+| Database and migrations | service-maintainer | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| Image and chart pins | platform-operator | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Revert to the previous pins. Exact pins UNKNOWN. |
+| Rollback and kill switch readiness | platform-operator | UNKNOWN | G0 | G1, G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | This is the rollback mechanism. Exact procedure UNKNOWN. |
+| OAuth | service-maintainer | UNKNOWN | G1 | G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| Scopes | service-maintainer | UNKNOWN | G1 | G2, G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| Existing glovo-home writes | service-maintainer | #41 | G1 | G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | Disable basket writes. Exact procedure UNKNOWN. |
+| Consent versions | service-maintainer | UNKNOWN | G2 | G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| Isolation | service-maintainer | UNKNOWN | G2 | G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| Capacity | platform-operator | UNKNOWN | G3 | G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 <!-- END MATRIX -->
 
-## 4. Authority and follow-ups
+## 5. Authority and follow-ups
 
-- Section 9.4 of the design and its unresolved items 1 to 3 belong to #44
-  (https://github.com/mctlhq/mctl-glovo/issues/44, same-repository number
-  assumed, lead to confirm). This document links that verdict and does not
-  restate or override it.
+- Section 9.4 of `docs/design/token-store.md` and its unresolved items 1 to 3
+  belong solely to #44 (https://github.com/mctlhq/mctl-glovo/issues/44,
+  verified). That verdict is linked here once. This document does not assume,
+  restate, replace or override it.
 - Correcting the text of #11 is a lead-owned follow-up. It is not done here
   and no GitHub issue is edited from this artifact.
 - Existing glovo-home basket writes are tracked as a topic, not as an
   approval for any user stage. glovo-home never gains an order, checkout or
   payment tool.
+- Role names are planning labels, not assignments of people.

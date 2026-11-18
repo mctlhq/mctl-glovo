@@ -1,12 +1,14 @@
 // Package design checks the C2 readiness planning artifact. The matrix is
 // documentation, not an authorization engine: nothing here is used at runtime
-// and no test contacts GitHub or any provider.
+// and no test contacts GitHub or any provider. Evidence checks are offline
+// syntax and state checks; no evidence URL is ever fetched.
 package design
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -44,14 +46,31 @@ type gate struct {
 	WriteDependency bool      `json:"write_dependency"`
 	DependsOn       []string  `json:"depends_on"`
 	Requires        []string  `json:"requires"`
+	Refs            []string  `json:"refs"`
+	Prerequisites   []string  `json:"prerequisites"`
 	Canary          *canary   `json:"canary_authorization"`
 }
 
 type topic struct {
-	ID     string   `json:"id"`
-	Name   string   `json:"name"`
-	Status string   `json:"status"`
-	Gates  []string `json:"gates"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Status      string    `json:"status"`
+	Role        string    `json:"role"`
+	Refs        []string  `json:"refs"`
+	SourcePaths []string  `json:"source_paths"`
+	EvidenceSHA string    `json:"evidence_sha"`
+	EvidenceURL string    `json:"evidence_url"`
+	Freshness   freshness `json:"freshness"`
+	Rollback    string    `json:"rollback"`
+	Earliest    string    `json:"earliest_gate"`
+	CarriedTo   []string  `json:"carried_to"`
+}
+
+type decisionRef struct {
+	ID       string `json:"id"`
+	Required bool   `json:"required"`
+	Stage    string `json:"stage"`
+	Note     string `json:"note"`
 }
 
 type matrix struct {
@@ -60,10 +79,20 @@ type matrix struct {
 	Issue         string `json:"issue"`
 	Issue40Done   bool   `json:"issue_40_fully_satisfied"`
 	Baseline      struct {
-		Repo        string `json:"repo"`
-		Branch      string `json:"branch"`
-		SHA         string `json:"sha"`
-		EvidenceURL string `json:"evidence_url"`
+		Repo        string   `json:"repo"`
+		Branch      string   `json:"branch"`
+		SHA         string   `json:"sha"`
+		EvidenceURL string   `json:"evidence_url"`
+		CodeNote    string   `json:"code_facts_note"`
+		SourcePaths []string `json:"source_paths"`
+		OpenDrafts  []struct {
+			Number int    `json:"number"`
+			Head   string `json:"head"`
+			State  string `json:"state"`
+			Merged bool   `json:"merged"`
+		} `json:"open_draft_prs"`
+		DraftsNote      string   `json:"open_draft_prs_note"`
+		RuntimeUnknowns []string `json:"runtime_unknowns"`
 	} `json:"baseline"`
 	Freshness struct {
 		OwnerApproved bool    `json:"owner_approved"`
@@ -74,7 +103,11 @@ type matrix struct {
 			Rule string `json:"rule"`
 		} `json:"proposals"`
 	} `json:"freshness"`
-	Forbidden []string `json:"forbidden_surfaces"`
+	Forbidden     []string `json:"forbidden_surfaces"`
+	StageSequence struct {
+		Source string   `json:"source"`
+		Order  []string `json:"order"`
+	} `json:"stage_sequence"`
 	Authority struct {
 		Section94 struct {
 			SourceOfTruth string `json:"source_of_truth"`
@@ -90,14 +123,9 @@ type matrix struct {
 			Note   string `json:"note"`
 		} `json:"issue_11_text_correction"`
 	} `json:"authority"`
-	DecisionRefs []struct {
-		ID       string `json:"id"`
-		Required bool   `json:"required"`
-		Stage    string `json:"stage"`
-		Note     string `json:"note"`
-	} `json:"decision_refs"`
-	Gates  []gate  `json:"gates"`
-	Topics []topic `json:"topics"`
+	DecisionRefs []decisionRef `json:"decision_refs"`
+	Gates        []gate        `json:"gates"`
+	Topics       []topic       `json:"topics"`
 }
 
 const (
@@ -129,12 +157,29 @@ func (m matrix) gate(id string) *gate {
 	return nil
 }
 
+func (m matrix) topic(id string) *topic {
+	for i := range m.Topics {
+		if m.Topics[i].ID == id {
+			return &m.Topics[i]
+		}
+	}
+	return nil
+}
+
 var sha40 = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
+// validHTTPS is an offline syntax check only: https scheme and a non-empty
+// host. It never fetches the URL.
+func validHTTPS(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme == "https" && u.Hostname() != ""
+}
+
 // verdict reports whether a gate may be treated as PASS at time now. A gate is
-// PASS only when it claims PASS and its evidence is present, observable and not
-// aged. maxAge is a synthetic proposal supplied by the caller; the real matrix
-// has no approved TTL, so with a nil maxAge nothing can pass.
+// PASS only when it claims PASS and its evidence is present, observable, in a
+// FRESH state and not aged. maxAge is a synthetic proposal supplied by the
+// caller; the real matrix has no approved TTL, so with a nil maxAge nothing
+// can pass.
 func verdict(g gate, now time.Time, maxAge *time.Duration) (string, string) {
 	if g.Status != "PASS" {
 		if g.Status == "FAIL" || g.Status == "BLOCKED" {
@@ -145,8 +190,11 @@ func verdict(g gate, now time.Time, maxAge *time.Duration) (string, string) {
 	if !sha40.MatchString(g.EvidenceSHA) {
 		return "UNKNOWN", "missing or non-40-hex evidence sha"
 	}
-	if !strings.HasPrefix(g.EvidenceURL, "https://") {
-		return "UNKNOWN", "missing evidence url"
+	if !validHTTPS(g.EvidenceURL) {
+		return "UNKNOWN", "missing or invalid evidence url"
+	}
+	if g.Freshness.State != "FRESH" {
+		return "UNKNOWN", "freshness state is not FRESH"
 	}
 	if g.Freshness.ObservedAt == nil {
 		return "UNKNOWN", "missing observed_at"
@@ -192,6 +240,15 @@ func goodGate(id, decision string) gate {
 
 func dur(h int) *time.Duration { d := time.Duration(h) * time.Hour; return &d }
 
+func contains(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
 func TestVerdictPositiveControl(t *testing.T) {
 	g := goodGate("G1", "D1")
 	if v, why := verdict(g, refTime, dur(24)); v != "PASS" {
@@ -206,17 +263,19 @@ func TestVerdictPositiveControl(t *testing.T) {
 
 func TestMissingEvidenceRefused(t *testing.T) {
 	cases := map[string]func(*gate){
-		"empty sha":        func(g *gate) { g.EvidenceSHA = "" },
-		"UNKNOWN sha":      func(g *gate) { g.EvidenceSHA = "UNKNOWN" },
-		"short sha":        func(g *gate) { g.EvidenceSHA = "abc123" },
-		"empty url":        func(g *gate) { g.EvidenceURL = "" },
-		"UNKNOWN url":      func(g *gate) { g.EvidenceURL = "UNKNOWN" },
-		"http url":         func(g *gate) { g.EvidenceURL = "http://example.invalid/x" },
-		"no observed_at":   func(g *gate) { g.Freshness.ObservedAt = nil },
-		"bad observed_at":  func(g *gate) { g.Freshness.ObservedAt = strp("yesterday") },
-		"status UNKNOWN":   func(g *gate) { g.Status = "UNKNOWN" },
-		"status empty":     func(g *gate) { g.Status = "" },
-		"status ambiguous": func(g *gate) { g.Status = "MAYBE" },
+		"empty sha":          func(g *gate) { g.EvidenceSHA = "" },
+		"UNKNOWN sha":        func(g *gate) { g.EvidenceSHA = "UNKNOWN" },
+		"short sha":          func(g *gate) { g.EvidenceSHA = "abc123" },
+		"empty url":          func(g *gate) { g.EvidenceURL = "" },
+		"UNKNOWN url":        func(g *gate) { g.EvidenceURL = "UNKNOWN" },
+		"http url":           func(g *gate) { g.EvidenceURL = "http://example.invalid/x" },
+		"https without host": func(g *gate) { g.EvidenceURL = "https://" },
+		"https empty host":   func(g *gate) { g.EvidenceURL = "https:///path" },
+		"no observed_at":     func(g *gate) { g.Freshness.ObservedAt = nil },
+		"bad observed_at":    func(g *gate) { g.Freshness.ObservedAt = strp("yesterday") },
+		"status UNKNOWN":     func(g *gate) { g.Status = "UNKNOWN" },
+		"status empty":       func(g *gate) { g.Status = "" },
+		"status ambiguous":   func(g *gate) { g.Status = "MAYBE" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -232,6 +291,18 @@ func TestMissingEvidenceRefused(t *testing.T) {
 			t.Fatal("PASS without an approved ttl")
 		}
 	})
+}
+
+func TestUnknownFreshnessStateRefused(t *testing.T) {
+	for _, st := range []string{"UNKNOWN", "", "UNOBSERVABLE", "AMBIGUOUS", "STALE"} {
+		t.Run("state "+st, func(t *testing.T) {
+			g := goodGate("G1", "D1") // PASS status and otherwise valid evidence
+			g.Freshness.State = st
+			if v, _ := verdict(g, refTime, dur(24)); v == "PASS" {
+				t.Fatalf("freshness state %q with valid evidence produced PASS", st)
+			}
+		})
+	}
 }
 
 func TestStaleEvidenceRefused(t *testing.T) {
@@ -300,39 +371,122 @@ func TestStageAuthorizationsDistinct(t *testing.T) {
 		t.Fatal("G4 lacks a separate canary authorization")
 	}
 	add("G4 canary", g4.Canary.DecisionID)
-	// Owner pre-GO (G0) and its later live results (G1) are different kinds.
+	if g4.Canary.DecisionID == g4.DecisionID {
+		t.Error("G4 canary shares the G4 decision id")
+	}
+	// G0 is the owner pre-GO decision; G1 is its later results, not a second decision.
 	if m.gate("G0").Kind != "decision" || m.gate("G1").Kind != "result" {
 		t.Error("G0 must be a decision and G1 its results")
+	}
+	for _, id := range []string{"G2", "G3", "G4"} {
+		if m.gate(id).Kind != "decision" {
+			t.Errorf("%s must be a decision", id)
+		}
+	}
+	// Chain: each stage depends on its predecessor.
+	for i := 1; i < len(want); i++ {
+		if !contains(m.gate(want[i]).DependsOn, want[i-1]) {
+			t.Errorf("%s must depend on %s", want[i], want[i-1])
+		}
+	}
+}
+
+func TestStageSequenceRecorded(t *testing.T) {
+	m := loadMatrix(t)
+	if m.StageSequence.Source != "operator-recorded requirement" {
+		t.Errorf("stage sequence source = %q", m.StageSequence.Source)
+	}
+	want := []string{"Owner-only", "10 read-only", "Approval+Canary", "20 read+write"}
+	if strings.Join(m.StageSequence.Order, ",") != strings.Join(want, ",") {
+		t.Errorf("stage sequence = %v, want %v", m.StageSequence.Order, want)
+	}
+}
+
+func TestPreGOPrerequisites(t *testing.T) {
+	m := loadMatrix(t)
+	g0 := m.gate("G0")
+	want := []string{
+		"owner-decision-49", "disabled-write-proof-41", "linking-42", "cutover-2777",
+		"operations-46", "deploy-false", "vault-control-identity", "proxy",
+		"migrations", "image-pins", "rollback-kill",
+	}
+	for _, id := range want {
+		if !contains(g0.Prerequisites, id) {
+			t.Errorf("G0 lacks prerequisite %s", id)
+		}
+		tp := m.topic(id)
+		if tp == nil {
+			t.Errorf("prerequisite topic %s missing", id)
+			continue
+		}
+		if tp.Earliest != "G0" {
+			t.Errorf("prerequisite %s earliest gate = %s, want G0", id, tp.Earliest)
+		}
+	}
+	// Named issue refs sit at G0.
+	refs := map[string]string{
+		"owner-decision-49": "#49", "disabled-write-proof-41": "#41", "linking-42": "#42",
+		"cutover-2777": "mctl-gitops#2777", "operations-46": "#46",
+	}
+	for id, ref := range refs {
+		if tp := m.topic(id); tp == nil || !contains(tp.Refs, ref) {
+			t.Errorf("topic %s must reference %s", id, ref)
+		}
+	}
+	// No live-results cycle: G0 never needs G1 or #43.
+	if len(g0.DependsOn) != 0 {
+		t.Errorf("G0 depends on %v, want nothing", g0.DependsOn)
+	}
+	for _, p := range append(append([]string{}, g0.Prerequisites...), g0.DependsOn...) {
+		if p == "G1" || p == "#43" {
+			t.Errorf("G0 requires live results %s", p)
+		}
+	}
+	if contains(g0.Refs, "#43") || contains(g0.Requires, "#43") {
+		t.Error("G0 references #43 live results")
+	}
+	g1 := m.gate("G1")
+	if !contains(g1.DependsOn, "G0") || !contains(g1.Refs, "#43") {
+		t.Error("G1 must depend on G0 and hold the #43 results")
+	}
+	// Every topic with earliest G0 must be a G0 prerequisite.
+	for _, tp := range m.Topics {
+		if tp.Earliest == "G0" && !contains(g0.Prerequisites, tp.ID) {
+			t.Errorf("topic %s has earliest gate G0 but is not a G0 prerequisite", tp.ID)
+		}
 	}
 }
 
 func TestDecisionRefsStaySeparate(t *testing.T) {
 	m := loadMatrix(t)
-	byID := map[string]bool{}
+	byID := map[string]decisionRef{}
 	for _, r := range m.DecisionRefs {
-		if byID[r.ID] {
+		if _, dup := byID[r.ID]; dup {
 			t.Errorf("duplicate decision ref %s", r.ID)
 		}
-		byID[r.ID] = r.Required
+		byID[r.ID] = r
 	}
-	if req, ok := byID["#50"]; !ok || !req {
-		t.Error("#50 must be present and required")
-	}
-	if req, ok := byID["#51"]; !ok || !req {
-		t.Error("#51 must be present and required")
-	}
-	if req, ok := byID["#52"]; !ok || req {
-		t.Error("#52 must be present and optional")
-	}
-}
-
-func contains(xs []string, s string) bool {
-	for _, x := range xs {
-		if x == s {
-			return true
+	want := map[string]struct {
+		req   bool
+		stage string
+	}{"#50": {true, "G2"}, "#51": {true, "G3"}, "#52": {false, "G4"}}
+	for id, w := range want {
+		r, ok := byID[id]
+		if !ok {
+			t.Errorf("%s missing", id)
+			continue
+		}
+		if r.Required != w.req || r.Stage != w.stage {
+			t.Errorf("%s = required %v stage %s, want required %v stage %s", id, r.Required, r.Stage, w.req, w.stage)
+		}
+		g := m.gate(w.stage)
+		if g == nil || !contains(g.Refs, id) {
+			t.Errorf("gate %s must carry ref %s", w.stage, id)
 		}
 	}
-	return false
+	if len(byID) != len(want) {
+		t.Errorf("got %d decision refs, want %d", len(byID), len(want))
+	}
 }
 
 func TestReadOnlyPhasesHaveNoWriteDependency(t *testing.T) {
@@ -343,7 +497,7 @@ func TestReadOnlyPhasesHaveNoWriteDependency(t *testing.T) {
 			t.Errorf("%s is read-only but declares a write dependency", id)
 		}
 		for _, dep := range []string{"#55", "#57"} {
-			if contains(g.DependsOn, dep) || contains(g.Requires, dep) {
+			if contains(g.DependsOn, dep) || contains(g.Requires, dep) || contains(g.Prerequisites, dep) || contains(g.Refs, dep) {
 				t.Errorf("%s depends on %s", id, dep)
 			}
 		}
@@ -356,14 +510,30 @@ func TestReadOnlyPhasesHaveNoWriteDependency(t *testing.T) {
 			t.Errorf("%s allows basket-write", id)
 		}
 	}
+	// Topics carried into read-only phases must not smuggle in #55 or #57.
+	for _, tp := range m.Topics {
+		for _, dep := range []string{"#55", "#57"} {
+			if contains(tp.Refs, dep) {
+				t.Errorf("topic %s references %s", tp.ID, dep)
+			}
+		}
+	}
 	g4 := m.gate("G4")
 	if !g4.WriteDependency || !contains(g4.AllowedSurfaces, "basket-write") {
 		t.Error("G4 must be the write stage")
+	}
+	for _, dep := range []string{"#55", "#57"} {
+		if !contains(g4.DependsOn, dep) {
+			t.Errorf("G4 must depend on %s", dep)
+		}
 	}
 	for _, req := range []string{"#1011", "#1012"} {
 		if !contains(g4.Requires, req) {
 			t.Errorf("G4 must require %s", req)
 		}
+	}
+	if g4.Canary == nil || g4.Canary.DecisionID == "" {
+		t.Error("G4 needs a separate canary authorization")
 	}
 }
 
@@ -420,34 +590,80 @@ func TestSourcePinsAndAuthority(t *testing.T) {
 	if a.SourceOfTruth != "#44" || a.Override || len(a.Unresolved) != 3 {
 		t.Error("#44 must stay the sole linked source for section 9.4 items 1-3")
 	}
+	if a.URL != "https://github.com/mctlhq/mctl-glovo/issues/44" {
+		t.Errorf("#44 url = %q", a.URL)
+	}
 	if m.Authority.Issue11.Owner != "lead" || m.Authority.Issue11.Status != "FOLLOW_UP_NOT_DONE" {
 		t.Error("#11 correction must be a lead-owned follow-up")
 	}
+	// Baseline code facts: every cited path exists in this checkout.
+	if len(m.Baseline.SourcePaths) == 0 {
+		t.Error("baseline source paths missing")
+	}
+	for _, p := range m.Baseline.SourcePaths {
+		if _, err := os.Stat("../../" + p); err != nil {
+			t.Errorf("baseline source path %s: %v", p, err)
+		}
+	}
+	// Open Draft PRs are separate from the baseline and never merged.
+	wantDrafts := map[int]string{54: "a2b20b65", 56: "c1179519", 53: "a3af531c"}
+	if len(m.Baseline.OpenDrafts) != len(wantDrafts) {
+		t.Errorf("got %d draft PRs, want %d", len(m.Baseline.OpenDrafts), len(wantDrafts))
+	}
+	for _, d := range m.Baseline.OpenDrafts {
+		if wantDrafts[d.Number] != d.Head || d.Merged || d.State != "draft" {
+			t.Errorf("draft PR #%d = %+v, want open draft head %s", d.Number, d, wantDrafts[d.Number])
+		}
+	}
+	if len(m.Baseline.RuntimeUnknowns) == 0 {
+		t.Error("runtime unknowns missing")
+	}
 }
 
-func TestTopicsCoverRequiredAreas(t *testing.T) {
+func TestTopicsCoverRequiredAreasWithMetadata(t *testing.T) {
 	m := loadMatrix(t)
 	required := []string{
-		"cutover-2777", "rollback-kill", "oauth", "consent-versions", "scopes",
-		"vault-control-identity", "proxy", "migrations", "image-pins", "capacity",
-		"glovo-home-writes", "isolation",
+		"owner-decision-49", "disabled-write-proof-41", "linking-42", "cutover-2777",
+		"operations-46", "deploy-false", "vault-control-identity", "proxy", "migrations",
+		"image-pins", "rollback-kill", "oauth", "scopes", "glovo-home-writes",
+		"consent-versions", "isolation", "capacity",
 	}
-	have := map[string]topic{}
-	for _, tp := range m.Topics {
-		have[tp.ID] = tp
-	}
+	order := map[string]int{"G0": 0, "G1": 1, "G2": 2, "G3": 3, "G4": 4}
+	roles := []string{"owner", "lead", "platform-operator", "service-maintainer"}
 	for _, id := range required {
-		tp, ok := have[id]
-		if !ok {
+		tp := m.topic(id)
+		if tp == nil {
 			t.Errorf("topic %s missing", id)
 			continue
 		}
 		if tp.Status != "UNKNOWN" {
 			t.Errorf("topic %s has live status %q, want UNKNOWN", id, tp.Status)
 		}
-		for _, gid := range tp.Gates {
-			if m.gate(gid) == nil {
-				t.Errorf("topic %s references unknown gate %s", id, gid)
+		if !contains(roles, tp.Role) {
+			t.Errorf("topic %s has role %q", id, tp.Role)
+		}
+		if len(tp.Refs) == 0 || tp.Rollback == "" {
+			t.Errorf("topic %s lacks refs or rollback pointer", id)
+		}
+		if tp.EvidenceSHA != "UNKNOWN" || tp.EvidenceURL != "UNKNOWN" || tp.Freshness.State != "UNKNOWN" || tp.Freshness.ObservedAt != nil {
+			t.Errorf("topic %s has evidence not labelled UNKNOWN", id)
+		}
+		if v, _ := verdict(gate{Status: "PASS", EvidenceSHA: tp.EvidenceSHA, EvidenceURL: tp.EvidenceURL, Freshness: tp.Freshness}, refTime, dur(24*365)); v == "PASS" {
+			t.Errorf("topic %s evidence evaluates to PASS", id)
+		}
+		e, ok := order[tp.Earliest]
+		if !ok || m.gate(tp.Earliest) == nil {
+			t.Errorf("topic %s earliest gate %q unknown", id, tp.Earliest)
+			continue
+		}
+		for _, c := range tp.CarriedTo {
+			if o, ok := order[c]; !ok || o <= e {
+				t.Errorf("topic %s carried to %s, not after %s", id, c, tp.Earliest)
+			}
+		}
+		for _, p := range tp.SourcePaths {
+			if _, err := os.Stat("../../" + p); err != nil {
+				t.Errorf("topic %s source path %s: %v", id, p, err)
 			}
 		}
 	}
@@ -456,17 +672,39 @@ func TestTopicsCoverRequiredAreas(t *testing.T) {
 	}
 }
 
+func list(xs []string) string {
+	if len(xs) == 0 {
+		return "-"
+	}
+	return strings.Join(xs, ", ")
+}
+
+func yesno(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
 func renderTables(m matrix) string {
 	var b strings.Builder
-	b.WriteString("| Gate | Status | Role | Phase | Evidence SHA | Evidence URL | Freshness | Rollback |\n")
-	b.WriteString("|---|---|---|---|---|---|---|---|\n")
-	for _, g := range m.Gates {
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
-			g.ID, g.Status, g.Role, g.Phase, g.EvidenceSHA, g.EvidenceURL, g.Freshness.State, g.Rollback)
+	b.WriteString("| Ref | Required | Stage | Note |\n|---|---|---|---|\n")
+	for _, r := range m.DecisionRefs {
+		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", r.ID, yesno(r.Required), r.Stage, r.Note)
 	}
-	b.WriteString("\n| Topic | Status | Gates |\n|---|---|---|\n")
+	b.WriteString("\n| Gate | Status | Role | Phase | Depends on | Prerequisites | Evidence SHA | Evidence URL | Freshness | Rollback |\n")
+	b.WriteString("|---|---|---|---|---|---|---|---|---|---|\n")
+	for _, g := range m.Gates {
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+			g.ID, g.Status, g.Role, g.Phase, list(g.DependsOn), list(g.Prerequisites),
+			g.EvidenceSHA, g.EvidenceURL, g.Freshness.State, g.Rollback)
+	}
+	b.WriteString("\n| Topic | Role | Refs | Earliest gate | Carried to | Status | Evidence SHA | Evidence URL | Freshness | Rollback |\n")
+	b.WriteString("|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, tp := range m.Topics {
-		fmt.Fprintf(&b, "| %s | %s | %s |\n", tp.Name, tp.Status, strings.Join(tp.Gates, ", "))
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+			tp.Name, tp.Role, list(tp.Refs), tp.Earliest, list(tp.CarriedTo), tp.Status,
+			tp.EvidenceSHA, tp.EvidenceURL, tp.Freshness.State, tp.Rollback)
 	}
 	return b.String()
 }
@@ -489,5 +727,34 @@ func TestMarkdownMatchesJSON(t *testing.T) {
 	}
 	if !strings.Contains(doc, m.Baseline.SHA) {
 		t.Error("markdown must name the baseline SHA")
+	}
+	for _, p := range m.Baseline.SourcePaths {
+		if !strings.Contains(doc, "`"+p+"`") {
+			t.Errorf("markdown must cite baseline source path %s", p)
+		}
+	}
+	for _, d := range m.Baseline.OpenDrafts {
+		if !strings.Contains(doc, fmt.Sprintf("#%d (head `%s`)", d.Number, d.Head)) {
+			t.Errorf("markdown must cite open draft PR #%d head %s", d.Number, d.Head)
+		}
+	}
+	for _, u := range m.Baseline.RuntimeUnknowns {
+		if !strings.Contains(doc, "- "+u+"\n") {
+			t.Errorf("markdown must list runtime unknown %q", u)
+		}
+	}
+	// #44 is linked from a single place.
+	if n := strings.Count(doc, m.Authority.Section94.URL); n != 1 {
+		t.Errorf("#44 url appears %d times in markdown, want 1", n)
+	}
+	// Stage and mapping statements in prose must not drift from the data.
+	for _, s := range []string{
+		"#50 maps to G2", "#51 to G3", "#52 to optional G4",
+		"Owner-only, 10 read-only, Approval+Canary,\n  20 read+write",
+		"G4 (twenty-user\n  writes) depends on G3, #55 and #57",
+	} {
+		if !strings.Contains(doc, s) {
+			t.Errorf("markdown lost statement %q", s)
+		}
 	}
 }
