@@ -146,9 +146,9 @@ Runtime unknowns, all UNKNOWN until evidence exists:
 
 | Gate | Status | Role | Phase | Depends on | Prerequisites | Evidence SHA | Evidence URL | Freshness | Rollback |
 |---|---|---|---|---|---|---|---|---|---|
-| G0 | UNKNOWN | owner | pre-go | - | owner-decision-49, disabled-write-proof-41, linking-42, cutover-2777, operations-46, deploy-false, vault-control-identity, proxy, migrations, image-pins, rollback-kill, oauth, scopes, glovo-home-writes, consent-versions, isolation, capacity, ext-mctl-api-1108, ext-mctl-api-1110, ext-mctl-api-1111, ext-mctl-api-1079, ext-gitops-2742, ext-gitops-2766, ext-gitops-2709 | UNKNOWN | UNKNOWN | UNKNOWN | Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran. |
+| G0 | UNKNOWN | owner | pre-go | - | owner-decision-49, disabled-write-proof-41, linking-42, cutover-2777, operations-46, deploy-false, vault-control-identity, proxy, migrations, image-pins, rollback-kill, oauth, scopes, glovo-home-writes, consent-versions, isolation, capacity, ext-mctl-api-1108, ext-mctl-api-1110, ext-mctl-api-1111, ext-gitops-2742, ext-gitops-2766, ext-gitops-2709 | UNKNOWN | UNKNOWN | UNKNOWN | Withdraw the pre-GO; no E2E starts. Nothing to undo because nothing ran. |
 | G1 | UNKNOWN | owner | owner-read-only | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | Kill switch and credential revocation. Exact procedure UNKNOWN. |
-| G2 | UNKNOWN | owner | two-user-read-only | G1 | - | UNKNOWN | UNKNOWN | UNKNOWN | Remove both users from the allowlist and revoke their tokens. Exact procedure UNKNOWN. |
+| G2 | UNKNOWN | owner | two-user-read-only | G1 | ext-mctl-api-1079 | UNKNOWN | UNKNOWN | UNKNOWN | Remove both users from the allowlist and revoke their tokens. Exact procedure UNKNOWN. |
 | G3 | UNKNOWN | owner | ten-user-read-only | G2, #44, #45 | - | UNKNOWN | UNKNOWN | UNKNOWN | Return to the two-user allowlist. Exact procedure UNKNOWN. |
 | G4 | UNKNOWN | owner | twenty-user-write | G3, #47, #44, #55, #57 | - | UNKNOWN | UNKNOWN | UNKNOWN | Disable basket writes, return to the ten-user read-only allowlist. Exact procedure UNKNOWN. |
 
@@ -174,7 +174,7 @@ Runtime unknowns, all UNKNOWN until evidence exists:
 | mctl-api#1108 (epic external) | service-maintainer | mctlhq/mctl-api#1108 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | mctl-api#1110 (epic external) | service-maintainer | mctlhq/mctl-api#1110 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | mctl-api#1111 (epic external) | service-maintainer | mctlhq/mctl-api#1111 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
-| mctl-api#1079 (epic external) | service-maintainer | mctlhq/mctl-api#1079 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| mctl-api#1079 (epic external) | service-maintainer | mctlhq/mctl-api#1079 | G2 | G3, G4 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | mctl-gitops#2742 (epic external) | platform-operator | mctlhq/mctl-gitops#2742 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | mctl-gitops#2766 (epic external) | platform-operator | mctlhq/mctl-gitops#2766 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | mctl-gitops#2709 (epic external) | platform-operator | mctlhq/mctl-gitops#2709 | G0 | - | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
@@ -190,8 +190,9 @@ It is a plan, not merged and not live authorization. The table below is a
 hand-transcribed snapshot. Tests are offline and never fetch the source, so
 drift in the source is not detected automatically: re-transcribe the table
 when the pinned head changes. A merged source change would still not prove a
-live rollout. Every external dependency of c2-go-owner is a G0 topic with
-status UNKNOWN.
+live rollout. Every external dependency of c2-go-owner is a topic with status
+UNKNOWN. All of them except mctlhq/mctl-api#1079 are G0 topics; section 5.1
+records the owner override for that one.
 
 The gate dependency sets are compared with this table by a test. The offline
 readiness safeguards that G0 lists beyond the epic set (deploy-false,
@@ -225,6 +226,37 @@ transcribed and is empty.
 | c2-write-canary | #57 | #57 | UNKNOWN (not transcribed) | UNKNOWN (not transcribed) |
 | c2-go-20 | #52 | G4 | c2-go-10, c2-cohort-feedback, c2-security-boundary, c2-write-approval-proof, c2-write-canary | - |
 <!-- END EPICS -->
+
+### 5.1 Owner override G-6 (Google sign-in)
+
+Owner decision G-6 removes mctlhq/mctl-api#1079 (Google sign-in) from G0
+owner-only. It stays a dependency from stage 2 (G2, two accounts) onward, and
+G3 and G4 reach it through their dependency on the previous gate. This is an
+owner-recorded override, relayed by the lead; the decision record itself was
+not fetched here. The pinned epic table above is not rewritten: the
+c2-go-owner row still lists mctlhq/mctl-api#1079 as transcribed, and the
+override is recorded in the JSON under `owner_overrides`. The rest of the
+dependency chain is unchanged and #44 remains open. A test refuses Google
+inserted back into G0 and Google omitted from G2 or downstream.
+
+### 5.2 Release evidence (offline observations)
+
+These entries are git observations in a clean checkout. A merged source change
+or a released tag is not a deployment and not a readiness PASS, so no gate or
+topic is changed by them and every deployment state stays UNKNOWN.
+
+- glovo-pr-64-merge: mctlhq/mctl-glovo PR #64 merge commit
+  `fb8638a0947d32bef4c484c82868efb4fa35e393` is reachable from origin/main
+  (https://github.com/mctlhq/mctl-glovo/commit/fb8638a0947d32bef4c484c82868efb4fa35e393),
+  observed 2026-11-19T12:19:20Z, FRESH.
+- glovo-0.2.0-tag: the lightweight tag 0.2.0 resolves to
+  `d95db5096de08444c010c1447aa454b262a99d06`
+  (https://github.com/mctlhq/mctl-glovo/commit/d95db5096de08444c010c1447aa454b262a99d06),
+  reachable from origin/main, observed 2026-11-19T12:19:20Z, FRESH.
+- mctl-api-4.170.1: UNKNOWN. Only a lead attestation exists. Missing source:
+  the mctlhq/mctl-api release or tag 4.170.1 resolved to a full 40-hex commit
+  SHA with its HTTPS release URL, plus a live observation of the deployed
+  version. Neither is readable offline from this repository.
 
 ## 6. Authority and follow-ups
 

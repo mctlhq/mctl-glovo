@@ -61,6 +61,47 @@
     "approval_status": "UNKNOWN",
     "approval_status_note": "Not fetched here; not observed by this artifact."
   },
+  "release_evidence": [
+    {
+      "id": "glovo-pr-64-merge",
+      "subject": "mctlhq/mctl-glovo PR #64 merge commit",
+      "claim": "The merge commit is reachable from origin/main in a clean checkout, observed with git after a fetch of origin.",
+      "evidence_sha": "fb8638a0947d32bef4c484c82868efb4fa35e393",
+      "evidence_url": "https://github.com/mctlhq/mctl-glovo/commit/fb8638a0947d32bef4c484c82868efb4fa35e393",
+      "freshness": {"observed_at": "2026-11-19T12:19:20Z", "state": "FRESH"},
+      "attestation": "independently observed with git in this checkout",
+      "deployment_state": "UNKNOWN",
+      "readiness_effect": "none",
+      "missing_source": null,
+      "note": "A merged source change is not a deployment and not a readiness PASS. No gate or topic is changed by this entry."
+    },
+    {
+      "id": "glovo-0.2.0-tag",
+      "subject": "mctlhq/mctl-glovo tag 0.2.0",
+      "claim": "The lightweight tag 0.2.0 resolves to this commit, which is reachable from origin/main, observed with git after a fetch of origin.",
+      "evidence_sha": "d95db5096de08444c010c1447aa454b262a99d06",
+      "evidence_url": "https://github.com/mctlhq/mctl-glovo/commit/d95db5096de08444c010c1447aa454b262a99d06",
+      "freshness": {"observed_at": "2026-11-19T12:19:20Z", "state": "FRESH"},
+      "attestation": "independently observed with git in this checkout",
+      "deployment_state": "UNKNOWN",
+      "readiness_effect": "none",
+      "missing_source": null,
+      "note": "A released tag is not a deployment and not a readiness PASS. The image digest, chart pin and deploy flag stay UNKNOWN."
+    },
+    {
+      "id": "mctl-api-4.170.1",
+      "subject": "mctlhq/mctl-api release 4.170.1",
+      "claim": "UNKNOWN",
+      "evidence_sha": "UNKNOWN",
+      "evidence_url": "UNKNOWN",
+      "freshness": {"observed_at": null, "state": "UNKNOWN"},
+      "attestation": "lead attestation only, not independently observed here",
+      "deployment_state": "UNKNOWN",
+      "readiness_effect": "none",
+      "missing_source": "The mctlhq/mctl-api release or tag 4.170.1 resolved to a full 40-hex commit SHA with its HTTPS release URL, plus a live observation of the deployed version. Neither is readable offline from this repository.",
+      "note": "Not recorded as evidence. Needs live inspection of mctl-api, which this task excludes."
+    }
+  ],
   "stage_sequence": {
     "source": "operator-recorded requirement",
     "stages": [
@@ -114,7 +155,23 @@
     "additional_offline_safeguards": {
       "G0": ["deploy-false", "vault-control-identity", "proxy", "migrations", "image-pins", "rollback-kill", "oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity"]
     },
-    "scope_note": "Only the dependency sets of the epics that realize a gate (c2-go-owner, c2-go-2, c2-go-10, c2-go-20) and the externals of c2-write-approval-proof are transcribed. For epics outside that set the omitted dependency fields were not transcribed and are displayed as UNKNOWN (not transcribed), never as zero dependencies. The G1 to G0 edge is readiness ordering, not an epic edge."
+    "scope_note": "Only the dependency sets of the epics that realize a gate (c2-go-owner, c2-go-2, c2-go-10, c2-go-20) and the externals of c2-write-approval-proof are transcribed. For epics outside that set the omitted dependency fields were not transcribed and are displayed as UNKNOWN (not transcribed), never as zero dependencies. The G1 to G0 edge is readiness ordering, not an epic edge.",
+    "owner_overrides": [
+      {
+        "id": "G-6",
+        "kind": "owner-recorded override of the pinned plan",
+        "source": "Owner decision G-6, relayed by the lead. The decision record itself was not fetched here.",
+        "ref": "mctlhq/mctl-api#1079",
+        "topic": "ext-mctl-api-1079",
+        "subject": "Google sign-in",
+        "pinned_epic": "c2-go-owner",
+        "pinned_source_lists_it": true,
+        "removed_from": ["G0"],
+        "retained_from": "G2",
+        "retained_scope": "Stage 2 (G2, two accounts) and every later gate (G3, G4).",
+        "note": "The pinned epic row for c2-go-owner is kept as transcribed and still lists the ref, so the transcription stays honest about the source. The override moves the topic from G0 to G2 and leaves the rest of the dependency chain unchanged. #44 stays open and is not affected."
+      }
+    ]
   },
   "authority": {
     "section_9_4": {
@@ -159,7 +216,7 @@
         "operations-46", "deploy-false", "vault-control-identity", "proxy",
         "migrations", "image-pins", "rollback-kill", "oauth", "scopes",
         "glovo-home-writes", "consent-versions", "isolation", "capacity",
-        "ext-mctl-api-1108", "ext-mctl-api-1110", "ext-mctl-api-1111", "ext-mctl-api-1079",
+        "ext-mctl-api-1108", "ext-mctl-api-1110", "ext-mctl-api-1111",
         "ext-gitops-2742", "ext-gitops-2766", "ext-gitops-2709"
       ]
     },
@@ -199,7 +256,7 @@
       "depends_on": ["G1"],
       "requires": [],
       "refs": ["#50"],
-      "prerequisites": []
+      "prerequisites": ["ext-mctl-api-1079"]
     },
     {
       "id": "G3",
@@ -270,7 +327,7 @@
     {"id": "ext-mctl-api-1108", "name": "mctl-api#1108 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1108"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
     {"id": "ext-mctl-api-1110", "name": "mctl-api#1110 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1110"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
     {"id": "ext-mctl-api-1111", "name": "mctl-api#1111 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1111"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
-    {"id": "ext-mctl-api-1079", "name": "mctl-api#1079 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1079"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
+    {"id": "ext-mctl-api-1079", "name": "mctl-api#1079 (epic external)", "status": "UNKNOWN", "role": "service-maintainer", "refs": ["mctlhq/mctl-api#1079"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G2", "carried_to": ["G3", "G4"], "note": "External dependency of the pinned plan epic c2-go-owner. Owner decision G-6 removes it from G0 and retains it from G2 (two accounts) onward. State UNKNOWN: merged source would not prove a live rollout."},
     {"id": "ext-gitops-2742", "name": "mctl-gitops#2742 (epic external)", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctlhq/mctl-gitops#2742"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
     {"id": "ext-gitops-2766", "name": "mctl-gitops#2766 (epic external)", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctlhq/mctl-gitops#2766"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."},
     {"id": "ext-gitops-2709", "name": "mctl-gitops#2709 (epic external)", "status": "UNKNOWN", "role": "platform-operator", "refs": ["mctlhq/mctl-gitops#2709"], "source_paths": [], "evidence_sha": "UNKNOWN", "evidence_url": "UNKNOWN", "freshness": {"observed_at": null, "state": "UNKNOWN"}, "rollback": "UNKNOWN", "earliest_gate": "G0", "carried_to": [], "note": "External dependency of the pinned plan epic c2-go-owner. State UNKNOWN: merged source would not prove a live rollout."}
