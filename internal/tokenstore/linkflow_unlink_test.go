@@ -193,3 +193,24 @@ func TestLinkUnlinkFlagOffIs404(t *testing.T) {
 		t.Fatalf("got %d", rec.Code)
 	}
 }
+
+// The ledger says who ended a link: the user through /link/unlink, the
+// operator through OperatorUnlink, not a free-text reason.
+func TestUnlinkAuditNamesTheActor(t *testing.T) {
+	e := newEnv(t, defaultCaps())
+	e.link("tok-owner", "link-owner", session("owner"))
+	if r := e.unlink(unlinkBody()); r.status != 200 {
+		t.Fatalf("user unlink: %d %s", r.status, r.raw)
+	}
+	e.link("tok-owner", "link-owner", session("again"))
+	if err := e.h.Store.OperatorUnlink(context.Background(), ptr(pidOwner)); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(e.h.AuditActors("unlink"), ",")
+	if got != "user,operator" {
+		t.Fatalf("unlink actors = %q, want user,operator", got)
+	}
+	if _, _, ok := e.h.LinkRow(pidOwner); ok {
+		t.Fatal("operator unlink left the row")
+	}
+}

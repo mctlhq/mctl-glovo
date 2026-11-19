@@ -46,6 +46,9 @@ type Store interface {
 	// Unlink deletes pid's link. It works with the kill switch on and
 	// needs no Vault.
 	Unlink(ctx context.Context, pid PID, reason string) error
+	// OperatorUnlink is Unlink on an operator's request: same deletion, but
+	// the audit line names the operator, not the user, as the actor.
+	OperatorUnlink(ctx context.Context, pid PID) error
 	// Erase is an erasure request (Art. 17): Unlink, then pseudonymise pid
 	// in the audit (Q8).
 	Erase(ctx context.Context, pid PID) error
@@ -768,13 +771,24 @@ var reasonPattern = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 // Unlink implements Store. No kill check and no Vault: deletion never
 // depends on the thing that might be broken.
 func (s *store) Unlink(ctx context.Context, pid PID, reason string) error {
+	return s.unlinkAs(ctx, pid, reason, actorUser)
+}
+
+// OperatorUnlink implements Store. The reason is fixed, the actor is the
+// operator: a ledger reader can tell who ended the link without trusting a
+// free-text reason.
+func (s *store) OperatorUnlink(ctx context.Context, pid PID) error {
+	return s.unlinkAs(ctx, pid, "operator_request", actorOperator)
+}
+
+func (s *store) unlinkAs(ctx context.Context, pid PID, reason, actor string) error {
 	if !pid.valid() {
 		return ErrInvalidPID
 	}
 	if !reasonPattern.MatchString(reason) {
 		reason = "unspecified"
 	}
-	ev := AuditEvent{PID: pid.id, Event: "unlink", Outcome: outcomeOK, Reason: reason, Actor: actorUser, RequestID: requestID(ctx)}
+	ev := AuditEvent{PID: pid.id, Event: "unlink", Outcome: outcomeOK, Reason: reason, Actor: actor, RequestID: requestID(ctx)}
 	err := s.db.DeleteLink(ctx, pid.id, ev)
 	s.logEvent(ctx, ev, err)
 	if err != nil {
