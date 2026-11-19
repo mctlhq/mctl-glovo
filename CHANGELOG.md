@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.0](https://github.com/mctlhq/mctl-glovo/compare/0.1.0...0.2.0) (2026-11-19)
+
+
+### Features
+
+* **c2:** fresh MCTL login and pid-bound code on the link routes ([#42](https://github.com/mctlhq/mctl-glovo/issues/42)) ([6558247](https://github.com/mctlhq/mctl-glovo/commit/65582474f878b29011f83d6604e4ac8e34340e4e))
+* **c2:** fresh MCTL login and pid-bound code on the link routes ([#42](https://github.com/mctlhq/mctl-glovo/issues/42)) ([c117951](https://github.com/mctlhq/mctl-glovo/commit/c1179519398bedd6c860c1e539c2749ad06c5a9a))
+* **c2:** read-only hosted C2 by default ([aa9b3cc](https://github.com/mctlhq/mctl-glovo/commit/aa9b3cc39cc7a8bbc834f04dfe841868a3ec65d6))
+* **c2:** read-only hosted C2 by default ([97b437b](https://github.com/mctlhq/mctl-glovo/commit/97b437b752337131c24d51309eb62748ec29b8e1))
+* **c2:** refuse GLOVO_C2_BASKET_WRITES, align consent and text with read-only ([187ca98](https://github.com/mctlhq/mctl-glovo/commit/187ca98aa168c5d8860765f00572b4890bf7f65a))
+* **glovo-link:** loopback MCTL login with PKCE for the link routes ([#42](https://github.com/mctlhq/mctl-glovo/issues/42) B2) ([43b0385](https://github.com/mctlhq/mctl-glovo/commit/43b03854ba20348e1533291823c7918decc71d82))
+* **glovo-link:** loopback MCTL login with PKCE for the link routes ([#42](https://github.com/mctlhq/mctl-glovo/issues/42) B2) ([5f282f8](https://github.com/mctlhq/mctl-glovo/commit/5f282f87109379fc1f32f135cb0a9d8f3898940d))
+
+
+### Bug Fixes
+
+* **glovo-link:** annotate the constants gosec actually flags ([24e4349](https://github.com/mctlhq/mctl-glovo/commit/24e4349df13a9077c930804938e96a0945160d69))
+* **glovo-link:** reap the browser opener and silence the last G101 ([ab6632a](https://github.com/mctlhq/mctl-glovo/commit/ab6632aed67f18d469a480823dfbf687b4fb6de8))
+* **glovo-link:** tolerate clock skew and never be stricter than the server ([e54fc2c](https://github.com/mctlhq/mctl-glovo/commit/e54fc2ca0ee419eb523ed31de1a437ec90e2170c))
+* **glovologic:** honest order-history analysis for "most ordered dish" ([#45](https://github.com/mctlhq/mctl-glovo/issues/45)) ([a3af531](https://github.com/mctlhq/mctl-glovo/commit/a3af531c897aab8eed22fe4532f77dcdf56b0f6c))
+* **glovologic:** honest order-history analysis for most ordered dish ([#45](https://github.com/mctlhq/mctl-glovo/issues/45)) ([167f326](https://github.com/mctlhq/mctl-glovo/commit/167f326fb4029f5f5923fc8edcc9ec51b1e98b84))
+
 ## 0.1.0 (2026-11-17)
 
 
