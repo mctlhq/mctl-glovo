@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.2](https://github.com/mctlhq/mctl-glovo/compare/0.3.1...0.3.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* **migrate:** wait for the pod network instead of failing on the first dial ([4ba11d4](https://github.com/mctlhq/mctl-glovo/commit/4ba11d457df1c0ef2714a47586dba59010911d5f))
+* **migrate:** wait for the pod network instead of failing on the first dial ([da43bfb](https://github.com/mctlhq/mctl-glovo/commit/da43bfb60f54e1fd5f927e2f9d0609b5ce26928b))
+
 ## [0.3.1](https://github.com/mctlhq/mctl-glovo/compare/0.3.0...0.3.1) (2026-11-19)
 
 
