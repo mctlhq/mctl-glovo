@@ -157,7 +157,8 @@ func migrate(ctx context.Context, c config) (result, error) {
 	// One dedicated session holds the advisory lock for the whole run.
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return result{}, errors.New("cannot connect to the database")
+		// The class is a fixed word, never pgx's text (it can quote the DSN).
+		return result{}, errors.New("cannot connect to the database: " + connectClass(err))
 	}
 	defer func() { _ = conn.Close() }()
 	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, lockKey); err != nil {
