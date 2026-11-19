@@ -95,7 +95,37 @@ type epic struct {
 	External   []extDep `json:"external_depends_on"`
 }
 
+type ownerOverride struct {
+	ID                 string   `json:"id"`
+	Kind               string   `json:"kind"`
+	Source             string   `json:"source"`
+	Ref                string   `json:"ref"`
+	Topic              string   `json:"topic"`
+	Subject            string   `json:"subject"`
+	PinnedEpic         string   `json:"pinned_epic"`
+	PinnedSourceListed bool     `json:"pinned_source_lists_it"`
+	RemovedFrom        []string `json:"removed_from"`
+	RetainedFrom       string   `json:"retained_from"`
+	RetainedScope      string   `json:"retained_scope"`
+	Note               string   `json:"note"`
+}
+
+type releaseEvidence struct {
+	ID              string    `json:"id"`
+	Subject         string    `json:"subject"`
+	Claim           string    `json:"claim"`
+	EvidenceSHA     string    `json:"evidence_sha"`
+	EvidenceURL     string    `json:"evidence_url"`
+	Freshness       freshness `json:"freshness"`
+	Attestation     string    `json:"attestation"`
+	DeploymentState string    `json:"deployment_state"`
+	ReadinessEffect string    `json:"readiness_effect"`
+	MissingSource   *string   `json:"missing_source"`
+	Note            string    `json:"note"`
+}
+
 type planSource struct {
+	Overrides  []ownerOverride     `json:"owner_overrides"`
 	Repo       string              `json:"repo"`
 	PR         int                 `json:"pr"`
 	PRState    string              `json:"pr_state"`
@@ -126,7 +156,8 @@ type writeApproval struct {
 }
 
 type matrix struct {
-	WriteApproval writeApproval `json:"write_approval"`
+	ReleaseEvidence []releaseEvidence `json:"release_evidence"`
+	WriteApproval   writeApproval     `json:"write_approval"`
 	SchemaVersion int           `json:"schema_version"`
 	Kind          string        `json:"kind"`
 	Issue         string        `json:"issue"`
@@ -813,7 +844,6 @@ var oneShotCarry = map[string][]string{
 	"ext-mctl-api-1108": {},
 	"ext-mctl-api-1110": {},
 	"ext-mctl-api-1111": {},
-	"ext-mctl-api-1079": {},
 	"ext-gitops-2742":   {},
 	"ext-gitops-2766":   {},
 	"ext-gitops-2709":   {},
@@ -1489,10 +1519,20 @@ func epicErrors(m matrix) []string {
 				continue
 			}
 			covered[e.CarriedBy] = true
-			expected[e.CarriedBy] = append(expected[e.CarriedBy], x.Target)
+			carrier := e.CarriedBy
+			// An owner-recorded override moves the external from the pinned
+			// carrier gate to the gate it is retained from. The pinned epic row
+			// itself is not changed.
+			for _, ov := range ps.Overrides {
+				if ov.Ref == x.Ref && ov.PinnedEpic == e.Epic {
+					carrier = ov.RetainedFrom
+					covered[carrier] = true
+				}
+			}
+			expected[carrier] = append(expected[carrier], x.Target)
 			if tp := m.topic(x.Target); tp != nil {
-				if !contains(tp.Refs, x.Ref) || tp.Earliest != e.CarriedBy {
-					errs = append(errs, "external topic "+x.Target+" must carry ref "+x.Ref+" at "+e.CarriedBy)
+				if !contains(tp.Refs, x.Ref) || tp.Earliest != carrier {
+					errs = append(errs, "external topic "+x.Target+" must carry ref "+x.Ref+" at "+carrier)
 				}
 			} else if x.Target != x.Ref {
 				errs = append(errs, "external "+x.Ref+" has no topic and is not carried by its own ref")
@@ -1862,14 +1902,18 @@ type goldenGateSet struct {
 var goldenGateSets = map[string]goldenGateSet{
 	"G0": {
 		internal: []string{"owner-decision-49", "disabled-write-proof-41", "linking-42", "cutover-2777", "operations-46"},
-		external: []string{"ext-mctl-api-1108", "ext-mctl-api-1110", "ext-mctl-api-1111", "ext-mctl-api-1079", "ext-gitops-2742", "ext-gitops-2766", "ext-gitops-2709"},
+		// Owner decision G-6 removed ext-mctl-api-1079 (Google sign-in) from G0.
+		// The pinned epic row still lists it, see goldenOverride.
+		external: []string{"ext-mctl-api-1108", "ext-mctl-api-1110", "ext-mctl-api-1111", "ext-gitops-2742", "ext-gitops-2766", "ext-gitops-2709"},
 		safeguards: []string{
 			"deploy-false", "vault-control-identity", "proxy", "migrations", "image-pins", "rollback-kill",
 			"oauth", "scopes", "glovo-home-writes", "consent-versions", "isolation", "capacity",
 		},
 	},
 	"G1": {internal: []string{"G0"}},
-	"G2": {internal: []string{"G1"}},
+	// G2 retains ext-mctl-api-1079 under owner decision G-6. G3 and G4 inherit
+	// it through their dependency on the previous gate.
+	"G2": {internal: []string{"G1"}, external: []string{"ext-mctl-api-1079"}},
 	"G3": {internal: []string{"G2", "#44", "#45"}},
 	"G4": {
 		internal: []string{"G3", "#47", "#44", "#55", "#57"},
@@ -1877,10 +1921,72 @@ var goldenGateSets = map[string]goldenGateSet{
 	},
 }
 
+// goldenOverride is the independent expectation for owner decision G-6.
+var goldenOverride = ownerOverride{
+	ID:                 "G-6",
+	Kind:               "owner-recorded override of the pinned plan",
+	Source:             "Owner decision G-6, relayed by the lead. The decision record itself was not fetched here.",
+	Ref:                "mctlhq/mctl-api#1079",
+	Topic:              "ext-mctl-api-1079",
+	Subject:            "Google sign-in",
+	PinnedEpic:         "c2-go-owner",
+	PinnedSourceListed: true,
+	RemovedFrom:        []string{"G0"},
+	RetainedFrom:       "G2",
+	RetainedScope:      "Stage 2 (G2, two accounts) and every later gate (G3, G4).",
+	Note:               "The pinned epic row for c2-go-owner is kept as transcribed and still lists the ref, so the transcription stays honest about the source. The override moves the topic from G0 to G2 and leaves the rest of the dependency chain unchanged. #44 stays open and is not affected.",
+}
+
+// overrideErrors checks the G-6 override against the golden record: the record
+// itself, the topic placement, absence from G0 and presence at G2 and
+// downstream (G3 and G4 reach it through the gate chain).
+func overrideErrors(m matrix) []string {
+	var errs []string
+	if len(m.PlanSource.Overrides) != 1 || !reflect.DeepEqual(m.PlanSource.Overrides[0], goldenOverride) {
+		errs = append(errs, "G-6 override record differs from the golden record")
+	}
+	topicID := goldenOverride.Topic
+	if tp := m.topic(topicID); tp == nil {
+		errs = append(errs, "G-6 topic "+topicID+" missing")
+	} else if tp.Earliest != "G2" || !sameSet(tp.CarriedTo, []string{"G3", "G4"}) {
+		errs = append(errs, fmt.Sprintf("G-6 topic %s earliest %s carried %v, want G2 carried to G3 and G4", topicID, tp.Earliest, tp.CarriedTo))
+	}
+	for _, id := range []string{"G0", "G1", "G2", "G3", "G4"} {
+		g := m.gate(id)
+		if g == nil {
+			errs = append(errs, "G-6 gate "+id+" missing")
+			continue
+		}
+		listed := contains(g.DependsOn, topicID) || contains(g.Prerequisites, topicID) || contains(g.Requires, topicID)
+		if want := id == "G2"; listed != want {
+			errs = append(errs, fmt.Sprintf("G-6 gate %s lists %s = %v, want %v", id, topicID, listed, want))
+		}
+	}
+	for _, link := range [][2]string{{"G3", "G2"}, {"G4", "G3"}} {
+		if g := m.gate(link[0]); g == nil || !contains(g.DependsOn, link[1]) {
+			errs = append(errs, "G-6 chain broken: "+link[0]+" no longer depends on "+link[1])
+		}
+	}
+	// The pinned epic row must still list the ref: the source is not rewritten.
+	listed := false
+	for _, e := range m.PlanSource.Epics {
+		if e.Epic == goldenOverride.PinnedEpic {
+			for _, x := range e.External {
+				listed = listed || x.Ref == goldenOverride.Ref
+			}
+		}
+	}
+	if !listed {
+		errs = append(errs, "G-6 pinned epic row no longer lists "+goldenOverride.Ref)
+	}
+	return errs
+}
+
 // goldenErrors compares the actual gate sets, the transcribed JSON epic rows
 // and the Markdown source table with the independent expectation above.
 func goldenErrors(m matrix, doc string) []string {
 	var errs []string
+	errs = append(errs, overrideErrors(m)...)
 	if len(m.PlanSource.Epics) != len(goldenEpics) {
 		errs = append(errs, fmt.Sprintf("epic row count %d, golden %d", len(m.PlanSource.Epics), len(goldenEpics)))
 	}
@@ -3098,8 +3204,9 @@ It is a plan, not merged and not live authorization. The table below is a
 hand-transcribed snapshot. Tests are offline and never fetch the source, so
 drift in the source is not detected automatically: re-transcribe the table
 when the pinned head changes. A merged source change would still not prove a
-live rollout. Every external dependency of c2-go-owner is a G0 topic with
-status UNKNOWN.
+live rollout. Every external dependency of c2-go-owner is a topic with status
+UNKNOWN. All of them except mctlhq/mctl-api#1079 are G0 topics; section 5.1
+records the owner override for that one.
 
 The gate dependency sets are compared with this table by a test. The offline
 readiness safeguards that G0 lists beyond the epic set (deploy-false,
@@ -3113,6 +3220,37 @@ ordering, not an epic edge.
 A field that was not transcribed is shown as ~UNKNOWN (not transcribed)~. That
 is never a claim of zero dependencies. A ~-~ appears only where the field was
 transcribed and is empty.`
+
+	goldenOverrideProse = `### 5.1 Owner override G-6 (Google sign-in)
+
+Owner decision G-6 removes mctlhq/mctl-api#1079 (Google sign-in) from G0
+owner-only. It stays a dependency from stage 2 (G2, two accounts) onward, and
+G3 and G4 reach it through their dependency on the previous gate. This is an
+owner-recorded override, relayed by the lead; the decision record itself was
+not fetched here. The pinned epic table above is not rewritten: the
+c2-go-owner row still lists mctlhq/mctl-api#1079 as transcribed, and the
+override is recorded in the JSON under ~owner_overrides~. The rest of the
+dependency chain is unchanged and #44 remains open. A test refuses Google
+inserted back into G0 and Google omitted from G2 or downstream.`
+
+	goldenReleaseProse = `### 5.2 Release evidence (offline observations)
+
+These entries are git observations in a clean checkout. A merged source change
+or a released tag is not a deployment and not a readiness PASS, so no gate or
+topic is changed by them and every deployment state stays UNKNOWN.
+
+- glovo-pr-64-merge: mctlhq/mctl-glovo PR #64 merge commit
+  ~fb8638a0947d32bef4c484c82868efb4fa35e393~ is reachable from origin/main
+  (https://github.com/mctlhq/mctl-glovo/commit/fb8638a0947d32bef4c484c82868efb4fa35e393),
+  observed 2026-11-19T12:19:20Z, FRESH.
+- glovo-0.2.0-tag: the lightweight tag 0.2.0 resolves to
+  ~d95db5096de08444c010c1447aa454b262a99d06~
+  (https://github.com/mctlhq/mctl-glovo/commit/d95db5096de08444c010c1447aa454b262a99d06),
+  reachable from origin/main, observed 2026-11-19T12:19:20Z, FRESH.
+- mctl-api-4.170.1: UNKNOWN. Only a lead attestation exists. Missing source:
+  the mctlhq/mctl-api release or tag 4.170.1 resolved to a full 40-hex commit
+  SHA with its HTTPS release URL, plus a live observation of the deployed
+  version. Neither is readable offline from this repository.`
 )
 
 const (
@@ -3126,7 +3264,7 @@ func goldenFullDoc() string {
 	return normalizeProse(strings.Join([]string{
 		goldenTitle, goldenStatusBlock, bt(goldenIntro), bt(goldenRulesBlock),
 		bt(goldenFreshnessBlock), bt(goldenBaselineBlock), goldenMatrixHeading, matrixSlot,
-		bt(goldenEpicsProse), epicsSlot, bt(goldenAuthorityBlock),
+		bt(goldenEpicsProse), epicsSlot, bt(goldenOverrideProse), bt(goldenReleaseProse), bt(goldenAuthorityBlock),
 	}, "\n\n"))
 }
 
@@ -3391,5 +3529,236 @@ func TestBareExistingApprovalRefused(t *testing.T) {
 		if len(fullDocErrors(bad)) == 0 {
 			t.Errorf("%s: full-document pin did not refuse it", name)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Owner decision G-6: mctlhq/mctl-api#1079 (Google sign-in) leaves G0 and is
+// retained from G2 onward. The red cases below put it back into G0 or omit it
+// downstream; the committed data must stay green.
+// ---------------------------------------------------------------------------
+
+func TestG6OverrideGreenAndRed(t *testing.T) {
+	m := loadMatrix(t)
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if errs := goldenErrors(m, string(raw)); len(errs) != 0 {
+		t.Fatalf("committed data is not green: %v", errs)
+	}
+	if errs := epicErrors(m); len(errs) != 0 {
+		t.Fatalf("committed data is not green: %v", errs)
+	}
+	const id = "ext-mctl-api-1079"
+	add := func(xs []string, x string) []string { return append(append([]string(nil), xs...), x) }
+	drop := func(xs []string, x string) []string {
+		var out []string
+		for _, v := range xs {
+			if v != x {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	setGate := func(m matrix, gid string, f func(*gate)) matrix {
+		bad := cloneMatrix(m)
+		for i := range bad.Gates {
+			if bad.Gates[i].ID == gid {
+				f(&bad.Gates[i])
+			}
+		}
+		return bad
+	}
+	cases := map[string]struct {
+		bad       matrix
+		wantEpic  bool
+		wantNames string
+	}{
+		"Google inserted back into G0": {
+			bad:       setGate(m, "G0", func(g *gate) { g.Prerequisites = add(g.Prerequisites, id) }),
+			wantEpic:  true,
+			wantNames: "G0",
+		},
+		"Google omitted from G2": {
+			bad:       setGate(m, "G2", func(g *gate) { g.Prerequisites = drop(g.Prerequisites, id) }),
+			wantEpic:  true,
+			wantNames: "G2",
+		},
+		"Google omitted downstream, G3 detached from G2": {
+			bad:       setGate(m, "G3", func(g *gate) { g.DependsOn = drop(g.DependsOn, "G2") }),
+			wantEpic:  true,
+			wantNames: "G3",
+		},
+		"Google omitted downstream, G4 detached from G3": {
+			bad:       setGate(m, "G4", func(g *gate) { g.DependsOn = drop(g.DependsOn, "G3") }),
+			wantEpic:  true,
+			wantNames: "G4",
+		},
+		"Google carried nowhere after G2": {
+			bad: func() matrix {
+				bad := cloneMatrix(m)
+				setTopic(&bad, id, func(tp *topic) { tp.CarriedTo = nil })
+				return bad
+			}(),
+			wantNames: "G-6",
+		},
+		"override record dropped": {
+			bad: func() matrix {
+				bad := cloneMatrix(m)
+				bad.PlanSource.Overrides = nil
+				return bad
+			}(),
+			wantNames: "G-6",
+		},
+		"pinned epic row rewritten": {
+			bad: func() matrix {
+				bad := cloneMatrix(m)
+				for i := range bad.PlanSource.Epics {
+					if bad.PlanSource.Epics[i].Epic == "c2-go-owner" {
+						e := bad.PlanSource.Epics[i]
+						e.External = nil
+						for _, x := range m.PlanSource.Epics[i].External {
+							if x.Ref != "mctlhq/mctl-api#1079" {
+								e.External = append(e.External, x)
+							}
+						}
+						bad.PlanSource.Epics[i] = e
+					}
+				}
+				return bad
+			}(),
+			wantNames: "c2-go-owner",
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			errs := goldenErrors(c.bad, string(raw))
+			if len(errs) == 0 {
+				t.Fatalf("%s was not refused by the golden data", name)
+			}
+			if !anyContains(errs, c.wantNames) {
+				t.Errorf("golden errors do not name %s: %v", c.wantNames, errs)
+			}
+			if c.wantEpic && len(epicErrors(c.bad)) == 0 {
+				t.Errorf("%s was not refused by the epic check", name)
+			}
+		})
+	}
+	// A coordinated re-insertion (gate, topic and override all moved back to
+	// G0) is internally consistent but still refused by the golden data.
+	bad := setGate(m, "G0", func(g *gate) { g.Prerequisites = add(g.Prerequisites, id) })
+	bad = setGate(bad, "G2", func(g *gate) { g.Prerequisites = drop(g.Prerequisites, id) })
+	setTopic(&bad, id, func(tp *topic) { tp.Earliest = "G0"; tp.CarriedTo = nil })
+	bad.PlanSource.Overrides = nil
+	if len(epicErrors(bad)) != 0 {
+		t.Fatalf("coordinated fixture is not consistent: %v", epicErrors(bad))
+	}
+	if len(goldenErrors(bad, string(raw))) == 0 {
+		t.Error("coordinated re-insertion of Google into G0 was not refused")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Release evidence: offline git observations only. A merged source or a
+// released tag is never a deployment or a readiness PASS.
+// ---------------------------------------------------------------------------
+
+var goldenReleaseEvidence = map[string]string{
+	"glovo-pr-64-merge": "fb8638a0947d32bef4c484c82868efb4fa35e393",
+	"glovo-0.2.0-tag":   "d95db5096de08444c010c1447aa454b262a99d06",
+	"mctl-api-4.170.1":  "UNKNOWN",
+}
+
+func releaseEvidenceErrors(m matrix) []string {
+	var errs []string
+	if len(m.ReleaseEvidence) != len(goldenReleaseEvidence) {
+		errs = append(errs, fmt.Sprintf("release evidence count %d, want %d", len(m.ReleaseEvidence), len(goldenReleaseEvidence)))
+	}
+	seen := map[string]bool{}
+	for _, r := range m.ReleaseEvidence {
+		wantSHA, ok := goldenReleaseEvidence[r.ID]
+		if !ok || seen[r.ID] {
+			errs = append(errs, "unexpected or duplicate release evidence "+r.ID)
+			continue
+		}
+		seen[r.ID] = true
+		if r.EvidenceSHA != wantSHA {
+			errs = append(errs, fmt.Sprintf("%s sha %q, want %q", r.ID, r.EvidenceSHA, wantSHA))
+		}
+		if r.DeploymentState != "UNKNOWN" {
+			errs = append(errs, r.ID+" deployment_state must stay UNKNOWN")
+		}
+		if r.ReadinessEffect != "none" {
+			errs = append(errs, r.ID+" readiness_effect must be none")
+		}
+		if r.Freshness.State == "FRESH" {
+			if !sha40.MatchString(r.EvidenceSHA) || !validHTTPS(r.EvidenceURL) || !strings.Contains(r.EvidenceURL, r.EvidenceSHA) {
+				errs = append(errs, r.ID+" FRESH needs a 40-hex sha and an https url naming it")
+			}
+			if r.Freshness.ObservedAt == nil {
+				errs = append(errs, r.ID+" FRESH needs observed_at")
+			} else if ts, err := time.Parse(time.RFC3339, *r.Freshness.ObservedAt); err != nil || !strings.HasSuffix(*r.Freshness.ObservedAt, "Z") || ts.IsZero() {
+				errs = append(errs, r.ID+" observed_at is not an RFC 3339 UTC time")
+			}
+			if !strings.HasPrefix(r.Attestation, "independently observed") {
+				errs = append(errs, r.ID+" FRESH needs an independent observation, not an attestation")
+			}
+			if r.MissingSource != nil {
+				errs = append(errs, r.ID+" FRESH must not list a missing source")
+			}
+		} else {
+			if r.Freshness.State != "UNKNOWN" || r.Freshness.ObservedAt != nil || r.EvidenceSHA != "UNKNOWN" || r.EvidenceURL != "UNKNOWN" || r.Claim != "UNKNOWN" {
+				errs = append(errs, r.ID+" without an observation must be UNKNOWN everywhere")
+			}
+			if r.MissingSource == nil || *r.MissingSource == "" {
+				errs = append(errs, r.ID+" UNKNOWN evidence must name the missing source")
+			}
+		}
+	}
+	return errs
+}
+
+func TestReleaseEvidence(t *testing.T) {
+	m := loadMatrix(t)
+	if errs := releaseEvidenceErrors(m); len(errs) != 0 {
+		t.Fatalf("release evidence: %v", errs)
+	}
+	raw, err := os.ReadFile(mdPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := string(raw)
+	for _, r := range m.ReleaseEvidence {
+		if !strings.Contains(doc, r.ID) || !strings.Contains(doc, r.EvidenceSHA) {
+			t.Errorf("Markdown does not carry release evidence %s", r.ID)
+		}
+		if r.EvidenceURL != "UNKNOWN" && !strings.Contains(doc, r.EvidenceURL) {
+			t.Errorf("Markdown does not carry the url of %s", r.ID)
+		}
+	}
+	mut := map[string]func(*matrix){
+		"mctl-api marked FRESH":          func(m *matrix) { m.ReleaseEvidence[2].Freshness.State = "FRESH" },
+		"mctl-api given a sha":           func(m *matrix) { m.ReleaseEvidence[2].EvidenceSHA = strings.Repeat("a", 40) },
+		"mctl-api observation invented":  func(m *matrix) { m.ReleaseEvidence[2].Freshness.ObservedAt = strp("2026-11-19T12:00:00Z") },
+		"mctl-api missing source erased": func(m *matrix) { m.ReleaseEvidence[2].MissingSource = nil },
+		"merge deployed":                 func(m *matrix) { m.ReleaseEvidence[0].DeploymentState = "PASS" },
+		"tag grants readiness":           func(m *matrix) { m.ReleaseEvidence[1].ReadinessEffect = "PASS" },
+		"merge sha short":                func(m *matrix) { m.ReleaseEvidence[0].EvidenceSHA = "fb8638a0" },
+		"merge url http":                 func(m *matrix) { m.ReleaseEvidence[0].EvidenceURL = "http://github.com/x/fb8638a0947d32bef4c484c82868efb4fa35e393" },
+		"tag without observation":        func(m *matrix) { m.ReleaseEvidence[1].Freshness.ObservedAt = nil },
+		"tag observed by attestation":    func(m *matrix) { m.ReleaseEvidence[1].Attestation = "lead attestation only" },
+		"tag time not UTC":               func(m *matrix) { m.ReleaseEvidence[1].Freshness.ObservedAt = strp("2026-11-19T12:19:20+02:00") },
+		"entry dropped":                  func(m *matrix) { m.ReleaseEvidence = m.ReleaseEvidence[:2] },
+	}
+	for name, f := range mut {
+		t.Run(name, func(t *testing.T) {
+			bad := m
+			bad.ReleaseEvidence = append([]releaseEvidence(nil), m.ReleaseEvidence...)
+			f(&bad)
+			if len(releaseEvidenceErrors(bad)) == 0 {
+				t.Fatalf("%s was not refused", name)
+			}
+		})
 	}
 }
