@@ -374,7 +374,7 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 	}
 	app := &c2App{link: h, mcp: routes, ready: []health.Checker{verifier.Ready}}
 	if c.control.enabled() {
-		app.control, err = buildControl(ctx, c.control, kill, log)
+		app.control, err = buildControl(ctx, c.control, kill, log, store)
 		if err != nil {
 			closeDB()
 			return nil, noop, err
@@ -520,7 +520,7 @@ func withCaps(cfg *tokenstore.Config, c c2Config) error {
 // The first key set fetch is best effort: until it works the endpoint
 // answers 503, which mctl-api reads as "state unknown", and the service
 // itself stays ready (the flip path being down must not take MCP down).
-func buildControl(ctx context.Context, cc controlConfig, kill *tokenstore.KillSwitch, log *slog.Logger) (*controlRoutes, error) {
+func buildControl(ctx context.Context, cc controlConfig, kill *tokenstore.KillSwitch, log *slog.Logger, accounts accountEnder) (*controlRoutes, error) {
 	v, err := authn.NewService(authn.ServiceConfig{
 		Issuer: cc.issuer, Audience: cc.audience, JWKSURL: cc.jwksURL, Subjects: cc.subjects,
 	})
@@ -532,5 +532,9 @@ func buildControl(ctx context.Context, cc controlConfig, kill *tokenstore.KillSw
 	if err := v.Refresh(startCtx); err != nil {
 		log.Warn("initial control jwks fetch failed", "error", err)
 	}
-	return newControlRoutes(v, kill, log.With("component", "control"), log.With("log", "audit"))
+	r, err := newControlRoutes(v, kill, log.With("component", "control"), log.With("log", "audit"))
+	if err != nil {
+		return nil, err
+	}
+	return r.WithAccounts(accounts), nil
 }

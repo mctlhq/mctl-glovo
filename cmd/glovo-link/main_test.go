@@ -28,6 +28,7 @@ type fakeServer struct {
 	mu       sync.Mutex
 	previews int
 	uploads  int
+	unlinks  int
 	total    int // every hit on a /link route, authorized or not
 	auths    []string
 	lastBody map[string]any
@@ -77,6 +78,14 @@ func newFakeServer(t *testing.T) *fakeServer {
 				return
 			}
 			_, _ = w.Write([]byte(`{"result":"linked"}`))
+		case "/link/unlink":
+			f.unlinks++
+			if body["schema"] != unlinkSchema || len(body) != 1 {
+				w.WriteHeader(400)
+				_, _ = w.Write([]byte(`{"error":"malformed_request","message":"x"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"result":"unlinked"}`))
 		default:
 			w.WriteHeader(404)
 		}
@@ -365,5 +374,58 @@ func TestBadCodeShapeNeverLeavesTheMachine(t *testing.T) {
 	}
 	if pv, _ := f.counts(); pv != 0 {
 		t.Fatal("a malformed code was sent")
+	}
+}
+
+// --- unlink --------------------------------------------------------------
+
+func TestUnlinkAfterFreshLoginAndConfirmation(t *testing.T) {
+	f := newFakeServer(t)
+	r := runHelper(t, f, []string{"-unlink"}, "y\n")
+	if r.code != 0 || r.stdout != msgUnlinked+"\n" {
+		t.Fatalf("%d %q %q", r.code, r.stdout, r.stderr)
+	}
+	f.mu.Lock()
+	n, auths := f.unlinks, append([]string(nil), f.auths...)
+	f.mu.Unlock()
+	tok := f.idp.issuedToken()
+	if n != 1 || tok == "" || len(auths) != 1 || auths[0] != "Bearer "+tok {
+		t.Fatalf("unlinks %d, auths %d", n, len(auths))
+	}
+	// It reads no code and never the session file.
+	if strings.Contains(r.stderr, "link code") {
+		t.Fatalf("unlink asked for a code: %q", r.stderr)
+	}
+}
+
+func TestUnlinkDeclinedSendsNothing(t *testing.T) {
+	f := newFakeServer(t)
+	for _, answer := range []string{"n", "", "Y es", "no"} {
+		r := runHelper(t, f, []string{"-unlink"}, answer+"\n")
+		if r.code == 0 || r.stdout != msgNotUnlinked+"\n" {
+			t.Fatalf("answer %q: %d %q", answer, r.code, r.stdout)
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.unlinks != 0 || f.total != 0 {
+		t.Fatalf("declined unlink reached the server: %d/%d", f.unlinks, f.total)
+	}
+}
+
+func TestUnlinkServerRefusalIsAFixedText(t *testing.T) {
+	f := newFakeServer(t)
+	f.freshRequired = true
+	r := runHelper(t, f, []string{"-unlink"}, "y\n")
+	if r.code == 0 || r.stdout != refusals["fresh_login_required"]+"\n" || strings.Contains(r.stdout+r.stderr, "MARKER") {
+		t.Fatalf("%d %q %q", r.code, r.stdout, r.stderr)
+	}
+}
+
+func TestUnlinkOnlyToTheLinkOrigin(t *testing.T) {
+	// The token is for the link server only: the route check admits the
+	// unlink path and nothing outside /link.
+	if !linkRoute("https://glovo.mctl.ai/link/unlink") || linkRoute("https://glovo.mctl.ai/link/unlink?x=1") || linkRoute("https://glovo.mctl.ai/mcp") {
+		t.Fatal("linkRoute admits the wrong paths")
 	}
 }

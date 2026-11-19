@@ -51,15 +51,18 @@ const (
 	defaultServer = "https://glovo.mctl.ai"
 	uploadSchema  = "glovo-link-upload/v1"
 	previewSchema = "glovo-link-preview/v1"
+	unlinkSchema  = "glovo-link-unlink/v1"
 	maxSession    = 16 << 10
 	maxAnswer     = 4 << 10
 )
 
-const usage = "usage: glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]\nThe link code is read from stdin, never from arguments."
+const usage = "usage: glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]\n       glovo-link -unlink -client-id ID [-server https://glovo.mctl.ai] [-no-browser]\nThe link code is read from stdin, never from arguments."
 
 // Fixed texts. stdout only ever carries msgLinked or one refusal.
 const (
 	msgLinked        = "linked"
+	msgUnlinked      = "unlinked"
+	msgNotUnlinked   = "not unlinked: you declined"
 	msgArgs          = "refused: glovo-link takes no arguments; it reads the link code from stdin"
 	msgServer        = "refused: -server must be an https:// origin"
 	msgCodeRead      = "refused: no link code on stdin"
@@ -153,6 +156,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 	server := fs.String("server", defaultServer, "link server origin (https only)")
 	clientID := fs.String("client-id", "", "OAuth client ID registered for this helper (required, no default)")
 	noBrowser := fs.Bool("no-browser", false, "print the login address instead of opening a browser")
+	unlink := fs.Bool("unlink", false, "remove your Glovo session from the service (no code is read)")
 	sessionPath := fs.String("session", "", "Glovo session file, or - for stdin (default ~/.glovo/session.json)")
 	if err := fs.Parse(args); err != nil {
 		_, _ = fmt.Fprintln(stderr, usage)
@@ -181,6 +185,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 	}
 
 	in := bufio.NewReader(stdin)
+	if *unlink {
+		return runUnlink(in, stdout, stderr, e, base, *clientID, *noBrowser)
+	}
 	_, _ = fmt.Fprint(stderr, "Paste the link code: ")
 	code, ok := readLine(in)
 	if !ok || code == "" {
@@ -263,10 +270,60 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 	return 0
 }
 
+// runUnlink removes the caller's stored Glovo session: the same fresh MCTL
+// login as linking, one y/N confirmation, then POST /link/unlink. It reads
+// no code and no session.
+func runUnlink(in *bufio.Reader, stdout, stderr io.Writer, e env, base, clientID string, noBrowser bool) int {
+	ctx := context.Background()
+	now := e.now
+	if now == nil {
+		now = time.Now
+	}
+	open := e.open
+	if noBrowser {
+		open = nil
+	}
+	token, msg := login(ctx, e.hc, loginParams{
+		Issuer:   e.issuer,
+		ClientID: clientID,
+		Resource: base + "/link",
+		Timeout:  e.loginTimeout,
+		Open:     open,
+		Now:      now,
+	}, stderr)
+	if msg != "" {
+		_, _ = fmt.Fprintln(stdout, msg)
+		return 1
+	}
+	_, _ = fmt.Fprint(stderr, "\nRemove your Glovo session from this service? Linking again needs a new session. [y/N] ")
+	answer, _ := readLine(in)
+	if a := strings.ToLower(answer); a != "y" && a != "yes" {
+		_, _ = fmt.Fprintln(stdout, msgNotUnlinked)
+		return 1
+	}
+	if m := prefilter(token, e.issuer, base+"/link", now()); m != "" {
+		_, _ = fmt.Fprintln(stdout, m)
+		return 1
+	}
+	var out struct {
+		Result string `json:"result"`
+	}
+	if msg := post(ctx, e.hc, target{base: base, token: token}, base+"/link/unlink", map[string]any{"schema": unlinkSchema}, &out); msg != "" {
+		_, _ = fmt.Fprintln(stdout, msg)
+		return 1
+	}
+	if out.Result != "unlinked" {
+		_, _ = fmt.Fprintln(stdout, msgServerUnknown)
+		return 1
+	}
+	_, _ = fmt.Fprintln(stdout, msgUnlinked)
+	return 0
+}
+
 // linkRoute admits only the two routes the token is for, without a query.
 func linkRoute(raw string) bool {
 	u, err := url.Parse(raw)
-	return err == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "/link/preview" || u.Path == "/link/upload")
+	return err == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "/link/preview" || u.Path == "/link/upload" || u.Path == "/link/unlink")
 }
 
 func sameOrigin(raw, base string) bool {

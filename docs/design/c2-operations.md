@@ -453,12 +453,19 @@ its Vault commands were not checked against a Vault.
 - Revoke the glovo:c2 grant or consent: a mctl-api action. The next call is
   refused within `admitTTL` (5 s) in consent mode; the verifier gate is at
   most 60 s (CURRENT). Which mechanism a given pilot uses is UNKNOWN.
-- Unlink: `Store.Unlink` exists (`store.go:750`) and works under kill
-  without Vault. There is **no caller** of `Unlink` in `cmd/` or the link
-  routes at this SHA (grep of non-test code finds none), so there is no
-  user-facing or operator route to run it. UNAVAILABLE as an operation.
-  Design 4.3 and 9.4 describe an Unlink control on `/link` and a grantless
-  sweep; neither is implemented in the source read (UNAVAILABLE).
+- Unlink: `Store.Unlink` (`store.go:750`) works under kill without Vault
+  or consent. Two callers exist in the source:
+  - user: `POST /link/unlink` on the link routes, behind the same fresh MCTL
+    login and link audience as an upload, reached with `glovo-link -unlink`
+    (one y/N confirmation, no code, no session file). The pid is the
+    verified one, never a body field.
+  - operator: `POST /internal/v1/control/unlink`, `{"principal": "prn_..."}`,
+    behind the control route's machine-user identity and proxy lock. Audit
+    lines `account_unlink` / `account_unlink_refused` carry no principal.
+  The route exists only when the control endpoint is configured. There is
+  no caller of it in mctl-api yet, and no live run: both are open. Design 4.3
+  also describes an Unlink control on the `/link` page and a grantless sweep;
+  neither is implemented (UNAVAILABLE).
 
 ### 6.3 Suspend and resume
 
@@ -471,9 +478,10 @@ its Vault commands were not checked against a Vault.
 ### 6.4 Erase
 
 - `Store.Erase` exists (`store.go:768`): unlink, an `erasure` event and the
-  subject pseudonymisation in one transaction. It has no caller in non-test
-  code (UNAVAILABLE as an operation). Erasure today is not executable by an
-  operator through any route in this repository.
+  subject pseudonymisation in one transaction. Its caller is
+  `POST /internal/v1/control/erase` (same identity as the unlink route,
+  audit `account_erase`). Nothing in mctl-api calls it yet, so an erasure
+  request has no end-to-end path until that caller and a live run exist.
 - Backups: DESIGN says Postgres backups for 14 days can still hold
   ciphertext, and a restore must re-apply recorded unlink and erasure events
   before the service starts. That procedure is DESIGN; no tool for it exists
@@ -486,7 +494,9 @@ its Vault commands were not checked against a Vault.
 |---|---|---|---|---|
 | Relink a user | the user, with owner GO to open a code | consent recorded, pid admitted | `link` event outcome `ok`, a `tool_call outcome=ok` | upload refused or consent not held: stop, no retry loop |
 | Revoke consent or grant | mctl-api admin, owner GO | principal and window recorded without raw pid in this repo | next `tool_call` for that principal is `refused` within the TTLs | none: refusal is the safe state |
-| Suspend / resume / unlink / erase by operator | operator, owner GO | UNAVAILABLE | UNAVAILABLE | do not improvise SQL; ask the orchestrator for a design slice |
+| Unlink / erase by operator | machine-user caller, owner GO | principal and window recorded without raw pid in this repo | `account_unlink` / `account_erase` audit line outcome `ok`, a `tool_call` for that principal answers not linked | `state_unknown` or any refusal: stop, do not retry in a loop, do not improvise SQL |
+| Unlink by the user | the user, `glovo-link -unlink` | fresh MCTL login | helper prints `unlinked`; `link` row gone; next `tool_call` answers not linked | refusal text from the helper: stop |
+| Suspend / resume by operator | operator, owner GO | UNAVAILABLE | UNAVAILABLE | do not improvise SQL; ask the orchestrator for a design slice |
 
 ## 7. Alert and evidence signals: what exists today
 
@@ -838,8 +848,8 @@ Open, not decided by this document:
 2. Which backend serves the public host at each stage (section 2).
 3. Whether the control route and the consent route are mounted in the
    deployed pod, and how mctl-api reaches the control route.
-4. Whether an operator unlink, resume and erase route is wanted (currently
-   UNAVAILABLE). Each is a new owner-approved slice with its own tests.
+4. Whether an operator resume route is wanted (UNAVAILABLE). Unlink and
+   erase routes exist; who calls them from mctl-api is open.
 5. Whether readiness should cover database and kill switch (section 1.2).
 6. The notification channel for expired sessions (`token-store.md` 4.5) and
    whether a per-user keepalive is wanted.

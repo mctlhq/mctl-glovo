@@ -96,7 +96,8 @@ by the Authorization header.
 | Erase pseudonymised in audit; audit insert-only and erasable | `TestEraseIsPseudonymisedInAudit`, `TestPostgresAuditIsInsertOnlyAndErasable` (PG) | source |
 | One user's erasure leaves the other intact | `TestIsoErasureOfOneUserLeavesTheOtherIntact` (PG) | source (PG) |
 | A not-linked principal gets a "not linked" refusal at the MCP surface | `cmd/mctl-glovo` `TestMCPAuditLine` (removes the principal from the session-source stub) | source (mem, stub only) |
-| Unlink through the MCP surface or an owner-facing path, and a call after a real `Unlink` returning not-linked rather than a cached session | store `Unlink`/`Erase` exist; no cmd-level test drives them | proposed |
+| Owner-facing unlink, and a read after a real `Unlink` returning not-linked rather than a cached session | `TestLinkUnlinkRemovesTheSessionAndOnlyThat`, `TestLinkUnlinkWorksUnderKillAndWithoutConsentOrVault`, `TestLinkUnlinkNeedsAFreshLinkToken`, `TestLinkUnlinkCannotTargetAnotherPrincipal`, `TestLinkUnlinkFailureIsNeverASuccess` (linkflow over a real store, memDB), `cmd/glovo-link` `TestUnlink*` | source (mem) |
+| Operator unlink and erase routes: identity gate, strict body, failure never ok, clean logs | `cmd/mctl-glovo` `TestControlAccount*` | source (stub store); live run proposed |
 
 Fresh-login linking is Draft #56 and out of scope.
 
