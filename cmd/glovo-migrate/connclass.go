@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"io"
 	"net"
 	"strings"
 	"syscall"
@@ -42,24 +43,40 @@ func connectClass(err error) string {
 	case errors.Is(err, syscall.EHOSTUNREACH), errors.Is(err, syscall.ENETUNREACH):
 		return "host unreachable"
 	}
-	// The remaining classes are read from fixed fragments of the text. The text is
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return "connection closed by the server"
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return "timed out"
+	}
+	// The remaining classes are read from fixed fragments of the text of the
+	// INNERMOST error only: the outer text is built from the DSN (user, host),
+	// and a host called "eof-db" must not read as a closed connection. The text is
 	// only inspected, never echoed.
-	msg := strings.ToLower(err.Error())
+	msg := strings.ToLower(innermost(err).Error())
 	switch {
 	case strings.Contains(msg, "server refused tls"), strings.Contains(msg, "does not support ssl"):
 		return "server does not offer TLS"
-	case strings.Contains(msg, "tls:"):
+	case strings.HasPrefix(msg, "tls:"):
 		return "TLS handshake failed"
-	case strings.Contains(msg, "timeout"), strings.Contains(msg, "i/o timeout"):
-		return "timed out"
-	case strings.Contains(msg, "eof"):
-		return "connection closed by the server"
 	}
 	var op *net.OpError
 	if errors.As(err, &op) {
 		return "network error during " + opName(op.Op)
 	}
 	return "unclassified"
+}
+
+// innermost follows Unwrap to the error at the bottom of the chain.
+func innermost(err error) error {
+	for {
+		u := errors.Unwrap(err)
+		if u == nil {
+			return err
+		}
+		err = u
+	}
 }
 
 // opName keeps only a known net.OpError operation name.

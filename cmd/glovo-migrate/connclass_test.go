@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"syscall"
@@ -37,7 +38,9 @@ func TestConnectClass(t *testing.T) {
 		{"hostname", wrap(x509.HostnameError{Host: leakyHost}), "server certificate rejected"},
 		{"no tls", wrap(errors.New("server refused TLS connection")), "server does not offer TLS"},
 		{"tls handshake", wrap(errors.New("tls: handshake failure")), "TLS handshake failed"},
-		{"eof", wrap(errors.New("unexpected EOF")), "connection closed by the server"},
+		{"eof", wrap(io.ErrUnexpectedEOF), "connection closed by the server"},
+		{"plain eof", wrap(io.EOF), "connection closed by the server"},
+		{"net timeout", wrap(&net.OpError{Op: "dial", Err: timeoutErr{}}), "timed out"},
 		{"op error other", wrap(&net.OpError{Op: "mystery " + leakyPass, Err: errors.New("x")}), "network error during connect"},
 		{"anything else", wrap(errors.New("weird " + leakyPass)), "unclassified"},
 	} {
@@ -49,6 +52,23 @@ func TestConnectClass(t *testing.T) {
 			if strings.Contains(got, secret) {
 				t.Errorf("%s: class leaks %q: %q", tc.name, secret, got)
 			}
+		}
+	}
+}
+
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "i/o timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return false }
+
+// The outer text is built from the DSN: a host or user that merely CONTAINS a
+// fragment must not decide the class.
+func TestConnectClassIgnoresFragmentsInTheOuterText(t *testing.T) {
+	for _, host := range []string{"eof-db.internal", "timeout.example", "tls:db", "refused.tls: example"} {
+		err := fmt.Errorf("failed to connect to `user=glovo host=%s`: %w", host, errors.New("something odd"))
+		if got := connectClass(err); got != "unclassified" {
+			t.Errorf("host %q: class %q, want unclassified", host, got)
 		}
 	}
 }
