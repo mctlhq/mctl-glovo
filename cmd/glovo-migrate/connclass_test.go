@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -83,11 +84,11 @@ func TestMigrateConnectFailureNamesTheClassNotTheDSN(t *testing.T) {
 	addr := l.Addr().String()
 	_ = l.Close() // nothing listens: connection refused
 	dsn := "postgresql://" + leakyUser + ":" + leakyPass + "@" + addr + "/mctl-glovo?sslmode=require"
-	_, err = migrate(context.Background(), config{DSN: dsn, ExpectRole: leakyUser, RuntimeRole: "glovo_c2_runtime"})
+	_, err = migrate(context.Background(), config{DSN: dsn, ExpectRole: leakyUser, RuntimeRole: "glovo_c2_runtime", ConnectWait: 600 * time.Millisecond})
 	if err == nil || exitCode(err) != exitFailed {
 		t.Fatalf("want a failure (exit %d), got %v", exitFailed, err)
 	}
-	if !strings.Contains(err.Error(), "cannot connect to the database: connection refused") {
+	if !strings.Contains(err.Error(), "cannot connect to the database after ") || !strings.HasSuffix(err.Error(), "connection refused") {
 		t.Fatalf("error does not name the class: %q", err)
 	}
 	for _, secret := range []string{leakyPass, addr} {
