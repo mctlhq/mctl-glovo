@@ -122,7 +122,12 @@ func openBrowser(u string) error {
 	default:
 		return errors.New("no browser opener")
 	}
-	return exec.Command(name, u).Start() // #nosec G204 -- fixed binary, the address is one argument
+	cmd := exec.Command(name, u) // #nosec G204 -- fixed binary, the address is one argument
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }() // reap the opener so it never lingers as a zombie
+	return nil
 }
 
 func newHTTPClient(roots *tls.Config) *http.Client {
