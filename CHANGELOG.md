@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/mctlhq/mctl-glovo/compare/0.2.0...0.3.0) (2026-11-19)
+
+
+### Features
+
+* **c2:** user and operator unlink and erase routes ([fb8638a](https://github.com/mctlhq/mctl-glovo/commit/fb8638a0947d32bef4c484c82868efb4fa35e393))
+* **c2:** user and operator unlink and erase routes ([88dd07f](https://github.com/mctlhq/mctl-glovo/commit/88dd07f038f477466c7d38b2808e61c9839b2ad5))
+
+
+### Bug Fixes
+
+* **c2:** record the operator as the actor of an operator unlink ([58fccc4](https://github.com/mctlhq/mctl-glovo/commit/58fccc43791a3d469294df14ef1fcf9cbeb4d09f))
+* **c2:** record the operator as the actor of an operator unlink ([a6c462c](https://github.com/mctlhq/mctl-glovo/commit/a6c462c9828e165b2aa104382901fb25b6fc8c0e))
+
 ## [0.2.0](https://github.com/mctlhq/mctl-glovo/compare/0.1.0...0.2.0) (2026-11-19)
 
 
