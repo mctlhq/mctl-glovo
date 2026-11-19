@@ -158,11 +158,11 @@ type writeApproval struct {
 type matrix struct {
 	ReleaseEvidence []releaseEvidence `json:"release_evidence"`
 	WriteApproval   writeApproval     `json:"write_approval"`
-	SchemaVersion int           `json:"schema_version"`
-	Kind          string        `json:"kind"`
-	Issue         string        `json:"issue"`
-	Issue40Done   bool          `json:"issue_40_fully_satisfied"`
-	Baseline      struct {
+	SchemaVersion   int               `json:"schema_version"`
+	Kind            string            `json:"kind"`
+	Issue           string            `json:"issue"`
+	Issue40Done     bool              `json:"issue_40_fully_satisfied"`
+	Baseline        struct {
 		Repo        string   `json:"repo"`
 		Branch      string   `json:"branch"`
 		SHA         string   `json:"sha"`
@@ -1523,7 +1523,8 @@ func epicErrors(m matrix) []string {
 			// An owner-recorded override moves the external from the pinned
 			// carrier gate to the gate it is retained from. The pinned epic row
 			// itself is not changed.
-			for _, ov := range ps.Overrides {
+			for i := range ps.Overrides {
+				ov := &ps.Overrides[i]
 				if ov.Ref == x.Ref && ov.PinnedEpic == e.Epic {
 					carrier = ov.RetainedFrom
 					covered[carrier] = true
@@ -1969,7 +1970,8 @@ func overrideErrors(m matrix) []string {
 	}
 	// The pinned epic row must still list the ref: the source is not rewritten.
 	listed := false
-	for _, e := range m.PlanSource.Epics {
+	for i := range m.PlanSource.Epics {
+		e := &m.PlanSource.Epics[i]
 		if e.Epic == goldenOverride.PinnedEpic {
 			for _, x := range e.External {
 				listed = listed || x.Ref == goldenOverride.Ref
@@ -3676,7 +3678,8 @@ func releaseEvidenceErrors(m matrix) []string {
 		errs = append(errs, fmt.Sprintf("release evidence count %d, want %d", len(m.ReleaseEvidence), len(goldenReleaseEvidence)))
 	}
 	seen := map[string]bool{}
-	for _, r := range m.ReleaseEvidence {
+	for i := range m.ReleaseEvidence {
+		r := &m.ReleaseEvidence[i]
 		wantSHA, ok := goldenReleaseEvidence[r.ID]
 		if !ok || seen[r.ID] {
 			errs = append(errs, "unexpected or duplicate release evidence "+r.ID)
@@ -3745,11 +3748,13 @@ func TestReleaseEvidence(t *testing.T) {
 		"merge deployed":                 func(m *matrix) { m.ReleaseEvidence[0].DeploymentState = "PASS" },
 		"tag grants readiness":           func(m *matrix) { m.ReleaseEvidence[1].ReadinessEffect = "PASS" },
 		"merge sha short":                func(m *matrix) { m.ReleaseEvidence[0].EvidenceSHA = "fb8638a0" },
-		"merge url http":                 func(m *matrix) { m.ReleaseEvidence[0].EvidenceURL = "http://github.com/x/fb8638a0947d32bef4c484c82868efb4fa35e393" },
-		"tag without observation":        func(m *matrix) { m.ReleaseEvidence[1].Freshness.ObservedAt = nil },
-		"tag observed by attestation":    func(m *matrix) { m.ReleaseEvidence[1].Attestation = "lead attestation only" },
-		"tag time not UTC":               func(m *matrix) { m.ReleaseEvidence[1].Freshness.ObservedAt = strp("2026-11-19T12:19:20+02:00") },
-		"entry dropped":                  func(m *matrix) { m.ReleaseEvidence = m.ReleaseEvidence[:2] },
+		"merge url http": func(m *matrix) {
+			m.ReleaseEvidence[0].EvidenceURL = "http://github.com/x/fb8638a0947d32bef4c484c82868efb4fa35e393"
+		},
+		"tag without observation":     func(m *matrix) { m.ReleaseEvidence[1].Freshness.ObservedAt = nil },
+		"tag observed by attestation": func(m *matrix) { m.ReleaseEvidence[1].Attestation = "lead attestation only" },
+		"tag time not UTC":            func(m *matrix) { m.ReleaseEvidence[1].Freshness.ObservedAt = strp("2026-11-19T12:19:20+02:00") },
+		"entry dropped":               func(m *matrix) { m.ReleaseEvidence = m.ReleaseEvidence[:2] },
 	}
 	for name, f := range mut {
 		t.Run(name, func(t *testing.T) {
