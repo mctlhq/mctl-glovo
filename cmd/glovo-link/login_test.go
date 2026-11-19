@@ -136,6 +136,7 @@ func (i *fakeIDP) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(302)
 	case "/token":
 		i.tokenN++
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
 		_ = r.ParseForm()
 		i.tokenQ = r.PostForm
 		q, ok := i.codes[r.PostForm.Get("code")]
@@ -387,7 +388,7 @@ func TestWrongResourceTokenRefused(t *testing.T) {
 
 func TestStaleTokenRefused(t *testing.T) {
 	f := newFakeServer(t)
-	f.idp.authAge = 10 * time.Minute
+	f.idp.authAge = maxAuthAge + 5*time.Minute
 	r := happy(t, f)
 	if r.code == 0 || r.stdout != msgTokenStale+"\n" || f.totalCalls() != 0 {
 		t.Fatalf("%d %q, link calls %d", r.code, r.stdout, f.totalCalls())
@@ -631,5 +632,23 @@ func TestDeclineAfterLoginWritesNothing(t *testing.T) {
 	}
 	if ents, err := os.ReadDir(e.home); err != nil || len(ents) != 0 {
 		t.Fatalf("files written under home: %v", ents)
+	}
+}
+
+// A token whose auth_time is a little in the future of the local clock (a
+// laptop behind mctl-api) is accepted, as the server accepts it; one beyond
+// the leeway is refused.
+func TestPrefilterToleratesFutureSkewUpToTheLeeway(t *testing.T) {
+	now := time.Now()
+	mk := func(authTime time.Time) string {
+		claims, _ := json.Marshal(map[string]any{"iss": defaultIssuer, "aud": "https://glovo.mctl.ai/link", "auth_time": authTime.Unix()})
+		return "e30." + base64.RawURLEncoding.EncodeToString(claims) + ".c2ln"
+	}
+	res := "https://glovo.mctl.ai/link"
+	if m := prefilter(mk(now.Add(clockLeeway-5*time.Second)), defaultIssuer, res, now); m != "" {
+		t.Fatalf("skew within the leeway refused: %q", m)
+	}
+	if m := prefilter(mk(now.Add(clockLeeway+10*time.Second)), defaultIssuer, res, now); m != msgTokenStale {
+		t.Fatalf("skew beyond the leeway: %q, want the stale refusal", m)
 	}
 }

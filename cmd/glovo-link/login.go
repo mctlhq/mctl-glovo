@@ -38,9 +38,15 @@ import (
 
 const (
 	defaultIssuer = "https://api.mctl.ai"
-	// maxAuthAge mirrors the server's default GLOVO_LINK_MAX_AUTH_AGE. A
-	// token older than this is refused here; the server stays the authority.
-	maxAuthAge   = 5 * time.Minute
+	// maxAuthAge is the server's hard cap on GLOVO_LINK_MAX_AUTH_AGE
+	// (authn.MaxFreshLoginAge, 15m), so the helper never refuses a token the
+	// link routes would accept whatever the configured value; the server
+	// stays the authority and enforces the configured age (default 5m).
+	maxAuthAge = 15 * time.Minute
+	// clockLeeway is the future skew tolerated on auth_time, the same as the
+	// server's authn.Leeway: a laptop clock a little behind mctl-api must not
+	// turn a fresh login into "too old".
+	clockLeeway  = 30 * time.Second
 	loginTimeout = 5 * time.Minute
 	maxLoginBody = 16 << 10
 	maxTokenLen  = 8 << 10
@@ -54,8 +60,8 @@ const (
 	msgLoginDenied    = "refused: the MCTL login was not completed"
 	msgLoginState     = "refused: the login answer did not match this login attempt"
 	msgLoginTimeout   = "refused: the MCTL login did not finish in time"
-	msgLoginToken     = "refused: MCTL did not issue a usable link token"
-	msgTokenResource  = "refused: the token is not for the link resource"
+	msgLoginToken     = "refused: MCTL did not issue a usable link token" // #nosec G101 -- fixed refusal text, not a credential
+	msgTokenResource  = "refused: the token is not for the link resource" // #nosec G101 -- fixed refusal text, not a credential
 	msgTokenStale     = "refused: the MCTL login is too old; run glovo-link again"
 	msgForwardOrigin  = "refused: the token may only be sent to the link server"
 )
@@ -356,7 +362,7 @@ func prefilter(token, issuer, resource string, now time.Time) string {
 		return msgTokenStale
 	}
 	age := now.Sub(time.Unix(at, 0))
-	if age < 0 || age > maxAuthAge {
+	if age < -clockLeeway || age > maxAuthAge {
 		return msgTokenStale
 	}
 	return ""
