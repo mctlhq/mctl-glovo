@@ -60,9 +60,12 @@ Rules:
 6. Launch condition: before any invitation, a participant-usable exit is
    proven for that group, that is revoking consent plus a working unlink and
    erase path, with evidence recorded under #43. At this baseline no
-   operator or user unlink or erase route exists in this repository
-   (`c2-operations.md` sections 6.2 to 6.4), so this condition is NOT met
-   and no group may be invited until it is. Any pilot check (T1 to T8) run
+   live evidence of the exit exists. The routes are in the source
+   (`POST /link/unlink`, `glovo-link -unlink`, and the control `unlink` and
+   `erase` routes, `c2-operations.md` sections 6.2 to 6.4) with tests, but
+   nothing has run them against a deployed service and mctl-api does not call
+   the operator routes, so this condition is still NOT met and no group may
+   be invited until the rehearsal evidence is recorded under #43. Any pilot check (T1 to T8) run
    in a rehearsal is read-only and uses the same exit path.
 
 What a participant is told before opting in (wording PENDING, content
@@ -181,10 +184,10 @@ target.
   the offline form. Already-published aggregates are not recomputed unless
   the owner decides otherwise (PENDING).
 - Ending feedback is separate from ending access. Revoking the grant,
-  unlinking and erasing are mctl-api and operator actions. At this baseline
-  no unlink or erase route exists for operators or users in this repository
-  (`c2-operations.md` sections 6.2 to 6.4, UNAVAILABLE). The protocol must
-  not promise either to a participant. What can be said is that the
+  unlinking and erasing are user and operator actions. The routes exist in
+  the source but have no live run and no mctl-api caller yet
+  (`c2-operations.md` sections 6.2 to 6.4). The protocol must not promise
+  either to a participant. What can be said is that the
   participant may revoke consent, and the next call is then refused within
   the documented windows.
 - Opt-outs enter the weekly summary only as a count.

@@ -88,6 +88,8 @@ type controlRoutes struct {
 	log      *slog.Logger
 	// audit receives one line per flip attempt (no subject, no token).
 	audit *slog.Logger
+	// accounts ends a user's link (WithAccounts); nil leaves those routes off.
+	accounts accountEnder
 }
 
 func newControlRoutes(v serviceVerifier, k flipper, log, audit *slog.Logger) (*controlRoutes, error) {
@@ -101,6 +103,10 @@ func newControlRoutes(v serviceVerifier, k flipper, log, audit *slog.Logger) (*c
 func (c *controlRoutes) Register(mux *http.ServeMux) {
 	if c != nil {
 		mux.HandleFunc("PUT "+controlPath, c.handle)
+		if c.accounts != nil {
+			mux.HandleFunc("POST "+unlinkPath, c.handleAccount(false))
+			mux.HandleFunc("POST "+erasePath, c.handleAccount(true))
+		}
 	}
 }
 
@@ -129,17 +135,20 @@ func viaProxy(r *http.Request) bool {
 	return false
 }
 
-func (c *controlRoutes) handle(w http.ResponseWriter, r *http.Request) {
+// authenticate is the check every control route shares: not via a proxy, a
+// bearer token, a machine-user subject on the allow-list. It writes the
+// refusal itself and audits it under event.
+func (c *controlRoutes) authenticate(w http.ResponseWriter, r *http.Request, event string) bool {
 	if viaProxy(r) {
 		http.NotFound(w, r)
-		return
+		return false
 	}
 	// Authenticate before reading the body.
 	tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || tok == "" {
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		controlError(w, http.StatusUnauthorized, "unauthorized")
-		return
+		return false
 	}
 	if _, err := c.verifier.Verify(r.Context(), tok); err != nil {
 		// Anything that is not a classified refusal is a failed read.
@@ -151,8 +160,15 @@ func (c *controlRoutes) handle(w http.ResponseWriter, r *http.Request) {
 		if status == http.StatusUnauthorized {
 			w.Header().Set("WWW-Authenticate", "Bearer")
 		}
-		c.audit.Warn("kill_switch_refused", "status", status)
+		c.audit.Warn(event, "status", status)
 		controlError(w, status, "refused")
+		return false
+	}
+	return true
+}
+
+func (c *controlRoutes) handle(w http.ResponseWriter, r *http.Request) {
+	if !c.authenticate(w, r, "kill_switch_refused") {
 		return
 	}
 	killed, ok := readKilled(w, r)
@@ -174,13 +190,96 @@ func (c *controlRoutes) handle(w http.ResponseWriter, r *http.Request) {
 	controlJSON(w, http.StatusOK, map[string]bool{"killed": stored})
 }
 
+// accountPaths are the operator routes that end a user's link. They share
+// the kill switch's identity check and its proxy lock.
+const (
+	unlinkPath = "/internal/v1/control/unlink"
+	erasePath  = "/internal/v1/control/erase"
+)
+
+// accountEnder is the part of tokenstore.Store the account routes use.
+// Neither call checks the kill switch or needs Vault: ending a link must
+// work exactly when something else is broken.
+type accountEnder interface {
+	Unlink(ctx context.Context, pid tokenstore.PID, reason string) error
+	Erase(ctx context.Context, pid tokenstore.PID) error
+}
+
+// WithAccounts mounts POST unlinkPath and erasePath. Nil leaves them off.
+func (c *controlRoutes) WithAccounts(a accountEnder) *controlRoutes {
+	c.accounts = a
+	return c
+}
+
+func (c *controlRoutes) handleAccount(erase bool) http.HandlerFunc {
+	event := "account_unlink"
+	if erase {
+		event = "account_erase"
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !c.authenticate(w, r, event+"_refused") {
+			return
+		}
+		var req struct {
+			Principal *string `json:"principal"`
+		}
+		if !readStrict(w, r, &req) {
+			return
+		}
+		if req.Principal == nil {
+			controlError(w, http.StatusBadRequest, "bad_body")
+			return
+		}
+		// The id comes from an authenticated operator, not from a user
+		// request; it is still held to the prn_ shape by PIDFrom.
+		pid := tokenstore.PIDFrom(&authn.Principal{ID: *req.Principal})
+		if pid == (tokenstore.PID{}) {
+			controlError(w, http.StatusBadRequest, "bad_body")
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+		defer cancel()
+		var err error
+		if erase {
+			err = c.accounts.Erase(ctx, pid)
+		} else {
+			err = c.accounts.Unlink(ctx, pid, "operator_request")
+		}
+		if err != nil {
+			c.audit.Error(event, "outcome", "unknown")
+			c.log.Error("account end failed", "error_class", errClass(err))
+			controlError(w, http.StatusServiceUnavailable, "state_unknown")
+			return
+		}
+		c.audit.Warn(event, "outcome", "ok")
+		controlJSON(w, http.StatusOK, map[string]string{"result": map[bool]string{false: "unlinked", true: "erased"}[erase]})
+	}
+}
+
 // readKilled reads the strict body: a JSON object with exactly one field,
-// "killed", a bool; nothing after it; at most controlBodyLimit bytes. It
-// writes the refusal itself.
+// "killed", a bool. It writes the refusal itself.
 func readKilled(w http.ResponseWriter, r *http.Request) (bool, bool) {
+	var req struct {
+		Killed *bool `json:"killed"`
+	}
+	if !readStrict(w, r, &req) {
+		return false, false
+	}
+	if req.Killed == nil {
+		controlError(w, http.StatusBadRequest, "bad_body")
+		return false, false
+	}
+	return *req.Killed, true
+}
+
+// readStrict decodes the one JSON object a control route accepts into dst:
+// application/json, at most controlBodyLimit bytes, no unknown fields,
+// nothing after the object. It writes the refusal itself; a missing field
+// is for the caller to check.
+func readStrict(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if mt, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";"); strings.TrimSpace(strings.ToLower(mt)) != "application/json" {
 		controlError(w, http.StatusUnsupportedMediaType, "content_type")
-		return false, false
+		return false
 	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, controlBodyLimit))
 	if err != nil {
@@ -190,23 +289,20 @@ func readKilled(w http.ResponseWriter, r *http.Request) (bool, bool) {
 		} else {
 			controlError(w, http.StatusBadRequest, "unreadable_body")
 		}
-		return false, false
+		return false
 	}
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
-	var req struct {
-		Killed *bool `json:"killed"`
-	}
-	if err := dec.Decode(&req); err != nil || req.Killed == nil {
+	if err := dec.Decode(dst); err != nil {
 		controlError(w, http.StatusBadRequest, "bad_body")
-		return false, false
+		return false
 	}
 	// Nothing but whitespace may follow the one object.
 	if _, err := dec.Token(); err != io.EOF {
 		controlError(w, http.StatusBadRequest, "bad_body")
-		return false, false
+		return false
 	}
-	return *req.Killed, true
+	return true
 }
 
 // errClass is a coarse, secret-free class of a store error for logs.

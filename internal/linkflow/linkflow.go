@@ -33,6 +33,7 @@ import (
 const (
 	UploadSchema  = "glovo-link-upload/v1"
 	PreviewSchema = "glovo-link-preview/v1"
+	UnlinkSchema  = "glovo-link-unlink/v1"
 	// MaxBody bounds every request body (design 4.1 step 4).
 	MaxBody = 16 << 10
 )
@@ -97,6 +98,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.Handle("POST /link/code", headers(http.HandlerFunc(h.handleCode)))
 	mux.Handle("POST /link/preview", headers(http.HandlerFunc(h.handlePreview)))
 	mux.Handle("POST /link/upload", headers(http.HandlerFunc(h.handleUpload)))
+	mux.Handle("POST /link/unlink", headers(http.HandlerFunc(h.handleUnlink)))
 }
 
 func headers(next http.Handler) http.Handler {
@@ -501,4 +503,37 @@ func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	h.log.Info("link", "route", route, "outcome", "linked")
 	writeJSON(w, http.StatusOK, map[string]string{"result": "linked"})
+}
+
+// handleUnlink ends the caller's own link and deletes the stored Glovo
+// session at once. It takes the same fresh-login token as an upload, so a
+// stolen MCP token cannot unlink, and it needs no consent, no code and no
+// working Vault: the kill switch and a Vault outage do not stand between a
+// user and their exit. The pid is the verified one, never a body field.
+func (h *Handler) handleUnlink(w http.ResponseWriter, r *http.Request) {
+	const route = "unlink"
+	pid, ref := h.linkPrincipal(r)
+	if ref != nil {
+		h.refuse(w, route, *ref)
+		return
+	}
+	obj, ref := readBody(w, r, "schema")
+	if ref != nil {
+		h.refuse(w, route, *ref)
+		return
+	}
+	if !checkSchema(obj, UnlinkSchema) {
+		h.refuse(w, route, refMalformed)
+		return
+	}
+	// Detached like an upload: a client that hangs up must not leave the
+	// outcome unknown.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), linkTimeout)
+	defer cancel()
+	if err := h.cfg.Store.Unlink(ctx, pid, "user_request"); err != nil {
+		h.refuse(w, route, refUnavailable)
+		return
+	}
+	h.log.Info("link", "route", route, "outcome", "unlinked")
+	writeJSON(w, http.StatusOK, map[string]string{"result": "unlinked"})
 }

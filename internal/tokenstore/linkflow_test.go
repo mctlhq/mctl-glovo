@@ -206,7 +206,7 @@ func (e *env) issue(tok string) string {
 func jsonReq(path string, body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	if path == "/link/preview" || path == "/link/upload" {
+	if path == "/link/preview" || path == "/link/upload" || path == "/link/unlink" {
 		req.Header.Set("Authorization", "Bearer link-owner")
 	}
 	return req
