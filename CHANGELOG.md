@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.1](https://github.com/mctlhq/mctl-glovo/compare/0.3.0...0.3.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **migrate:** classify by typed errors, read text only from the innermost error ([5f32ef6](https://github.com/mctlhq/mctl-glovo/commit/5f32ef623f38c3cf7766148231e7d6ecd23ae692))
+* **migrate:** name the class of a connection failure, never the DSN ([3854116](https://github.com/mctlhq/mctl-glovo/commit/38541164f5a7c3cb3e4915080870408fe5576d72))
+* **migrate:** name the class of a connection failure, never the DSN ([d1b169a](https://github.com/mctlhq/mctl-glovo/commit/d1b169a3b82192ed0ff0d89588ab8dc962c03032))
+
 ## [0.3.0](https://github.com/mctlhq/mctl-glovo/compare/0.2.0...0.3.0) (2026-11-19)
 
 
