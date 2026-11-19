@@ -13,18 +13,28 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
+
+// A caller-supplied test value: the helper has no default client.
+const testClient = "test-client-id"
 
 var testCode = strings.Repeat("Ab0-_", 8) + "xyz" // 43 base64url characters
 
 type fakeServer struct {
 	srv *httptest.Server
+	idp *fakeIDP
 
 	mu       sync.Mutex
 	previews int
 	uploads  int
+	total    int // every hit on a /link route, authorized or not
+	auths    []string
 	lastBody map[string]any
 	upload   func(w http.ResponseWriter)
+	// freshRequired makes the link routes answer the server's stale-login
+	// refusal, whatever the token looks like to the helper.
+	freshRequired bool
 }
 
 func newFakeServer(t *testing.T) *fakeServer {
@@ -37,6 +47,20 @@ func newFakeServer(t *testing.T) *fakeServer {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.lastBody = body
+		if strings.HasPrefix(r.URL.Path, "/link/") {
+			f.total++
+			f.auths = append(f.auths, r.Header.Get("Authorization"))
+			if f.freshRequired {
+				w.WriteHeader(401)
+				_, _ = w.Write([]byte(`{"error":"fresh_login_required","message":"MARKER-hostile"}`))
+				return
+			}
+			if want := f.idp.issuedToken(); want == "" || r.Header.Get("Authorization") != "Bearer "+want {
+				w.WriteHeader(401)
+				_, _ = w.Write([]byte(`{"error":"invalid_token","message":"x"}`))
+				return
+			}
+		}
 		switch r.URL.Path {
 		case "/link/preview":
 			f.previews++
@@ -58,13 +82,33 @@ func newFakeServer(t *testing.T) *fakeServer {
 		}
 	}))
 	t.Cleanup(f.srv.Close)
+	f.idp = newFakeIDP(t, f)
 	return f
 }
 
+// client trusts both fake servers (the link server and the fake mctl-api).
 func (f *fakeServer) client() *http.Client {
 	pool := x509.NewCertPool()
 	pool.AddCert(f.srv.Certificate())
+	pool.AddCert(f.idp.srv.Certificate())
 	return newHTTPClient(&tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12})
+}
+
+func (f *fakeServer) env(t *testing.T) env {
+	return env{
+		hc:           f.client(),
+		home:         t.TempDir(),
+		issuer:       f.idp.srv.URL,
+		open:         f.idp.browser,
+		now:          time.Now,
+		loginTimeout: 5 * time.Second,
+	}
+}
+
+func (f *fakeServer) totalCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.total
 }
 
 func (f *fakeServer) counts() (int, int) {
@@ -94,10 +138,21 @@ type result struct {
 
 func runHelper(t *testing.T, f *fakeServer, args []string, stdin string) result {
 	t.Helper()
+	t.Helper()
+	all := append([]string{"-server", f.srv.URL, "-client-id", testClient}, args...)
+	return runEnv(t, f, f.env(t), all, stdin)
+}
+
+func runEnv(t *testing.T, f *fakeServer, e env, args []string, stdin string) result {
+	t.Helper()
 	var out, errb bytes.Buffer
-	all := append([]string{"-server", f.srv.URL}, args...)
-	code := run(all, strings.NewReader(stdin), &out, &errb, f.client(), t.TempDir())
-	return result{code, out.String(), errb.String()}
+	code := run(args, strings.NewReader(stdin), &out, &errb, e)
+	r := result{code, out.String(), errb.String()}
+	// The login token is never shown, whatever the outcome.
+	if tok := f.idp.issuedToken(); tok != "" && strings.Contains(r.stdout+r.stderr, tok) {
+		t.Fatalf("output carries the login token:\n%s\n%s", r.stdout, r.stderr)
+	}
+	return r
 }
 
 func noMarkers(t *testing.T, r result) {
@@ -124,6 +179,14 @@ func TestLinkFromFile(t *testing.T) {
 	f.mu.Unlock()
 	if schema != uploadSchema || sess["refreshToken"] != "MARKER-REFRESH" {
 		t.Fatalf("upload body: %v", f.lastBody)
+	}
+	// Both link routes got the one login token, as a Bearer token.
+	tok := f.idp.issuedToken()
+	f.mu.Lock()
+	auths := append([]string(nil), f.auths...)
+	f.mu.Unlock()
+	if tok == "" || len(auths) != 2 || auths[0] != "Bearer "+tok || auths[1] != "Bearer "+tok {
+		t.Fatalf("link routes saw %d Authorization headers", len(auths))
 	}
 }
 
@@ -180,7 +243,7 @@ func TestDashCodeNeverEchoed(t *testing.T) {
 		t.Fatalf("network calls: %d previews, %d uploads", pv, up)
 	}
 	var out, errb bytes.Buffer
-	if code := run([]string{"-h"}, strings.NewReader(""), &out, &errb, f.client(), t.TempDir()); code != 0 || errb.String() != usage+"\n" || out.Len() != 0 {
+	if code := run([]string{"-h"}, strings.NewReader(""), &out, &errb, f.env(t)); code != 0 || errb.String() != usage+"\n" || out.Len() != 0 {
 		t.Fatalf("-h: %d %q %q", code, out.String(), errb.String())
 	}
 }
@@ -218,7 +281,7 @@ func TestHTTPSOnly(t *testing.T) {
 	f := newFakeServer(t)
 	for _, s := range []string{"http://glovo.mctl.ai", "glovo.mctl.ai", "https://u:p@glovo.mctl.ai", "https://glovo.mctl.ai/x", "https://glovo.mctl.ai?q=1"} {
 		var out bytes.Buffer
-		code := run([]string{"-server", s}, strings.NewReader(testCode+"\ny\n"), &out, io.Discard, f.client(), t.TempDir())
+		code := run([]string{"-server", s, "-client-id", testClient}, strings.NewReader(testCode+"\ny\n"), &out, io.Discard, f.env(t))
 		if code != 2 || out.String() != msgServer+"\n" {
 			t.Fatalf("%s: %d %q", s, code, out.String())
 		}
