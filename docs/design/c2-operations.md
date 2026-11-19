@@ -462,8 +462,13 @@ its Vault commands were not checked against a Vault.
   - operator: `POST /internal/v1/control/unlink`, `{"principal": "prn_..."}`,
     behind the control route's machine-user identity and proxy lock. Audit
     lines `account_unlink` / `account_unlink_refused` carry no principal.
-  The route exists only when the control endpoint is configured. There is
-  no caller of it in mctl-api yet, and no live run: both are open. Design 4.3
+  The route exists only when the control endpoint is configured
+  (`cmd/mctl-glovo/c2.go` `buildControl`, `control.go` `WithAccounts`).
+  No caller exists in this repository. Whether mctl-api has one was not read
+  here (UNKNOWN), and there is no live run. The state in the source is
+  CURRENT at `fb8638a0947d32bef4c484c82868efb4fa35e393` (merge of #64);
+  whether a deployed image contains it is UNKNOWN. The live rehearsal plan
+  is section 6.5. Design 4.3
   also describes an Unlink control on the `/link` page and a grantless sweep;
   neither is implemented (UNAVAILABLE).
 
@@ -481,7 +486,8 @@ its Vault commands were not checked against a Vault.
   subject pseudonymisation in one transaction. Its caller is
   `POST /internal/v1/control/erase` (same identity as the unlink route,
   audit `account_erase`). Nothing in mctl-api calls it yet, so an erasure
-  request has no end-to-end path until that caller and a live run exist.
+  request has no end-to-end path until a caller (not found in this
+  repository; mctl-api not read, UNKNOWN) and a live run exist.
 - Backups: DESIGN says Postgres backups for 14 days can still hold
   ciphertext, and a restore must re-apply recorded unlink and erasure events
   before the service starts. That procedure is DESIGN; no tool for it exists
@@ -497,6 +503,20 @@ its Vault commands were not checked against a Vault.
 | Unlink / erase by operator | machine-user caller, owner GO | principal and window recorded without raw pid in this repo | `account_unlink` / `account_erase` audit line outcome `ok`, a `tool_call` for that principal answers not linked | `state_unknown` or any refusal: stop, do not retry in a loop, do not improvise SQL |
 | Unlink by the user | the user, `glovo-link -unlink` | fresh MCTL login | helper prints `unlinked`; `link` row gone; next `tool_call` answers not linked | refusal text from the helper: stop |
 | Suspend / resume by operator | operator, owner GO | UNAVAILABLE | UNAVAILABLE | do not improvise SQL; ask the orchestrator for a design slice |
+
+### 6.5 First live link requires prior unlink and erase rehearsal (PROPOSED)
+
+PROPOSED, no GO. The first live link of any account needs prior live unlink
+and erase rehearsal evidence recorded under #43, using at most two
+owner-authorized test accounts and an explicit prior owner GO for each
+effect (section 2.2). The plan, with preconditions, expected evidence,
+readback limits, aborts and contingency, is
+`docs/design/c2-offline-acceptance.md` section 10. If no suitably linked test
+account exists, the plan is blocked for an owner decision there (10.3); it is
+not worked around by linking live. Readback limit that applies to every
+action row above: there is no link-state read route, so evidence is the
+response, the audit lines and a following "not linked" answer, each with the
+limits stated in that section.
 
 ## 7. Alert and evidence signals: what exists today
 

@@ -11,6 +11,11 @@ Related issues: mctlhq/mctl-glovo#43 (this plan), #40 (operator pre-GO),
 issues was not re-read while writing this; their scope is taken from the task
 statement and from `docs/design/c2-readiness.md` at the pinned revision.
 
+Section 10 (G-3 rehearsal plan) was added against `origin/main` at
+`fb8638a0947d32bef4c484c82868efb4fa35e393` (merge of #64), which postdates the
+pin in section 1. Only the unlink and erase statements of section 10 were
+checked at that revision.
+
 ## 1. Source revision and limits
 
 All source references are pinned to `origin/main` at
@@ -293,3 +298,142 @@ service. Their status was not fetched here. Checkout, payment and
 No harness implementation, test runs, drills, live access or publication. No
 checkout, payment or order tool, no real identifiers, payloads or
 credentials, no flag, ingress, Vault or runtime change.
+
+## 10. G-3 rehearsal plan: live unlink and erase evidence (proposed)
+
+Status: PROPOSED. Nothing in this section was run, and it is not a GO. "G-3
+rehearsal" is this plan's name for the live exit rehearsal. It is not the
+readiness gate G3 (ten-user admission, #51).
+
+### 10.1 What the source does at `fb8638a0947d32bef4c484c82868efb4fa35e393`
+
+CURRENT in the repository (merge of #64). Deployed state is UNKNOWN: whether
+an image with #64 runs, whether the control endpoint is configured, and
+whether either route is reachable are all unobserved.
+
+| Route | Where | Authorization | Evidence it leaves |
+| --- | --- | --- | --- |
+| `POST /link/unlink` (user), reached with `glovo-link -unlink` | `internal/linkflow/linkflow.go` `handleUnlink`; `cmd/glovo-link/main.go` `runUnlink` | A fresh MCTL login with the link audience, the same as an upload. The principal is the verified one, never a body field. No consent, code or Vault is needed, and the kill switch does not block it. | `200 {"result":"unlinked"}`; helper prints `unlinked`; `link` log line `route=unlink outcome=unlinked`; store audit event `unlink` with actor user and reason `user_request` |
+| `POST /internal/v1/control/unlink` (operator) | `cmd/mctl-glovo/control.go` `handleAccount(false)`; `internal/tokenstore/store.go` `OperatorUnlink` | Machine-user token on the control subject allowlist, no proxy forwarding headers (404 otherwise), strict body `{"principal": "prn_..."}`. Mounted only if the control endpoint is configured (`cmd/mctl-glovo/c2.go` `buildControl`). | `200 {"result":"unlinked"}`; audit line `account_unlink outcome=ok`; store audit event `unlink`, actor operator, reason `operator_request`. Failure is `503 state_unknown` plus `outcome=unknown`, never a 200. |
+| `POST /internal/v1/control/erase` (operator) | `control.go` `handleAccount(true)`; `store.go` `Erase` | Same as operator unlink | `200 {"result":"erased"}`; audit line `account_erase outcome=ok`; unlink and `erasure` audit events and subject pseudonymisation in one transaction |
+
+Limits of that evidence:
+
+- Coverage is source and synthetic tests only: `TestControlAccount*` (stub
+  store, `cmd/mctl-glovo`), `TestLinkUnlink*` (real store over the in-memory
+  DB double, `internal/tokenstore`) and `TestUnlink*` (`cmd/glovo-link`).
+  Nothing has run against a deployed service, a real Postgres, Vault or
+  mctl-api.
+- The source has no caller of the operator routes. Whether mctl-api has one
+  was not read here and is UNKNOWN. Without a caller, the operator route
+  needs a human holding a valid machine-user token, which is an owner decision.
+- There is no read route for link state. After a call, the only observation
+  is the response, the audit lines and a following `tool_call` that answers
+  "not linked". That follow-up is itself a live call and needs its own GO.
+- A backup may still hold ciphertext (`token-store.md` 4.4). The rehearsal
+  must not claim crypto-erasure.
+
+### 10.2 Order rule
+
+The first live link of any account needs prior live unlink and erase
+rehearsal evidence recorded under #43. Rules:
+
+1. At most two owner-authorized test accounts, never a participant or user
+   account. Not named or identified in any record (use `test-A`, `test-B`).
+2. Every effect below needs its own explicit owner GO recorded before it
+   happens: each link, each tool call, each unlink, each erase, each kill or
+   un-kill. A GO for one never covers another (`c2-operations.md` section
+   2.2). This plan is not a GO.
+3. Read-only tools only. No basket write, checkout, payment or order.
+4. No flag, Vault, deploy or release change is part of this plan.
+
+### 10.3 Blocker for owner decision: no linked test account may exist
+
+Observing an unlink or an erase needs a linked account to remove, but the
+order rule forbids the first live link until that evidence exists. If no
+suitably linked test account already exists, the rehearsal cannot start and
+this is a BLOCKER for the owner. It is not solved here and must not be solved
+by linking live. Options for the owner to decide (none is chosen or implied):
+
+- name an existing owner-authorized account that is already linked, with the
+  evidence that it is;
+- grant a recorded, explicitly scoped exception to the order rule for one
+  test account (a link and its immediate unlink, in one window);
+- accept an isolated environment (own Vault, proxy and database, none serving
+  production, `c2-operations.md` section 11) for the rehearsal, which then
+  gives synthetic evidence only and does not satisfy the live evidence
+  requirement.
+
+Whether a linked test account exists is UNKNOWN.
+
+### 10.4 Proposed preconditions
+
+- Written owner GO per effect (10.2), with scope and time window.
+- Deployed image tag and digest and the source SHA, recorded, containing #64.
+  If unknown, record UNKNOWN and stop.
+- Owner decision on which backend serves the public host (`c2-operations.md`
+  section 2).
+- Control endpoint confirmed configured for the operator route. If not, only
+  the user route can be rehearsed and the operator route stays UNKNOWN.
+- Kill state recorded as UNKNOWN or as a dated non-mutating observation. The
+  kill route has no read.
+- A named holder of the machine-user token and a named person who operates
+  `glovo-link -unlink`. The two test accounts are consenting owner-controlled
+  accounts.
+- Where records are kept. No participant data, identifier, token, link code,
+  principal id or Glovo account id enters this repository or an issue.
+
+### 10.5 Proposed sequence and expected evidence
+
+For each test account, in order, each step behind its own GO. Stop at the
+first unexpected result.
+
+| Step | Effect | Expected evidence | Readback limit |
+| --- | --- | --- | --- |
+| R1 | User unlink of `test-A` with `glovo-link -unlink` | helper prints `unlinked`; `200 result unlinked`; `link` line `route=unlink outcome=unlinked`; `unlink` audit event, actor user | `200` is the answering process's result. Other replicas, in-flight calls and backups are not observed. |
+| R2 | One read tool call as `test-A` after R1 | "not linked" refusal, `tool_call outcome=error`, no Glovo request | Needs its own GO. A "not linked" text is only valid when the database read succeeded; `unavailable` is a different answer. |
+| R3 | Operator unlink of `test-B` | `200 result unlinked`; `account_unlink outcome=ok`; `unlink` audit event, actor operator | Same as R1. |
+| R4 | Operator erase of `test-B` (after R3 or alone) | `200 result erased`; `account_erase outcome=ok`; `unlink` and `erasure` events | Pseudonymisation is observable only through audit rows the owner may read. Absence of a log line is not proof. |
+| R5 | One read tool call as `test-B` after R4 | "not linked" refusal | As R2. |
+| R6 | Repeat R3 on an already unlinked account | Recorded unedited. The result for an already absent link was not read in source for this document; the live result is UNKNOWN. | Do not retry in a loop. |
+
+Each step is recorded with the section 6 template, class LH, the full source
+SHA, "not run" until a real run exists. The control and `account_*` log
+fields carry no principal, so tie a step to the account by the recorded GO
+and the time window, not by an identifier in the record.
+
+### 10.6 Aborts
+
+Stop, do not retry in a loop, do not use SQL and ask the owner if:
+
+- any response is `503 state_unknown`, a non-200 or a refusal;
+- the answer to R2 or R5 is anything other than "not linked", or a Glovo
+  request is observed;
+- a real user's data, principal or session appears;
+- a checkout, payment or order surface appears;
+- the control route answers 404 (not mounted or proxy headers present): the
+  operator route stays UNKNOWN and is not worked around;
+- the image or source SHA cannot be established;
+- the owner withdraws a GO.
+
+### 10.7 Contingency
+
+- A user unlink that fails leaves the link state UNKNOWN. Do not assume
+  removal. The operator route is a separate effect with its own GO.
+- An operator failure, or a missing control endpoint, leaves the operator
+  route UNKNOWN. That blocks the "exit proven" condition for the cohort
+  (`c2-pilot-feedback.md` rule 6) until the owner decides.
+- A partial result (unlink without erase evidence) is recorded as partial and
+  does not meet the #43 requirement.
+- Kill is not part of this plan. If one is needed it has its own GO and its
+  own `c2-operations.md` row.
+- If an account is left linked after a failure, it remains an owner-authorized
+  test account and is not invited to anything else.
+
+### 10.8 What this does not do
+
+It starts no rehearsal and links nothing. It does not meet the #43 live
+requirement, grants no GO, and does not satisfy the launch condition of
+`c2-pilot-feedback.md` or the first-live-link gate of `c2-operations.md`.
+Cross references: `c2-operations.md` section 6.5, `c2-pilot-feedback.md` rule
+6.
