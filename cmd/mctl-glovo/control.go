@@ -201,7 +201,7 @@ const (
 // Neither call checks the kill switch or needs Vault: ending a link must
 // work exactly when something else is broken.
 type accountEnder interface {
-	Unlink(ctx context.Context, pid tokenstore.PID, reason string) error
+	OperatorUnlink(ctx context.Context, pid tokenstore.PID) error
 	Erase(ctx context.Context, pid tokenstore.PID) error
 }
 
@@ -243,7 +243,7 @@ func (c *controlRoutes) handleAccount(erase bool) http.HandlerFunc {
 		if erase {
 			err = c.accounts.Erase(ctx, pid)
 		} else {
-			err = c.accounts.Unlink(ctx, pid, "operator_request")
+			err = c.accounts.OperatorUnlink(ctx, pid)
 		}
 		if err != nil {
 			c.audit.Error(event, "outcome", "unknown")

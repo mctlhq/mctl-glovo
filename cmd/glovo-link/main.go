@@ -58,12 +58,13 @@ const (
 
 const usage = "usage: glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]\n       glovo-link -unlink -client-id ID [-server https://glovo.mctl.ai] [-no-browser]\nThe link code is read from stdin, never from arguments."
 
-// Fixed texts. stdout only ever carries msgLinked or one refusal.
+// Fixed texts. stdout only ever carries msgLinked, msgUnlinked, msgNotUnlinked
+// or one refusal.
 const (
 	msgLinked        = "linked"
 	msgUnlinked      = "unlinked"
 	msgNotUnlinked   = "not unlinked: you declined"
-	msgArgs          = "refused: glovo-link takes no arguments; it reads the link code from stdin"
+	msgArgs          = "refused: glovo-link takes no arguments (and -unlink takes no -session); it reads the link code from stdin"
 	msgServer        = "refused: -server must be an https:// origin"
 	msgCodeRead      = "refused: no link code on stdin"
 	msgCodeShape     = "refused: that is not a link code"
@@ -168,6 +169,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 	}
 	if fs.NArg() > 0 {
 		// Whatever it is, it may be the code: never echo it.
+		_, _ = fmt.Fprintln(stdout, msgArgs)
+		return 2
+	}
+	if *unlink && *sessionPath != "" {
+		// -unlink reads no session: refuse the combination rather than ignore it.
 		_, _ = fmt.Fprintln(stdout, msgArgs)
 		return 2
 	}
