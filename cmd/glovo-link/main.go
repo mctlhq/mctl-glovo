@@ -7,13 +7,19 @@
 // reads the Glovo session. It uploads over https only and prints "linked"
 // or one fixed refusal; it never prints the session.
 //
+// Before it previews, it runs a fresh MCTL login in the browser (OAuth
+// authorization code with PKCE S256 and a loopback redirect, resource
+// <server>/link, see login.go) and sends the resulting token, held in memory
+// only, as a Bearer token to the link server and nowhere else. The OAuth
+// client ID is supplied by the caller; there is no default.
+//
 // Capturing a fresh Glovo login is not part of this helper: it uploads a
 // session that already exists (by default ~/.glovo/session.json, the file
 // glovo-skill and the remote-login prototype of PR #4 write).
 //
 // Usage:
 //
-//	glovo-link [-server https://glovo.mctl.ai] [-session PATH | -session -]
+//	glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]
 //
 // With -session -, stdin carries the code line, then the y/N answer line,
 // then the session JSON.
@@ -32,7 +38,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -47,7 +55,7 @@ const (
 	maxAnswer     = 4 << 10
 )
 
-const usage = "usage: glovo-link [-server https://glovo.mctl.ai] [-session PATH | -session -]\nThe link code is read from stdin, never from arguments."
+const usage = "usage: glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]\nThe link code is read from stdin, never from arguments."
 
 // Fixed texts. stdout only ever carries msgLinked or one refusal.
 const (
@@ -74,11 +82,52 @@ var refusals = map[string]string{
 	"unavailable":       "refused: linking is unavailable right now; request a new code and try again later",
 	"request_too_large": "refused: the session is larger than 16 KiB",
 	"malformed_request": "refused: the link server did not understand the request",
+	// Token refusals from the link routes (the server is the authority).
+	"invalid_token":           "refused: the link server did not accept the MCTL login token; run glovo-link again",
+	"fresh_login_required":    "refused: the MCTL login is too old; run glovo-link again",
+	"access_denied":           "refused: this MCTL account is not allowed to link",
+	"consent_required":        "refused: record your consent to the current link terms first",
+	"temporarily_unavailable": "refused: the link server cannot verify logins right now; try again later",
+}
+
+// env is everything run takes from outside, so tests can fake it.
+type env struct {
+	hc           *http.Client
+	home         string
+	issuer       string
+	open         func(string) error
+	now          func() time.Time
+	loginTimeout time.Duration
 }
 
 func main() {
 	home, _ := os.UserHomeDir()
-	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, newHTTPClient(nil), home))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, env{
+		hc:     newHTTPClient(nil),
+		home:   home,
+		issuer: defaultIssuer,
+		open:   openBrowser,
+	}))
+}
+
+// openBrowser starts the system browser with the address as one argument:
+// no shell is involved.
+func openBrowser(u string) error {
+	var name string
+	switch runtime.GOOS {
+	case "darwin":
+		name = "open"
+	case "linux":
+		name = "xdg-open"
+	default:
+		return errors.New("no browser opener")
+	}
+	cmd := exec.Command(name, u) // #nosec G204 -- fixed binary, the address is one argument
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }() // reap the opener so it never lingers as a zombie
+	return nil
 }
 
 func newHTTPClient(roots *tls.Config) *http.Client {
@@ -95,12 +144,15 @@ func newHTTPClient(roots *tls.Config) *http.Client {
 	}
 }
 
-func run(args []string, stdin io.Reader, stdout, stderr io.Writer, hc *http.Client, home string) int {
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
+	hc, home := e.hc, e.home
 	fs := flag.NewFlagSet("glovo-link", flag.ContinueOnError)
 	// The flag package's own messages echo the offending argument, and a
 	// code may start with "-": nothing it writes is shown.
 	fs.SetOutput(io.Discard)
 	server := fs.String("server", defaultServer, "link server origin (https only)")
+	clientID := fs.String("client-id", "", "OAuth client ID registered for this helper (required, no default)")
+	noBrowser := fs.Bool("no-browser", false, "print the login address instead of opening a browser")
 	sessionPath := fs.String("session", "", "Glovo session file, or - for stdin (default ~/.glovo/session.json)")
 	if err := fs.Parse(args); err != nil {
 		_, _ = fmt.Fprintln(stderr, usage)
@@ -120,6 +172,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, hc *http.Clie
 		_, _ = fmt.Fprintln(stdout, msgServer)
 		return 2
 	}
+	if *clientID == "" {
+		_, _ = fmt.Fprintln(stdout, msgClientID)
+		return 2
+	}
 	if *sessionPath == "" {
 		*sessionPath = filepath.Join(home, ".glovo", "session.json")
 	}
@@ -137,10 +193,33 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, hc *http.Clie
 	}
 
 	ctx := context.Background()
+	now := e.now
+	if now == nil {
+		now = time.Now
+	}
+	open := e.open
+	if *noBrowser {
+		open = nil
+	}
+	// The token stays in this variable: never printed, logged or stored.
+	token, msg := login(ctx, hc, loginParams{
+		Issuer:   e.issuer,
+		ClientID: *clientID,
+		Resource: base + "/link",
+		Timeout:  e.loginTimeout,
+		Open:     open,
+		Now:      now,
+	}, stderr)
+	if msg != "" {
+		_, _ = fmt.Fprintln(stdout, msg)
+		return 1
+	}
+	link := target{base: base, token: token}
+
 	var preview struct {
 		Identity string `json:"identity"`
 	}
-	if msg := post(ctx, hc, base+"/link/preview", map[string]any{"schema": previewSchema, "code": code}, &preview); msg != "" {
+	if msg := post(ctx, hc, link, base+"/link/preview", map[string]any{"schema": previewSchema, "code": code}, &preview); msg != "" {
 		_, _ = fmt.Fprintln(stdout, msg)
 		return 1
 	}
@@ -152,8 +231,14 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, hc *http.Clie
 		return 1
 	}
 
+	// The confirmation may have taken a while: do not send a token that has
+	// aged out meanwhile. The server decides either way.
+	if m := prefilter(token, e.issuer, base+"/link", now()); m != "" {
+		_, _ = fmt.Fprintln(stdout, m)
+		return 1
+	}
+
 	var sess map[string]any
-	var msg string
 	if *sessionPath == "-" {
 		sess, msg = parseSession(io.LimitReader(in, maxSession+1))
 	} else {
@@ -166,7 +251,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, hc *http.Clie
 	var out struct {
 		Result string `json:"result"`
 	}
-	if msg := post(ctx, hc, base+"/link/upload", map[string]any{"schema": uploadSchema, "code": code, "session": sess}, &out); msg != "" {
+	if msg := post(ctx, hc, link, base+"/link/upload", map[string]any{"schema": uploadSchema, "code": code, "session": sess}, &out); msg != "" {
 		_, _ = fmt.Fprintln(stdout, msg)
 		return 1
 	}
@@ -176,6 +261,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, hc *http.Clie
 	}
 	_, _ = fmt.Fprintln(stdout, msgLinked)
 	return 0
+}
+
+// linkRoute admits only the two routes the token is for, without a query.
+func linkRoute(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "/link/preview" || u.Path == "/link/upload")
+}
+
+func sameOrigin(raw, base string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme+"://"+u.Host == base && u.User == nil
 }
 
 // checkServer accepts https://host[:port] and nothing else.
@@ -270,9 +366,19 @@ func parseSession(r io.Reader) (map[string]any, string) {
 	return sess, ""
 }
 
-// post sends body and decodes a 200 answer into out. It returns "" on
-// success or the fixed refusal to print.
-func post(ctx context.Context, hc *http.Client, u string, body any, out any) string {
+// target is the one origin the token may be sent to, and the token.
+type target struct {
+	base  string
+	token string
+}
+
+// post sends body with the Bearer token and decodes a 200 answer into out.
+// It returns "" on success or the fixed refusal to print. The token goes
+// only to base's origin; redirects are never followed.
+func post(ctx context.Context, hc *http.Client, t target, u string, body any, out any) string {
+	if t.token == "" || !sameOrigin(u, t.base) || !linkRoute(u) {
+		return msgForwardOrigin
+	}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return msgSessionRead
@@ -285,6 +391,7 @@ func post(ctx context.Context, hc *http.Client, u string, body any, out any) str
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+t.token)
 	resp, err := hc.Do(req)
 	if err != nil {
 		return msgUnreachable
