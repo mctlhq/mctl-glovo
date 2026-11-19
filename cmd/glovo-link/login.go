@@ -61,9 +61,9 @@ const (
 	msgLoginState     = "refused: the login answer did not match this login attempt"
 	msgLoginTimeout   = "refused: the MCTL login did not finish in time"
 	msgLoginToken     = "refused: MCTL did not issue a usable link token" // #nosec G101 -- fixed refusal text, not a credential
-	msgTokenResource  = "refused: the token is not for the link resource" // #nosec G101 -- fixed refusal text, not a credential
-	msgTokenStale     = "refused: the MCTL login is too old; run glovo-link again"
-	msgForwardOrigin  = "refused: the token may only be sent to the link server" // #nosec G101 -- fixed refusal text, not a credential
+	msgTokenResource  = "refused: the token is not for the link resource"
+	msgTokenStale     = "refused: the MCTL login is too old; run glovo-link again" // #nosec G101 -- fixed refusal text, not a credential
+	msgForwardOrigin  = "refused: the token may only be sent to the link server"
 )
 
 var (
