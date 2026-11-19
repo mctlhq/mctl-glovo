@@ -101,6 +101,9 @@ type config struct {
 	ExpectRole  string
 	RuntimeRole string
 	AllowNoTLS  bool
+	// ConnectWait bounds how long a transient connection failure is retried.
+	// Zero means connectWaitDefault; a negative value means a single attempt.
+	ConnectWait time.Duration
 
 	// wrapCatalog decorates the schema probe's database access; tests use it
 	// to inject failures. Nil in production.
@@ -155,10 +158,19 @@ func migrate(ctx context.Context, c config) (result, error) {
 	defer func() { _ = db.Close() }()
 
 	// One dedicated session holds the advisory lock for the whole run.
-	conn, err := db.Conn(ctx)
+	wait := c.ConnectWait
+	if wait == 0 {
+		wait = connectWaitDefault
+	}
+	var conn *sql.Conn
+	attempts, err := retryConnect(ctx, func(ctx context.Context) error {
+		cn, err := db.Conn(ctx)
+		conn = cn
+		return err
+	}, wait, sleepCtx)
 	if err != nil {
 		// The class is a fixed word, never pgx's text (it can quote the DSN).
-		return result{}, errors.New("cannot connect to the database: " + connectClass(err))
+		return result{}, fmt.Errorf("cannot connect to the database after %d attempt(s): %s", attempts, connectClass(err))
 	}
 	defer func() { _ = conn.Close() }()
 	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, lockKey); err != nil {

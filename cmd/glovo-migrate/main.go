@@ -49,6 +49,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	runtime := fs.String("runtime-role", "", "role that receives the runtime grants (empty: grant nothing)")
 	noTLS := fs.Bool("insecure-no-tls", false, "allow a connection without TLS (local development and CI only)")
 	timeout := fs.Duration("timeout", 5*time.Minute, "overall time limit")
+	connectWait := fs.Duration("connect-wait", connectWaitDefault, "how long a transient connection failure is retried (a new pod's network can take a moment); negative: one attempt")
 	if err := fs.Parse(args); err != nil {
 		return exitRefused
 	}
@@ -63,7 +64,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 	}
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
-	res, err := migrate(ctx, config{DSN: dsn, ExpectRole: *expect, RuntimeRole: *runtime, AllowNoTLS: *noTLS})
+	res, err := migrate(ctx, config{DSN: dsn, ExpectRole: *expect, RuntimeRole: *runtime, AllowNoTLS: *noTLS, ConnectWait: *connectWait})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "glovo-migrate:", err)
 		return exitCode(err)

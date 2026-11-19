@@ -399,12 +399,16 @@ func TestRefusesBadInput(t *testing.T) {
 // An unreachable database is a failed read (3), not a refusal and not
 // success.
 func TestUnreachableDatabaseIsAFailure(t *testing.T) {
-	o := runWith(t, "postgres://u:"+sentinelPass+"@127.0.0.1:1/db?sslmode=disable&connect_timeout=2", "-insecure-no-tls")
+	o := runWith(t, "postgres://u:"+sentinelPass+"@127.0.0.1:1/db?sslmode=disable&connect_timeout=2", "-insecure-no-tls", "-connect-wait=500ms")
 	if o.code != exitFailed {
 		t.Fatalf("code %d (%q)", o.code, o.stderr)
 	}
 	if strings.Contains(o.stderr+o.stdout, sentinelPass) {
 		t.Errorf("output leaks the DSN password: %q", o.stderr)
+	}
+	// The failure names its class and how often it tried, and nothing else.
+	if !strings.Contains(o.stderr, "cannot connect to the database after ") || !strings.Contains(o.stderr, "connection refused") {
+		t.Errorf("failure does not name the class: %q", o.stderr)
 	}
 }
 
