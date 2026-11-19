@@ -429,3 +429,11 @@ func TestUnlinkOnlyToTheLinkOrigin(t *testing.T) {
 		t.Fatal("linkRoute admits the wrong paths")
 	}
 }
+
+func TestUnlinkRefusesASessionFlag(t *testing.T) {
+	f := newFakeServer(t)
+	r := runHelper(t, f, []string{"-unlink", "-session", "-"}, "y\n")
+	if r.code != 2 || r.stdout != msgArgs+"\n" || f.totalCalls() != 0 {
+		t.Fatalf("%d %q, %d server calls", r.code, r.stdout, f.totalCalls())
+	}
+}

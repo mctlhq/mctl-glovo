@@ -20,10 +20,10 @@ type recordingEnder struct {
 	err   error
 }
 
-func (r *recordingEnder) Unlink(_ context.Context, pid tokenstore.PID, reason string) error {
+func (r *recordingEnder) OperatorUnlink(_ context.Context, pid tokenstore.PID) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.calls = append(r.calls, "unlink:"+pid.String()+":"+reason)
+	r.calls = append(r.calls, "unlink:"+pid.String()+":operator_request")
 	return r.err
 }
 

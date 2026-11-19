@@ -129,3 +129,16 @@ func (h *LinkHarness) AuditEvents() []string {
 	}
 	return out
 }
+
+// AuditActors lists the actor of every audit row of one event.
+func (h *LinkHarness) AuditActors(event string) []string {
+	h.mem.mu.Lock()
+	defer h.mem.mu.Unlock()
+	var out []string
+	for i := range h.mem.audit {
+		if h.mem.audit[i].Event == event {
+			out = append(out, h.mem.audit[i].Actor)
+		}
+	}
+	return out
+}
