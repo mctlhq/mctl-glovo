@@ -56,6 +56,9 @@ type c2Config struct {
 	// token's auth_time (GLOVO_LINK_MAX_AUTH_AGE, default 5m, at most 15m).
 	linkResource   string
 	linkMaxAuthAge time.Duration
+	// keepalive is the hosted session keepalive interval
+	// (GLOVO_C2_KEEPALIVE_INTERVAL). Zero, the default, runs none.
+	keepalive time.Duration
 	// basketWrites serves the basket mutation tools. No loader sets it (the
 	// environment cannot: see loadBasketWrites); it is the code seam of a
 	// future approval-gated change, and it needs basketApprover too.
@@ -139,6 +142,22 @@ func basketWriteOptions(c c2Config) []glovoapi.Option {
 	return []glovoapi.Option{glovoapi.WithBasketWrites()}
 }
 
+// loadKeepalive reads GLOVO_C2_KEEPALIVE_INTERVAL. Unset, "" and "0" mean no
+// keepalive (the default). Anything else must be a Go duration within
+// [tokenstore.MinKeepaliveInterval, tokenstore.MaxKeepaliveInterval]: a typo
+// stops the boot, and never reads as "off" or as a faster schedule.
+func loadKeepalive(getenv func(string) string) (time.Duration, error) {
+	raw := strings.TrimSpace(getenv("GLOVO_C2_KEEPALIVE_INTERVAL"))
+	if raw == "" || raw == "0" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < tokenstore.MinKeepaliveInterval || d > tokenstore.MaxKeepaliveInterval {
+		return 0, fmt.Errorf("GLOVO_C2_KEEPALIVE_INTERVAL: %q is not 0 or a duration within [%s, %s]", raw, tokenstore.MinKeepaliveInterval, tokenstore.MaxKeepaliveInterval)
+	}
+	return d, nil
+}
+
 // loadC2 reads GLOVO_C2_ENABLED (design 6) and, when it is "true", the
 // rest. Anything but "", "false" or "true" is an error, not "off": a typo
 // in the flag must stop the rollout, not silently pick a side.
@@ -163,6 +182,9 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	c := c2Config{enabled: true, capacity: capacity, caps: caps, vaultRole: getenv("GLOVO_VAULT_ROLE")}
 	if c.vaultRole == "" {
 		c.vaultRole = "mctl-glovo"
+	}
+	if c.keepalive, err = loadKeepalive(getenv); err != nil {
+		return c2Config{}, err
 	}
 	if c.control, err = loadControl(getenv); err != nil {
 		return c2Config{}, err
@@ -236,6 +258,9 @@ type c2App struct {
 	control *controlRoutes
 	// ready are the extra readiness checks (token verification keys).
 	ready []health.Checker
+	// keepaliveDone is closed when the keepalive goroutine has returned; nil
+	// when none runs.
+	keepaliveDone <-chan struct{}
 }
 
 // Register mounts the link and MCP routes.
@@ -246,7 +271,19 @@ func (a *c2App) Register(mux *http.ServeMux) {
 }
 
 // Shutdown drains the MCP surface; safe with the flag off.
-func (a *c2App) Shutdown(ctx context.Context) error { return a.mcp.Shutdown(ctx) }
+func (a *c2App) Shutdown(ctx context.Context) error {
+	err := a.mcp.Shutdown(ctx)
+	// The keepalive stops with the process context; waiting lets a refresh
+	// it has in flight persist its rotated token before the process exits.
+	if a.keepaliveDone != nil {
+		select {
+		case <-a.keepaliveDone:
+		case <-ctx.Done():
+			err = errors.Join(err, errors.New("keepalive did not stop in time"))
+		}
+	}
+	return err
+}
 
 // buildLink returns the C2 handlers. With the flag off it builds nothing:
 // no store, no Vault login, no database (design 6). With it on, every
@@ -379,6 +416,21 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 			return nil, noop, err
 		}
 	}
+	if c.keepalive > 0 {
+		// Started after every step that can fail: a failed boot must not leave
+		// this goroutine running on a closed database. It waits a tick before
+		// its first round.
+		ka, err := tokenstore.NewKeepalive(tokenstore.KeepaliveConfig{
+			Store: store, Sessions: sessions, Interval: c.keepalive, Logger: log.With("component", "keepalive"),
+		})
+		if err != nil {
+			closeDB()
+			return nil, noop, err
+		}
+		go ka.Run(ctx)
+		app.keepaliveDone = ka.Done()
+		log.Info("hosted session keepalive on", "interval", c.keepalive.String())
+	}
 	return app, closeDB, nil
 }
 
@@ -445,6 +497,8 @@ func storeConfig(c c2Config, db tokenstore.DB, transit tokenstore.Transit, kill 
 		ValidateLink:  validate,
 		MaskIdentity:  maskIdentityFrom(consent),
 		ClientOptions: append([]glovoapi.Option{glovoapi.WithProxy(c.proxy), glovoapi.WithRequireProxy()}, basketWriteOptions(c)...),
+		// Four per pid of the cohort: see tokenstore.DefaultKeepaliveDecryptsPerHour.
+		KeepaliveDecryptsPerHour: 4 * c.capacity,
 	}
 	withLinkConsent(&scfg, gate)
 	return scfg

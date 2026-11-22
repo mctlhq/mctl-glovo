@@ -440,10 +440,22 @@ its Vault commands were not checked against a Vault.
 - Who tells the user their session expired: no code sends an alert to the
   account owner. Design 4.5 says the channel is open (UNKNOWN). The only
   signal today is the user's next call returning `needs_relink`.
-- A keepalive per pid is DESIGN (`token-store.md` 4.5). A caller for it in
-  `cmd/` is not present at this SHA (UNAVAILABLE as a scheduled job). Sessions
-  therefore refresh only on use. The consequence for dormant users is not
-  measured (UNKNOWN).
+- A keepalive per pid is BUILT and DARK (`token-store.md` 4.5,
+  `internal/tokenstore/keepalive.go`). It runs only when
+  `GLOVO_C2_KEEPALIVE_INTERVAL` is set to a duration of 1h to 24h; unset or
+  `0` is off, and a value outside the range stops the boot. Whether it is
+  enabled in the deployed pod is UNKNOWN from this repository: turning it on
+  is a gitops value plus an owner GO. Until then sessions refresh only on
+  use. Once on, it reads each active pid once per interval through the same
+  client, refresh coordinator and audit rows as a tool call, writes one
+  `keepalive` log line per read, and stops under the kill switch. A
+  refused refresh chain surfaces as `event=keepalive outcome=needs_relink
+  reason=glovo_rejected` (with `alert=GlovoSessionNeedsRelink`) as well as the
+  existing `refresh`/`glovo_rejected` audit row. `reason=refresh_failures`
+  is the store's repeated-failure counter instead, reachable through
+  transient refusals, and is not a dead-chain signal. The refresh-chain lifetime Glovo
+  enforces is not measured (UNKNOWN); 24h is the glovo-home default and the
+  upper bound of this setting.
 
 ### 6.2 Revoke (what is and is not available)
 
@@ -535,6 +547,7 @@ Log lines available as evidence (all CURRENT, fields as coded):
 | `tool_call` | `who` (keyed digest `pid-<24 hex>`, not the raw principal), `tool`, `outcome` (`ok`; `refused` only for no principal, the middleware kill check or the admitter; `error` for everything else, including every result error, section 3.2), `duration_ms` | `cmd/mctl-glovo/mcp.go:248-298` |
 | `request refused` | `reason`, `status`, `method` | `internal/gateway/gateway.go:192` |
 | `tokenstore` | `event`, `outcome`, `reason`, `actor_kind`, `link_id`, `request_id`, `audit_row_written` on failure. Emitted by `store.audit`, which also writes the row (`audit.go:60-72`) | `internal/tokenstore/audit.go:60-93` |
+| `keepalive` | `event=keepalive`, `outcome` (`ok`, `needs_relink`, `transient_error`, `auth_rejected`, `integrity_error`, `suspended`, `unlinked`, `killed`, `list_failed`), `reason`, `link_id`, `failures` and `retry_in` on a failure. Only when the keepalive is enabled; carries no `pid` | `internal/tokenstore/keepalive.go` |
 | `kill_switch_flip` | `requested`, `stored`, `outcome` (`ok` with `stored`, or `unknown`). Emitted only by the control route after a `Set` attempt, never by a decrypt-cap trip | `cmd/mctl-glovo/control.go:168,173` |
 | `kill_switch_refused` | `status` | `control.go:154` |
 | `kill switch flip failed` | `error_class` (`store_unavailable`, `timeout`, `other`) | `control.go:169` |
@@ -721,7 +734,7 @@ only (UNKNOWN which).
 | A4 | JWKS not usable | `request refused` `status=503`, `initial jwks fetch failed` | any sustained for 5 minutes | `request refused` 503 absent for 10 minutes | PROPOSED |
 | A5 | Proxy loss | `unavailable` plus tinyproxy log silence, or the owner's existing mini check | UNKNOWN | allowed curl returns an HTTP status; synthetic `ok` | PROPOSED; the mini side belongs to the mini host owner |
 | A6 | Glovo 403/429 rising | `tokenstore` refresh reasons `glovo_rejected`; no 429 count exists today | the epic requires an alert; no number decided | decay below threshold for 30 minutes | PROPOSED; 429 counting would be new code (UNAVAILABLE) |
-| A7 | `needs_relink` or `suspend` events | `tokenstore` | aggregate count only | none per user | PROPOSED |
+| A7 | `needs_relink` or `suspend` events; with the keepalive on, also `keepalive outcome=needs_relink reason=glovo_rejected` (a session that died unused; `reason=refresh_failures` is repeated failures, not a proven dead chain) | `tokenstore`, `keepalive` | aggregate count only | none per user | PROPOSED |
 | A8 | `integrity_error` or `cap_exceeded` | `tokenstore` | any | owner security review | PROPOSED; ties to #44 |
 | A9 | Decrypt count vs Vault audit mismatch or `unknown` window | Vault audit | per `token-store.md` section 5 | an observed equal window | DESIGN, not verified deployed |
 

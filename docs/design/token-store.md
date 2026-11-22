@@ -728,12 +728,70 @@ the R4 legal read):
 
 ### 4.5 Keepalive and expiry alerts go to the account's owner
 
-- A keepalive per linked `pid` (one authenticated read a day, the
-  glovo-home pattern) runs through `Store.Update` when the access token is
-  near expiry, so it takes the same lease and fence (2.5).
-- It counts against that `pid`'s caps and stops under the kill switch.
-  A long kill can therefore let sessions expire. That is accepted and
-  stated on the status page.
+- **Built (dark by default).** `tokenstore.Keepalive` makes one
+  authenticated read per active `pid` per interval: the basket GET, the
+  same read the link validator and glovo-home's keepalive make. It is off
+  unless `GLOVO_C2_KEEPALIVE_INTERVAL` is a duration between 1h and 24h
+  (unset or `0` is off; anything else is a boot error). The minimum bounds
+  the background load and the decrypt budget. The maximum is the one
+  interval with operating evidence (glovo-home's daily default). Enabling
+  it in production is a gitops value and an owner decision.
+- **No path of its own.** It asks `Sessions` for the pid's client, as a tool
+  call does, and reads through it. A read that needs a fresh access token
+  refreshes through the Lease's coordinator, so it takes the same row lease
+  and (`link_id`, `version`) fence (2.5), writes the same `decrypt` and
+  `refresh` audit rows, and goes through the egress proxy. `Store.ListActive`
+  (no decrypt; a failed page fails the whole listing) is its work list.
+- **Kill switch.** A round starts with `Store.Running` and re-checks before
+  every pid. Killed, unreadable or latched means no work-list read, no
+  decrypt and no Glovo request. It stops with the process context, and
+  `c2App.Shutdown` waits for it so a rotation in flight is persisted
+  (the commit runs on a detached context).
+- **Caps.** Its decrypts carry a context marker only package `tokenstore`
+  can set. `decryptRow` counts them in a separate window,
+  `Config.KeepaliveDecryptsPerHour` (default 80, `4 * GLOVO_C2_CAPACITY` as
+  wired), and in neither decrypt cap of section 6. A keepalive therefore can
+  neither suspend a pid nor trip the global latch. Spending its own budget
+  only defers it (`cap_exceeded` / `keepalive_decrypt_cap`, a transient
+  outcome). Cost: up to two decrypts per pid per read (client build, then
+  the refresh). The Glovo request caps do apply to its reads. The tool
+  calls' decrypt budget is untouched, so the keepalive also hides nothing
+  from the exfiltration detector beyond its own bounded window; the Vault
+  reconciliation still sees every decrypt (`decrypt` rows with reason
+  `keepalive`).
+- **Schedule.** One goroutine, pids one after another, a one-minute tick.
+  The schedule is in memory: a pid seen for the first time (boot or new
+  link) is due at a random point within one interval; afterwards every
+  interval gets +-10 percent jitter so pids do not synchronise. After a
+  restart each pid is therefore read within one interval. A failure retries
+  after 5 minutes, doubling, capped at min(interval/2, 30 minutes), +-20
+  percent jitter.
+- **Outcomes** (one `slog` line per read, `event=keepalive`, with
+  `link_id`, never the `pid`): `ok`; `needs_relink` (the store set the
+  state and wrote `refresh` with the same cause; the line carries it as
+  `reason`, plus `alert=GlovoSessionNeedsRelink`, and the pid leaves the
+  schedule. `reason=glovo_rejected` is Glovo refusing the refresh chain, a
+  dead session; `reason=refresh_failures` is the store's counter of repeated
+  failed refreshes reaching its limit, which the keepalive's own retries can
+  reach in about 35 minutes, so it is not proof of a dead chain); `transient_error` (busy lease, Vault or
+  database down, the keepalive's own budget, proxy, network, 429, 5xx:
+  retried, never a dead session; the store's own counting of repeated
+  refresh failures still applies); `auth_rejected` (the read itself was
+  refused with a fresh token; state untouched, retried, WARN);
+  `integrity_error`; `suspended` and `unlinked` (skipped); `killed`
+  (logged once per episode); `list_failed`. No new audit event type exists:
+  the DB audit has the existing `decrypt`, `refresh` and `cap_exceeded` rows,
+  and the keepalive line is a log event only.
+- **Replicas.** No new coordination primitive. Two replicas never refresh
+  one pid at once because of the row lease and the fence (2.5): the second
+  gets `ErrBusy` (a transient outcome) or adopts the rotated session. What is
+  not deduplicated is the read itself: each replica keeps its own schedule,
+  so two replicas read twice per interval. The caps are per process (section
+  6), so running more than one replica remains the documented C2-2
+  prerequisite, not something this job changes.
+- A keepalive counts against that `pid`'s request caps and stops under the
+  kill switch. A long kill can therefore let sessions expire. That is
+  accepted and stated on the status page.
 - On `needs_relink`, the alert goes to **the user whose account it is**,
   with a link to `/link`. It contains no token and no Glovo data.
   **Unverified / open:** the channel (e-mail through mctl-api, or the MCTL
