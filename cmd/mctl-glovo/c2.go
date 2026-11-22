@@ -362,7 +362,6 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 	h, err := linkflow.New(linkflow.Config{
 		Enabled:        true,
 		Store:          store,
-		Verifier:       verifier,
 		LinkVerifier:   linkVerifier,
 		Consent:        consent,
 		TrustedProxies: c.trustedProxies,
@@ -465,9 +464,12 @@ func maskIdentityFrom(src linkflow.ConsentSource) func(context.Context, string) 
 	}
 }
 
-// linkVerifierConfig is the check on a preview or an upload: the dedicated
-// link audience and a fresh login. No grant is required (a link token is not
-// a data-plane token); the allowlist and the consent admission still apply.
+// linkVerifierConfig is the check on every token-bearing link route
+// (/link/code, /link/preview, /link/upload, /link/unlink): the dedicated link
+// audience and a fresh login. No grant claim is required (a link token is not
+// a data-plane token). That includes /link/code, which used to need the MCP
+// token's grant: dropping it there is deliberate. The allowlist and the live
+// consent admission still apply on every route.
 func linkVerifierConfig(c c2Config, gate authn.Admitter, admit bool) authn.Config {
 	vcfg := verifierConfig(c, gate, admit)
 	vcfg.Resource = c.linkResource
@@ -477,10 +479,10 @@ func linkVerifierConfig(c c2Config, gate authn.Admitter, admit bool) authn.Confi
 }
 
 // buildLinkVerifier returns the link-route verifier, or nil when
-// GLOVO_LINK_RESOURCE is unset (preview and upload then refuse).
+// GLOVO_LINK_RESOURCE is unset (every link route then refuses).
 func buildLinkVerifier(ctx context.Context, c c2Config, gate authn.Admitter, admit bool, log *slog.Logger) (linkflow.Verifier, error) {
 	if c.linkResource == "" {
-		log.Warn("GLOVO_LINK_RESOURCE is unset: /link/preview and /link/upload refuse every request")
+		log.Warn("GLOVO_LINK_RESOURCE is unset: /link/code, /link/preview, /link/upload and /link/unlink refuse every request")
 		return nil, nil
 	}
 	v, err := authn.New(linkVerifierConfig(c, gate, admit))

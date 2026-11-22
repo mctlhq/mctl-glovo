@@ -15,11 +15,11 @@ import (
 
 func unlinkBody() string { return mustJSON(map[string]any{"schema": linkflow.UnlinkSchema}) }
 
-func (e *env) link(tok, linkTok string, sess map[string]any) {
+func (e *env) link(tok string, sess map[string]any) {
 	e.t.Helper()
 	code := e.issue(tok)
 	req := jsonReq("/link/upload", uploadBody(code, sess))
-	req.Header.Set("Authorization", "Bearer "+linkTok)
+	req.Header.Set("Authorization", "Bearer "+tok)
 	if r := e.do(req); r.status != 200 {
 		e.t.Fatalf("link: %d %s", r.status, r.raw)
 	}
@@ -38,8 +38,8 @@ func ptr(pid string) tokenstore.PID {
 // owner can link again.
 func TestLinkUnlinkRemovesTheSessionAndOnlyThat(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	e.link("tok-owner", "link-owner", session("owner"))
-	e.link("tok-other", "link-other", session("other"))
+	e.link("link-owner", session("owner"))
+	e.link("link-other", session("other"))
 	if _, err := e.h.Store.Get(context.Background(), ptr(pidOwner)); err != nil {
 		t.Fatalf("get before unlink: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestLinkUnlinkRemovesTheSessionAndOnlyThat(t *testing.T) {
 	if r := e.unlink(unlinkBody()); r.status != 200 {
 		t.Fatalf("second unlink: %d %s", r.status, r.raw)
 	}
-	e.link("tok-owner", "link-owner", session("again"))
+	e.link("link-owner", session("again"))
 	if got := e.h.Stored(pidOwner)["refreshToken"]; got != "refresh-again" {
 		t.Fatalf("relink after unlink: %v", got)
 	}
@@ -73,7 +73,7 @@ func TestLinkUnlinkRemovesTheSessionAndOnlyThat(t *testing.T) {
 // is on, consent is gone, and Vault is not called.
 func TestLinkUnlinkWorksUnderKillAndWithoutConsentOrVault(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	e.link("tok-owner", "link-owner", session("owner"))
+	e.link("link-owner", session("owner"))
 	e.h.SetKilled(true)
 	e.consent.mu.Lock()
 	delete(e.consent.versions, pidOwner)
@@ -95,7 +95,7 @@ func TestLinkUnlinkWorksUnderKillAndWithoutConsentOrVault(t *testing.T) {
 // no token and a token in the query all leave the row alone.
 func TestLinkUnlinkNeedsAFreshLinkToken(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	e.link("tok-owner", "link-owner", session("owner"))
+	e.link("link-owner", session("owner"))
 	for _, tc := range []struct {
 		name, auth string
 		status     int
@@ -128,8 +128,8 @@ func TestLinkUnlinkNeedsAFreshLinkToken(t *testing.T) {
 // extra fields or a wrong schema is refused and removes nothing.
 func TestLinkUnlinkCannotTargetAnotherPrincipal(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	e.link("tok-owner", "link-owner", session("owner"))
-	e.link("tok-other", "link-other", session("other"))
+	e.link("link-owner", session("owner"))
+	e.link("link-other", session("other"))
 	for _, body := range []string{
 		mustJSON(map[string]any{"schema": linkflow.UnlinkSchema, "principal": pidOther}),
 		mustJSON(map[string]any{"schema": linkflow.UnlinkSchema, "pid": pidOther}),
@@ -167,7 +167,7 @@ func (failingUnlinkStore) Unlink(context.Context, tokenstore.PID, string) error 
 func TestLinkUnlinkFailureIsNeverASuccess(t *testing.T) {
 	e := newEnv(t, defaultCaps())
 	lf, err := linkflow.New(linkflow.Config{
-		Enabled: true, Store: failingUnlinkStore{e.h.Store}, Verifier: fakeVerifier{},
+		Enabled: true, Store: failingUnlinkStore{e.h.Store},
 		LinkVerifier: e.linkV, Consent: e.consent, Log: slog.New(slog.NewJSONHandler(e.logs, nil)),
 	})
 	if err != nil {
@@ -198,11 +198,11 @@ func TestLinkUnlinkFlagOffIs404(t *testing.T) {
 // operator through OperatorUnlink, not a free-text reason.
 func TestUnlinkAuditNamesTheActor(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	e.link("tok-owner", "link-owner", session("owner"))
+	e.link("link-owner", session("owner"))
 	if r := e.unlink(unlinkBody()); r.status != 200 {
 		t.Fatalf("user unlink: %d %s", r.status, r.raw)
 	}
-	e.link("tok-owner", "link-owner", session("again"))
+	e.link("link-owner", session("again"))
 	if err := e.h.Store.OperatorUnlink(context.Background(), ptr(pidOwner)); err != nil {
 		t.Fatal(err)
 	}

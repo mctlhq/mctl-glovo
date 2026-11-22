@@ -44,9 +44,9 @@ const (
 const linkTimeout = 30 * time.Second
 
 // Verifier is the token check, authn.Verifier in production: exact aud,
-// exact iss, EdDSA against mctl-api's JWKS. The link routes use two: Verifier
-// (the MCP audience) mints a code, LinkVerifier (the dedicated link audience,
-// with a fresh-login requirement) previews and uploads.
+// exact iss, EdDSA against mctl-api's JWKS. Every link route uses the one
+// LinkVerifier: the dedicated link audience with a fresh-login requirement.
+// No link route accepts an MCP-audience token.
 type Verifier interface {
 	Verify(ctx context.Context, token string) (*authn.Principal, error)
 }
@@ -55,15 +55,15 @@ type Verifier interface {
 type Config struct {
 	// Enabled is GLOVO_C2_ENABLED. False registers no route.
 	Enabled bool
-	// Store, Verifier and Consent are required when Enabled.
-	Store    tokenstore.Store
-	Verifier Verifier
-	Consent  ConsentSource
-	// LinkVerifier checks the token on /link/preview and /link/upload: the
-	// link audience and a fresh MCTL login (auth_time). Nil leaves those two
-	// routes answering 503 and nothing else changes: no code can be
-	// previewed or redeemed without it, so a missing link audience fails
-	// closed and never falls back to the MCP verifier.
+	// Store and Consent are required when Enabled.
+	Store   tokenstore.Store
+	Consent ConsentSource
+	// LinkVerifier checks the token on every token-bearing link route
+	// (/link/code, /link/preview, /link/upload, /link/unlink): the link
+	// audience and a fresh MCTL login (auth_time). Nil leaves those routes
+	// answering 503: no code can be issued, previewed or redeemed without it,
+	// so a missing link audience fails closed and never falls back to the MCP
+	// audience.
 	LinkVerifier Verifier
 	// TrustedProxies are the hops (ingress, tunnel) whose X-Forwarded-For
 	// is believed. Empty: the client IP is the peer address.
@@ -83,8 +83,8 @@ func New(cfg Config) (*Handler, error) {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	if cfg.Enabled && (cfg.Store == nil || cfg.Verifier == nil || cfg.Consent == nil) {
-		return nil, errors.New("linkflow: store, verifier and consent source are required when enabled")
+	if cfg.Enabled && (cfg.Store == nil || cfg.Consent == nil) {
+		return nil, errors.New("linkflow: store and consent source are required when enabled")
 	}
 	return &Handler{cfg: cfg, log: log}, nil
 }
@@ -302,14 +302,9 @@ func (h *Handler) trusted(ip netip.Addr) bool {
 
 // --- authentication ------------------------------------------------------
 
-// principal verifies the bearer token exactly as the MCP gateway does.
-func (h *Handler) principal(r *http.Request) (tokenstore.PID, *refusal) {
-	return h.verified(r, h.cfg.Verifier)
-}
-
-// linkPrincipal verifies the token of a preview or an upload: the link
-// audience and a fresh login. Without a link verifier it refuses; it never
-// falls back to the MCP verifier.
+// linkPrincipal verifies the token of a code request, a preview, an upload or
+// an unlink: the link audience and a fresh login. Without a link verifier it
+// refuses; there is no fallback to the MCP audience.
 func (h *Handler) linkPrincipal(r *http.Request) (tokenstore.PID, *refusal) {
 	if h.cfg.LinkVerifier == nil {
 		return tokenstore.PID{}, &refLinkLoginOff
@@ -378,12 +373,14 @@ func (h *Handler) handlePage(w http.ResponseWriter, _ *http.Request) {
 	renderPage(w, newPage("", time.Time{}))
 }
 
-// handleCode issues a code for the authenticated principal (step 2). The
-// consent version comes from the server-side consent record only, and must
-// be the version this service shows.
+// handleCode issues a code for the authenticated principal (step 2). It takes
+// the same fresh link-audience token as preview and upload, so a code is only
+// minted for a principal that just logged in. The consent version comes from
+// the server-side consent record only, and must be the version this service
+// shows.
 func (h *Handler) handleCode(w http.ResponseWriter, r *http.Request) {
 	const route = "code"
-	pid, ref := h.principal(r)
+	pid, ref := h.linkPrincipal(r)
 	if ref != nil {
 		h.refuse(w, route, *ref)
 		return

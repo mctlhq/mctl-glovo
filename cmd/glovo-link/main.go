@@ -1,17 +1,17 @@
 // Command glovo-link links a Glovo account to an MCTL account (slice C2-1b,
-// docs/design/token-store.md 4.1 steps 3-6).
+// docs/design/token-store.md 4.1 steps 2-6).
 //
-// It reads the one-time link code from stdin, never from an argument or the
-// environment, where shell history and process listings would keep it. It
-// shows the masked MCTL identity the code belongs to and asks before it
-// reads the Glovo session. It uploads over https only and prints "linked"
-// or one fixed refusal; it never prints the session.
-//
-// Before it previews, it runs a fresh MCTL login in the browser (OAuth
-// authorization code with PKCE S256 and a loopback redirect, resource
-// <server>/link, see login.go) and sends the resulting token, held in memory
-// only, as a Bearer token to the link server and nowhere else. The OAuth
-// client ID is supplied by the caller; there is no default.
+// It runs one fresh MCTL login in the browser (OAuth authorization code with
+// PKCE S256 and a loopback redirect, resource <server>/link, see login.go)
+// and sends the resulting token, held in memory only, as a Bearer token to
+// the link server and nowhere else. With that one token it requests its own
+// one-time link code (POST /link/code), previews the masked MCTL identity the
+// code belongs to, asks, and only then uploads the Glovo session. The code is
+// held in memory only: it is not read from stdin, an argument or the
+// environment, and it is never printed, so there is nothing to paste and
+// nothing for shell history or a process listing to keep. It uploads over
+// https only and prints "linked" or one fixed refusal; it never prints the
+// session. The OAuth client ID is supplied by the caller; there is no default.
 //
 // Capturing a fresh Glovo login is not part of this helper: it uploads a
 // session that already exists (by default ~/.glovo/session.json, the file
@@ -21,8 +21,7 @@
 //
 //	glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]
 //
-// With -session -, stdin carries the code line, then the y/N answer line,
-// then the session JSON.
+// With -session -, stdin carries the y/N answer line, then the session JSON.
 package main
 
 import (
@@ -56,7 +55,7 @@ const (
 	maxAnswer     = 4 << 10
 )
 
-const usage = "usage: glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]\n       glovo-link -unlink -client-id ID [-server https://glovo.mctl.ai] [-no-browser]\nThe link code is read from stdin, never from arguments."
+const usage = "usage: glovo-link -client-id ID [-server https://glovo.mctl.ai] [-no-browser] [-session PATH | -session -]\n       glovo-link -unlink -client-id ID [-server https://glovo.mctl.ai] [-no-browser]\nOne MCTL login; the helper requests its own link code. No code is read or accepted."
 
 // Fixed texts. stdout only ever carries msgLinked, msgUnlinked, msgNotUnlinked
 // or one refusal.
@@ -64,10 +63,8 @@ const (
 	msgLinked        = "linked"
 	msgUnlinked      = "unlinked"
 	msgNotUnlinked   = "not unlinked: you declined"
-	msgArgs          = "refused: glovo-link takes no arguments (and -unlink takes no -session); it reads the link code from stdin"
+	msgArgs          = "refused: glovo-link takes no arguments (and -unlink takes no -session); it requests its own link code"
 	msgServer        = "refused: -server must be an https:// origin"
-	msgCodeRead      = "refused: no link code on stdin"
-	msgCodeShape     = "refused: that is not a link code"
 	msgDeclined      = "not linked: you declined"
 	msgSessionRead   = "refused: the Glovo session could not be read"
 	msgSessionMode   = "refused: the session file must be a regular file readable only by you (chmod 600)"
@@ -157,7 +154,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 	server := fs.String("server", defaultServer, "link server origin (https only)")
 	clientID := fs.String("client-id", "", "OAuth client ID registered for this helper (required, no default)")
 	noBrowser := fs.Bool("no-browser", false, "print the login address instead of opening a browser")
-	unlink := fs.Bool("unlink", false, "remove your Glovo session from the service (no code is read)")
+	unlink := fs.Bool("unlink", false, "remove your Glovo session from the service (no code is requested)")
 	sessionPath := fs.String("session", "", "Glovo session file, or - for stdin (default ~/.glovo/session.json)")
 	if err := fs.Parse(args); err != nil {
 		_, _ = fmt.Fprintln(stderr, usage)
@@ -194,15 +191,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 	if *unlink {
 		return runUnlink(in, stdout, stderr, e, base, *clientID, *noBrowser)
 	}
-	_, _ = fmt.Fprint(stderr, "Paste the link code: ")
-	code, ok := readLine(in)
-	if !ok || code == "" {
-		_, _ = fmt.Fprintln(stdout, msgCodeRead)
-		return 1
-	}
-	if !looksLikeCode(code) {
-		_, _ = fmt.Fprintln(stdout, msgCodeShape)
-		return 1
+	// A session file is checked before the login: a bad file must not cost a
+	// browser login or burn a link attempt (the server counts the code
+	// request, the preview and the upload each against its rate limits).
+	// With -session - the JSON follows the y/N answer on stdin.
+	var sess map[string]any
+	if *sessionPath != "-" {
+		var msg string
+		if sess, msg = readSessionFile(*sessionPath); msg != "" {
+			_, _ = fmt.Fprintln(stdout, msg)
+			return 1
+		}
 	}
 
 	ctx := context.Background()
@@ -229,6 +228,23 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 	}
 	link := target{base: base, token: token}
 
+	// One code request, never retried: a refusal (rate_limited included) is
+	// printed and ends the run. The code stays in this variable: never
+	// printed, logged or stored, and not an argument or an environment value.
+	_, _ = fmt.Fprintln(stderr, "Requesting a one-time link code for the account you just signed in to.")
+	var issued struct {
+		Code string `json:"code"`
+	}
+	if msg := post(ctx, hc, link, base+"/link/code", nil, &issued); msg != "" {
+		_, _ = fmt.Fprintln(stdout, msg)
+		return 1
+	}
+	code := issued.Code
+	if !looksLikeCode(code) {
+		_, _ = fmt.Fprintln(stdout, msgServerUnknown)
+		return 1
+	}
+
 	var preview struct {
 		Identity string `json:"identity"`
 	}
@@ -251,15 +267,12 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, e env) int {
 		return 1
 	}
 
-	var sess map[string]any
 	if *sessionPath == "-" {
 		sess, msg = parseSession(io.LimitReader(in, maxSession+1))
-	} else {
-		sess, msg = readSessionFile(*sessionPath)
-	}
-	if msg != "" {
-		_, _ = fmt.Fprintln(stdout, msg)
-		return 1
+		if msg != "" {
+			_, _ = fmt.Fprintln(stdout, msg)
+			return 1
+		}
 	}
 	var out struct {
 		Result string `json:"result"`
@@ -329,7 +342,7 @@ func runUnlink(in *bufio.Reader, stdout, stderr io.Writer, e env, base, clientID
 // linkRoute admits only the two routes the token is for, without a query.
 func linkRoute(raw string) bool {
 	u, err := url.Parse(raw)
-	return err == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "/link/preview" || u.Path == "/link/upload" || u.Path == "/link/unlink")
+	return err == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "/link/code" || u.Path == "/link/preview" || u.Path == "/link/upload" || u.Path == "/link/unlink")
 }
 
 func sameOrigin(raw, base string) bool {
@@ -435,16 +448,19 @@ type target struct {
 	token string
 }
 
-// post sends body with the Bearer token and decodes a 200 answer into out.
-// It returns "" on success or the fixed refusal to print. The token goes
-// only to base's origin; redirects are never followed.
+// post sends body (none when nil) with the Bearer token and decodes a 200
+// answer into out. It returns "" on success or the fixed refusal to print.
+// The token goes only to base's origin; redirects are never followed.
 func post(ctx context.Context, hc *http.Client, t target, u string, body any, out any) string {
 	if t.token == "" || !sameOrigin(u, t.base) || !linkRoute(u) {
 		return msgForwardOrigin
 	}
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return msgSessionRead
+	var raw []byte
+	if body != nil {
+		var err error
+		if raw, err = json.Marshal(body); err != nil {
+			return msgSessionRead
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
@@ -452,7 +468,9 @@ func post(ctx context.Context, hc *http.Client, t target, u string, body any, ou
 	if err != nil {
 		return msgUnreachable
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+t.token)
 	resp, err := hc.Do(req)
