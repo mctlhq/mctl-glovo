@@ -363,6 +363,8 @@ func renderPage(w http.ResponseWriter, d pageData) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Overrides the no-style default of headers(): the hashed <style> only.
+	w.Header().Set("Content-Security-Policy", pageCSP)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(buf.Bytes())
 }
