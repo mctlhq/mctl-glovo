@@ -1,6 +1,7 @@
-// Edge copy of glovo-home's landing page (internal/gateway/landing.go).
-// Routed by mctl-gitops to the root path of glovo.mctl.ai only; /mcp and
-// /.well-known/* never reach this Worker and keep going to the origin.
+// Edge copy of glovo-home's landing page (internal/gateway/landing.go), plus
+// the OAuth Client ID Metadata Document of the glovo-link helper.
+// mctl-gitops routes glovo.mctl.ai/* here; /mcp*, /link* and /.well-known/*
+// have no-script routes and keep going to the origin.
 // Pages, CSP and cookie name come from pages.gen.js (cmd/landing-gen), so
 // the bytes match what the origin would serve.
 import { COOKIE, CSP, LANGS, PAGES } from "./pages.gen.js";
@@ -35,11 +36,45 @@ const BASE_HEADERS = {
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 };
 
+// CIMD_PATH is the client_id of the glovo-link helper: an https URL whose
+// document names the client (OAuth Client ID Metadata Documents, as accepted
+// by mctl-api when this host is in OAUTH_CIMD_ALLOWED_HOSTS). The document
+// must carry client_id equal to its own URL. The helper listens on a random
+// loopback port, so the redirect is the port-less loopback form (RFC 8252
+// section 7.3); mctl-api matches any port on an exact scheme, host and path.
+// It is a public client (no secret): token_endpoint_auth_method is none.
+export const CIMD_PATH = "/glovo-link/client.json";
+export const CIMD_DOCUMENT = {
+  client_id: "https://glovo.mctl.ai" + CIMD_PATH,
+  client_name: "glovo-link",
+  redirect_uris: ["http://127.0.0.1/callback"],
+  grant_types: ["authorization_code"],
+  response_types: ["code"],
+  token_endpoint_auth_method: "none",
+};
+
 export default {
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === CIMD_PATH) {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return new Response("method not allowed\n", {
+          status: 405,
+          headers: { ...BASE_HEADERS, Allow: "GET, HEAD" },
+        });
+      }
+      // A short max-age: mctl-api honours it, so a changed redirect URI
+      // reaches the authorization server within the hour.
+      const headers = new Headers({
+        ...BASE_HEADERS,
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=3600",
+      });
+      const body = JSON.stringify(CIMD_DOCUMENT) + "\n";
+      return new Response(request.method === "HEAD" ? null : body, { status: 200, headers });
+    }
     if (url.pathname !== "/") {
-      // The route admits only "/"; anything else is a routing mistake.
+      // Anything else that reaches the Worker is a routing mistake.
       return new Response("not found\n", { status: 404, headers: BASE_HEADERS });
     }
     if (request.method !== "GET" && request.method !== "HEAD") {

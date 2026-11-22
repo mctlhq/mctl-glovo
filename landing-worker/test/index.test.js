@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker from "../src/index.js";
+import worker, { CIMD_DOCUMENT, CIMD_PATH } from "../src/index.js";
 import { CSP, PAGES } from "../src/pages.gen.js";
 
 const get = (path, headers = {}, method = "GET") =>
@@ -80,4 +80,26 @@ test("head metadata for an invitation-only preview", async () => {
     assert.ok(body.includes(`hreflang="${lang}" aria-label=`) && body.includes(" aria-current=\"page\""));
     assert.ok(!body.includes("og:image") && !body.includes('rel="icon"'));
   }
+});
+
+// The glovo-link helper's client_id is this document's own URL. mctl-api
+// refuses a document whose client_id differs from the URL it was fetched
+// from, one with a secret-bearing auth method, or one with no usable
+// redirect URI, so each of those is pinned here.
+test("CIMD document for glovo-link", async () => {
+  const r = await get(CIMD_PATH);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("Content-Type"), "application/json");
+  assert.match(r.headers.get("Cache-Control"), /max-age=3600/);
+  const d = await r.json();
+  assert.equal(d.client_id, "https://glovo.mctl.ai" + CIMD_PATH);
+  assert.equal(d.token_endpoint_auth_method, "none");
+  assert.deepEqual(d.redirect_uris, ["http://127.0.0.1/callback"]);
+  assert.deepEqual(d, CIMD_DOCUMENT);
+  for (const k of ["client_secret", "jwks", "jwks_uri"]) assert.ok(!(k in d), k);
+  const h = await get(CIMD_PATH, {}, "HEAD");
+  assert.equal(h.status, 200);
+  assert.equal(await h.text(), "");
+  assert.equal((await get(CIMD_PATH, {}, "POST")).status, 405);
+  assert.equal((await get(CIMD_PATH + "/x")).status, 404);
 });
