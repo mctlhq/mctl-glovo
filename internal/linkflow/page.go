@@ -24,14 +24,14 @@ var pageTmpl = template.Must(template.New("link").Parse(`<!doctype html>
 <h2>Your one-time link code</h2>
 <p>This code is shown once. It expires at {{.Expires}} and only the newest code works.</p>
 <p><code>{{.Code}}</code></p>
-<p>Run <code>glovo-link</code> on the machine that has your Glovo session and paste the code when it asks. Never pass the code as a command-line argument.</p>
+<p>Normally you do not need this page: <code>glovo-link</code> requests its own code after one MCTL login. Never pass a code as a command-line argument.</p>
 <p>The helper shows the MCTL account the code belongs to. If it is not yours, answer no.</p>
 {{else}}
 <h2>How linking works</h2>
 <ol>
 <li>Record your consent to this text in MCTL.</li>
-<li>Request a one-time code from <code>POST /link/code</code> while signed in to MCTL.</li>
-<li>Run <code>glovo-link</code> and paste the code when it asks.</li>
+<li>Run <code>glovo-link</code> on the machine that has your Glovo session and sign in to MCTL once when it asks.</li>
+<li>The helper requests a one-time code for your account, shows which MCTL account it belongs to and asks you to confirm. There is nothing to paste.</li>
 </ol>
 {{end}}
 </main>

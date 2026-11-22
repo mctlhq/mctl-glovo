@@ -202,7 +202,7 @@ func (i *fakeIDP) browser(u string) error {
 
 func happy(t *testing.T, f *fakeServer) result {
 	t.Helper()
-	return runHelper(t, f, []string{"-session", writeSession(t, sessionJSON, 0o600)}, testCode+"\ny\n")
+	return runHelper(t, f, []string{"-session", writeSession(t, sessionJSON, 0o600)}, "y\n")
 }
 
 // A consent page comes first and the code only after approval; the request
@@ -270,7 +270,7 @@ func TestListenerBindsLoopbackOnly(t *testing.T) {
 	e.loginTimeout = 700 * time.Millisecond
 	done := make(chan result, 1)
 	go func() {
-		done <- runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient}, testCode+"\ny\n")
+		done <- runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, "y\n")
 	}()
 	redirect := <-redirects
 	ru, err := url.Parse(redirect)
@@ -300,7 +300,7 @@ func TestListenerBindsLoopbackOnly(t *testing.T) {
 func TestClientIDHasNoDefault(t *testing.T) {
 	f := newFakeServer(t)
 	var out, errb strings.Builder
-	code := run([]string{"-server", f.srv.URL}, strings.NewReader(testCode+"\ny\n"), &out, &errb, f.env(t))
+	code := run([]string{"-server", f.srv.URL}, strings.NewReader("y\n"), &out, &errb, f.env(t))
 	if code != 2 || out.String() != msgClientID+"\n" {
 		t.Fatalf("%d %q", code, out.String())
 	}
@@ -338,7 +338,7 @@ func TestPKCEMismatchRefused(t *testing.T) {
 		pu.RawQuery = q.Encode()
 		return f.idp.browser(pu.String())
 	}
-	r := runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, testCode+"\ny\n")
+	r := runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, "y\n")
 	if r.code == 0 || r.stdout != msgLoginToken+"\n" {
 		t.Fatalf("%d %q", r.code, r.stdout)
 	}
@@ -408,7 +408,7 @@ func TestTokenAgingDuringConfirmationNotUploaded(t *testing.T) {
 		}
 		return time.Now()
 	}
-	r := runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, testCode+"\ny\n")
+	r := runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, "y\n")
 	if r.code == 0 || r.stdout != msgTokenStale+"\n" {
 		t.Fatalf("%d %q", r.code, r.stdout)
 	}
@@ -463,7 +463,7 @@ func TestConsentDeniedAndTimeout(t *testing.T) {
 	f.idp.noConsent = true // the browser never returns
 	e := f.env(t)
 	e.loginTimeout = 300 * time.Millisecond
-	r = runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, testCode+"\ny\n")
+	r = runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, "y\n")
 	if r.code == 0 || r.stdout != msgLoginTimeout+"\n" || f.totalCalls() != 0 {
 		t.Fatalf("timeout: %d %q", r.code, r.stdout)
 	}
@@ -528,6 +528,9 @@ func TestTokenNeverLeavesTheLinkOrigin(t *testing.T) {
 	tok := f.idp.mint()
 	for _, u := range []string{
 		sink.URL + "/link/preview",
+		sink.URL + "/link/code",
+		f.srv.URL + ".evil.example/link/code",
+		f.srv.URL + "/link/code?x=1",
 		f.srv.URL + ".evil.example/link/preview",
 		strings.Replace(f.srv.URL, "https://", "https://user:pw@", 1) + "/link/preview",
 		f.srv.URL + "/../x",
@@ -623,7 +626,7 @@ func TestCallbackHandlerHardening(t *testing.T) {
 func TestDeclineAfterLoginWritesNothing(t *testing.T) {
 	f := newFakeServer(t)
 	e := f.env(t)
-	r := runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, testCode+"\nn\n")
+	r := runEnv(t, f, e, []string{"-server", f.srv.URL, "-client-id", testClient, "-session", writeSession(t, sessionJSON, 0o600)}, "n\n")
 	if r.code == 0 || r.stdout != msgDeclined+"\n" {
 		t.Fatalf("%d %q", r.code, r.stdout)
 	}

@@ -432,7 +432,8 @@ its Vault commands were not checked against a Vault.
   `store.go:428-450`). Proxy, network and deadline errors are transient and
   count nothing.
 - The user relinks through `/link` with a new one-time code and the local
-  helper `cmd/glovo-link`. The routes that exist are `GET /link`, `POST
+  helper `cmd/glovo-link`, which does the whole flow with one fresh MCTL
+  login: it requests its own code, previews, asks y/N, uploads. The routes that exist are `GET /link`, `POST
   /link/code`, `POST /link/preview`, `POST /link/upload`
   (`internal/linkflow/linkflow.go:88-91`). Until mctl-api serves masked
   identity (C2-1c), preview refuses (`README.md`).

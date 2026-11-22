@@ -1,0 +1,8 @@
+# Build output of go build ./cmd/<name> at the repo root.
+/glovo-link
+/mctl-glovo
+/glovo-home
+/token-refresher
+/glovo-migrate
+/landing-gen
+/landing-css-sync

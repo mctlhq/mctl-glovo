@@ -52,8 +52,8 @@ func (fakeVerifier) Verify(_ context.Context, tok string) (*authn.Principal, err
 	return nil, &authn.Error{Reason: "bad_token", Status: http.StatusUnauthorized}
 }
 
-// fakeLinkVerifier stands for the link-audience verifier: it knows only
-// fresh link tokens. An MCP token (tok-*) is the wrong audience here, a stale
+// fakeLinkVerifier stands for the link-audience verifier, the one verifier of
+// every token-bearing link route: it knows only fresh link tokens. An MCP token (tok-*) is the wrong audience here, a stale
 // or auth_time-less one is a fresh-login failure. The real claim checks are
 // authn's own tests; the wiring of the two verifiers is TestLinkRoutesUse...
 type fakeLinkVerifier struct{ calls atomic.Int64 }
@@ -69,6 +69,12 @@ func (f *fakeLinkVerifier) Verify(_ context.Context, tok string) (*authn.Princip
 		return nil, &authn.Error{Reason: authn.ReasonFreshLogin, Status: http.StatusUnauthorized}
 	case "link-jwks-down":
 		return nil, &authn.Error{Reason: authn.ReasonJWKSDown, Status: http.StatusServiceUnavailable}
+	case "link-not-admitted":
+		return nil, &authn.Error{Reason: authn.ReasonNotAdmitted, Status: http.StatusForbidden}
+	case "link-admit-down":
+		return nil, &authn.Error{Reason: authn.ReasonAdmitDown, Status: http.StatusServiceUnavailable}
+	case "link-not-allowed":
+		return nil, &authn.Error{Reason: "not_allowed", Status: http.StatusForbidden}
 	}
 	return nil, &authn.Error{Reason: authn.ReasonAudience, Status: http.StatusUnauthorized}
 }
@@ -153,7 +159,6 @@ func newEnv(t *testing.T, caps tokenstore.Caps) *env {
 	lf, err := linkflow.New(linkflow.Config{
 		Enabled:      true,
 		Store:        e.h.Store,
-		Verifier:     fakeVerifier{},
 		LinkVerifier: e.linkV,
 		Consent:      e.consent,
 		Log:          slog.New(slog.NewJSONHandler(e.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
@@ -233,7 +238,7 @@ func mustJSON(v any) string {
 // A repeated key is refused on preview too, before the rate limit.
 func TestLinkPreviewRefusesDuplicateKeys(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	body := `{"schema":"` + linkflow.PreviewSchema + `","code":"wrong","code":"` + code + `"}`
 	wantRefusal(t, e.do(jsonReq("/link/preview", body)), 400, "malformed_request")
 }
@@ -275,7 +280,7 @@ func TestLinkFlagOffIs404(t *testing.T) {
 	} {
 		req := httptest.NewRequest(rt.method, rt.path, strings.NewReader(previewBody("x")))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer tok-owner")
+		req.Header.Set("Authorization", "Bearer link-owner")
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound {
@@ -291,7 +296,7 @@ func TestLinkFlagOffIs404(t *testing.T) {
 
 func TestLinkHappyPathAndRelink(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	if r := e.preview(code); r.status != 200 || r.body["identity"] != "o***@e***.com" {
 		t.Fatalf("preview: %d %s", r.status, r.raw)
 	}
@@ -307,7 +312,7 @@ func TestLinkHappyPathAndRelink(t *testing.T) {
 		t.Fatalf("stored %v", got)
 	}
 	// A relink replaces the link: a new link_id and a new version.
-	code2 := e.issue("tok-owner")
+	code2 := e.issue("link-owner")
 	if r := e.upload(code2, session("two")); r.status != 200 {
 		t.Fatalf("relink: %d %s", r.status, r.raw)
 	}
@@ -327,7 +332,7 @@ func TestLinkPageShowsConsentAndCodeOnce(t *testing.T) {
 		t.Fatalf("page: %d", r.status)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
-	req.Header.Set("Authorization", "Bearer tok-owner")
+	req.Header.Set("Authorization", "Bearer link-owner")
 	req.Header.Set("Accept", "text/html")
 	rec := httptest.NewRecorder()
 	e.mux.ServeHTTP(rec, req)
@@ -359,7 +364,7 @@ func TestLinkNoConsentNoCode(t *testing.T) {
 			e := newEnv(t, defaultCaps())
 			tc.set(e.consent)
 			req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
-			req.Header.Set("Authorization", "Bearer tok-owner")
+			req.Header.Set("Authorization", "Bearer link-owner")
 			wantRefusal(t, e.do(req), tc.status, tc.errCode)
 			if e.h.Codes() != 0 {
 				t.Fatalf("%d codes without consent", e.h.Codes())
@@ -369,14 +374,14 @@ func TestLinkNoConsentNoCode(t *testing.T) {
 	// The production source until C2-1c never reports a consent.
 	t.Run("unavailable source", func(t *testing.T) {
 		e := newEnv(t, defaultCaps())
-		lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: e.h.Store, Verifier: fakeVerifier{}, Consent: linkflow.UnavailableConsent{}})
+		lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: e.h.Store, Consent: linkflow.UnavailableConsent{}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		e.mux = http.NewServeMux()
 		lf.Register(e.mux)
 		req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
-		req.Header.Set("Authorization", "Bearer tok-owner")
+		req.Header.Set("Authorization", "Bearer link-owner")
 		wantRefusal(t, e.do(req), 503, "unavailable")
 		if e.h.Codes() != 0 {
 			t.Fatalf("%d codes", e.h.Codes())
@@ -393,10 +398,10 @@ func TestLinkCodeNeedsAVerifiedToken(t *testing.T) {
 	}{
 		{"", "", 401, "invalid_token"},
 		{"Basic abc", "", 401, "invalid_token"},
-		{"Bearer tok-forged", "", 401, "invalid_token"},
-		{"Bearer tok-jwks-down", "", 503, "temporarily_unavailable"},
-		{"Bearer tok-not-allowed", "", 403, "access_denied"},
-		{"Bearer tok-owner", "?access_token=tok-owner", 401, "invalid_token"},
+		{"Bearer link-forged", "", 401, "invalid_token"},
+		{"Bearer link-jwks-down", "", 503, "temporarily_unavailable"},
+		{"Bearer link-not-allowed", "", 403, "access_denied"},
+		{"Bearer link-owner", "?access_token=link-owner", 401, "invalid_token"},
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/link/code"+tc.query, nil)
 		if tc.auth != "" {
@@ -409,9 +414,62 @@ func TestLinkCodeNeedsAVerifiedToken(t *testing.T) {
 	}
 }
 
+// POST /link/code takes the fresh link-audience token and nothing else (the
+// helper requests its own code with the token it just logged in with). Every
+// refusal mints nothing.
+func TestLinkCodeTokenAndPreconditions(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		token  string
+		setup  func(e *env)
+		status int
+		code   string
+	}{
+		{"fresh link token", "link-owner", nil, 200, ""},
+		{"MCP-audience token", "tok-owner", nil, 401, "invalid_token"},
+		{"stale login", "link-stale", nil, 401, "fresh_login_required"},
+		{"no auth_time", "link-no-auth-time", nil, 401, "fresh_login_required"},
+		{"no token", "", nil, 401, "invalid_token"},
+		{"no consent", "link-owner", func(e *env) { delete(e.consent.versions, pidOwner) }, 403, "consent_required"},
+		{"killed", "link-owner", func(e *env) { e.h.SetKilled(true) }, 503, "linking_disabled"},
+		{"rate limited", "link-owner", func(e *env) { e.issue("link-owner") }, 429, "rate_limited"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			caps := defaultCaps()
+			if tc.code == "rate_limited" {
+				caps.LinkAttemptsPerIPHour = 1 // spent by the setup's own request
+			}
+			e := newEnv(t, caps)
+			if tc.setup != nil {
+				tc.setup(e)
+			}
+			before := e.h.Codes()
+			req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
+			if tc.token != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			r := e.do(req)
+			if tc.code == "" {
+				if r.status != 200 || r.body["code"] == "" || r.body["consent_version"] != linkflow.ConsentVersion {
+					t.Fatalf("got %d %s", r.status, r.raw)
+				}
+				// The code is for the pid of the link token: its own preview works.
+				if p := e.preview(r.body["code"]); p.status != 200 || p.body["identity"] != "o***@e***.com" {
+					t.Fatalf("preview of the issued code: %d %s", p.status, p.raw)
+				}
+				return
+			}
+			wantRefusal(t, r, tc.status, tc.code)
+			if e.h.Codes() != before {
+				t.Fatalf("%d codes minted by a refused request", e.h.Codes()-before)
+			}
+		})
+	}
+}
+
 func TestLinkExpiredCode(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	e.h.ExpireCodes()
 	wantRefusal(t, e.preview(code), 400, "code_refused")
 	wantRefusal(t, e.upload(code, session("x")), 400, "code_refused")
@@ -422,8 +480,8 @@ func TestLinkExpiredCode(t *testing.T) {
 
 func TestLinkNewCodeInvalidatesOld(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	old := e.issue("tok-owner")
-	fresh := e.issue("tok-owner")
+	old := e.issue("link-owner")
+	fresh := e.issue("link-owner")
 	wantRefusal(t, e.preview(old), 400, "code_refused")
 	wantRefusal(t, e.upload(old, session("x")), 400, "code_refused")
 	if r := e.upload(fresh, session("y")); r.status != 200 {
@@ -434,7 +492,7 @@ func TestLinkNewCodeInvalidatesOld(t *testing.T) {
 // Two uploads with one code: exactly one wins.
 func TestLinkCodeIsSingleUseUnderConcurrency(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	e.gate = make(chan struct{})
 	start := make(chan struct{})
 	var wg sync.WaitGroup
@@ -477,7 +535,7 @@ func TestLinkCodeIsSingleUseUnderConcurrency(t *testing.T) {
 
 func TestLinkUploadBodyChecksComeFirst(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	big := session("big")
 	big["padding"] = strings.Repeat("p", linkflow.MaxBody)
 	cases := []struct {
@@ -523,7 +581,7 @@ func TestLinkRateLimits(t *testing.T) {
 	caps.LinkAttemptsPerIPHour = 3
 	caps.LinkAttemptsGlobalHour = 5
 	e := newEnv(t, caps)
-	code := e.issue("tok-owner") // attempt 1 from 203.0.113.7
+	code := e.issue("link-owner") // attempt 1 from 203.0.113.7
 	for i := 0; i < 2; i++ {
 		if r := e.preview(code); r.status != 200 {
 			t.Fatalf("preview %d: %d", i, r.status)
@@ -555,13 +613,13 @@ func TestLinkRateLimits(t *testing.T) {
 // The kill switch refuses before the code is redeemed: the code survives.
 func TestLinkKillSwitchRefusesBeforeRedemption(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	vault := e.h.VaultCalls()
 	e.h.SetKilled(true)
 	wantRefusal(t, e.upload(code, session("k")), 503, "linking_disabled")
 	wantRefusal(t, e.preview(code), 503, "linking_disabled")
 	req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
-	req.Header.Set("Authorization", "Bearer tok-owner")
+	req.Header.Set("Authorization", "Bearer link-owner")
 	wantRefusal(t, e.do(req), 503, "linking_disabled")
 	if e.validations.Load() != 0 || e.h.VaultCalls() != vault {
 		t.Fatalf("killed upload reached Glovo (%d) or Vault (%d)", e.validations.Load(), e.h.VaultCalls()-vault)
@@ -589,7 +647,7 @@ func TestLinkSessionShapeBurnsCode(t *testing.T) {
 	for _, field := range []string{"accessToken", "refreshToken", "deviceUrn"} {
 		t.Run(field, func(t *testing.T) {
 			e := newEnv(t, defaultCaps())
-			code := e.issue("tok-owner")
+			code := e.issue("link-owner")
 			s := session("s")
 			delete(s, field)
 			wantRefusal(t, e.upload(code, s), 422, "session_refused")
@@ -603,7 +661,7 @@ func TestLinkSessionShapeBurnsCode(t *testing.T) {
 		})
 	}
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	s := session("s")
 	s["accessToken"] = strings.Repeat("a", 9<<10)
 	wantRefusal(t, e.upload(code, s), 422, "session_refused")
@@ -613,7 +671,7 @@ func TestLinkSessionShapeBurnsCode(t *testing.T) {
 // code is still burned.
 func TestLinkGlovoValidationFailureStoresNothing(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	vault := e.h.VaultCalls()
 	e.failGlovo.Store(true)
 	wantRefusal(t, e.upload(code, session("g")), 422, "session_refused")
@@ -633,12 +691,12 @@ func TestLinkGlovoValidationFailureStoresNothing(t *testing.T) {
 // A relink keeps the old link until the new one is validated.
 func TestLinkFailedRelinkKeepsOldLink(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	if r := e.upload(e.issue("tok-owner"), session("a")); r.status != 200 {
+	if r := e.upload(e.issue("link-owner"), session("a")); r.status != 200 {
 		t.Fatal(r.raw)
 	}
 	before, _, _ := e.h.LinkRow(pidOwner)
 	e.failGlovo.Store(true)
-	wantRefusal(t, e.upload(e.issue("tok-owner"), session("b")), 422, "session_refused")
+	wantRefusal(t, e.upload(e.issue("link-owner"), session("b")), 422, "session_refused")
 	after, _, _ := e.h.LinkRow(pidOwner)
 	if after.LinkID != before.LinkID || after.Version != before.Version {
 		t.Fatal("a refused relink changed the link")
@@ -664,7 +722,7 @@ func TestLinkRedactionMarkerScan(t *testing.T) {
 		}
 	}
 	var codes []string
-	issue := func() string { c := e.issue("tok-owner"); codes = append(codes, c); return c }
+	issue := func() string { c := e.issue("link-owner"); codes = append(codes, c); return c }
 
 	// Success.
 	e.upload(issue(), marker("ok"))
@@ -717,7 +775,7 @@ func TestLinkRedactionMarkerScan(t *testing.T) {
 // The response to an upload is "linked" and nothing else.
 func TestLinkUploadAnswerCarriesNoSessionData(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	r := e.upload(e.issue("tok-owner"), session("q"))
+	r := e.upload(e.issue("link-owner"), session("q"))
 	if r.raw != `{"result":"linked"}`+"\n" {
 		t.Fatalf("answer %q", r.raw)
 	}
@@ -726,13 +784,13 @@ func TestLinkUploadAnswerCarriesNoSessionData(t *testing.T) {
 func TestLinkPreviewMaskUnavailable(t *testing.T) {
 	e := newEnv(t, defaultCaps())
 	h := tokenstore.NewLinkHarness(t, defaultCaps(), func(context.Context, glovoapi.Session) error { return nil }, nil)
-	lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: h.Store, Verifier: fakeVerifier{}, LinkVerifier: e.linkV, Consent: e.consent})
+	lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: h.Store, LinkVerifier: e.linkV, Consent: e.consent})
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.mux = http.NewServeMux()
 	lf.Register(e.mux)
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	wantRefusal(t, e.preview(code), 503, "unavailable")
 	// Without a preview the helper never uploads, but the code itself is
 	// still good: the store did not burn it.
@@ -752,7 +810,7 @@ func TestLinkUploadRechecksConsent(t *testing.T) {
 			t.Fatal(err)
 		}
 		e.h.LinkConsent = g.LinkConsent
-		code := e.issue("tok-owner")
+		code := e.issue("link-owner")
 		return e, code
 	}
 	t.Run("held", func(t *testing.T) {
@@ -788,16 +846,16 @@ func TestLinkUploadRechecksConsent(t *testing.T) {
 	})
 }
 
-// The verifier's consent gate answers in the link flow's own terms.
+// The link verifier's consent gate answers in the link flow's own terms.
 func TestLinkCodeAdmissionRefusals(t *testing.T) {
 	e := newEnv(t, defaultCaps())
 	for tok, want := range map[string]struct {
 		status int
 		code   string
 	}{
-		"tok-not-admitted": {403, "consent_required"},
-		"tok-admit-down":   {503, "temporarily_unavailable"},
-		"tok-not-allowed":  {403, "access_denied"},
+		"link-not-admitted": {403, "consent_required"},
+		"link-admit-down":   {503, "temporarily_unavailable"},
+		"link-not-allowed":  {403, "access_denied"},
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
 		req.Header.Set("Authorization", "Bearer "+tok)
@@ -847,7 +905,7 @@ func TestLinkPreviewAndUploadNeedAFreshLinkToken(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, defaultCaps())
-			code := e.issue("tok-owner")
+			code := e.issue("link-owner")
 			for _, path := range []string{"/link/preview", "/link/upload"} {
 				body := previewBody(code)
 				if path == "/link/upload" {
@@ -874,29 +932,33 @@ func TestLinkPreviewAndUploadNeedAFreshLinkToken(t *testing.T) {
 	}
 }
 
-// The link audience is its own verifier: no fallback to the MCP one, and the
-// MCP route that mints a code never accepts a link token.
+// The link audience is the only audience: no link route falls back to an
+// MCP-audience token, and a missing link verifier refuses the code route too.
 func TestLinkRoutesUseTheirOwnVerifier(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
-	// A link token cannot mint a code.
+	code := e.issue("link-owner")
+	// An MCP-audience token cannot mint a code.
 	req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
-	req.Header.Set("Authorization", "Bearer link-owner")
+	req.Header.Set("Authorization", "Bearer tok-owner")
 	wantRefusal(t, e.do(req), 401, "invalid_token")
 	// A missing link verifier refuses; it never falls back to the MCP one.
-	lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: e.h.Store, Verifier: fakeVerifier{}, Consent: e.consent})
+	lf, err := linkflow.New(linkflow.Config{Enabled: true, Store: e.h.Store, Consent: e.consent})
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.mux = http.NewServeMux()
 	lf.Register(e.mux)
+	codes := e.h.Codes()
 	for _, tok := range []string{"link-owner", "tok-owner"} {
 		pv, up := e.previewAndUploadWith(code, "Bearer "+tok)
 		wantRefusal(t, pv, 503, "unavailable")
 		wantRefusal(t, up, 503, "unavailable")
+		req := httptest.NewRequest(http.MethodPost, "/link/code", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		wantRefusal(t, e.do(req), 503, "unavailable")
 	}
-	if e.validations.Load() != 0 {
-		t.Fatal("reached Glovo without a link verifier")
+	if e.validations.Load() != 0 || e.h.Codes() != codes {
+		t.Fatal("reached Glovo or minted a code without a link verifier")
 	}
 }
 
@@ -905,7 +967,7 @@ func TestLinkRoutesUseTheirOwnVerifier(t *testing.T) {
 // nothing and does not burn the owner's code.
 func TestLinkCodeOfAnotherPrincipalIsRefused(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	pv, up := e.previewAndUploadWith(code, "Bearer link-other")
 	wantRefusal(t, pv, 400, "code_refused")
 	wantRefusal(t, up, 400, "code_refused")
@@ -932,7 +994,7 @@ func TestLinkCodeOfAnotherPrincipalIsRefused(t *testing.T) {
 // A code works once, and a replay by the owner changes nothing.
 func TestLinkReplayIsRefused(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	if r := e.upload(code, session("one")); r.status != 200 {
 		t.Fatalf("%d %s", r.status, r.raw)
 	}
@@ -958,7 +1020,7 @@ func TestLinkPreviewNeedsLiveConsent(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, defaultCaps())
-			code := e.issue("tok-owner")
+			code := e.issue("link-owner")
 			e.consent.mu.Lock()
 			tc.set(e.consent)
 			e.consent.mu.Unlock()
@@ -981,7 +1043,7 @@ func TestLinkUploadIgnoresACachedConsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.h.LinkConsent = g.LinkConsent
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	if r := e.preview(code); r.status != 200 {
 		t.Fatalf("preview: %d %s", r.status, r.raw)
 	}
@@ -1001,7 +1063,7 @@ func TestLinkUploadIgnoresACachedConsent(t *testing.T) {
 // session.
 func TestLinkNewRefusalsLeakNothing(t *testing.T) {
 	e := newEnv(t, defaultCaps())
-	code := e.issue("tok-owner")
+	code := e.issue("link-owner")
 	var seen []string
 	for _, tok := range []string{"link-stale", "link-other", "tok-owner", "link-forged"} {
 		pv, up := e.previewAndUploadWith(code, "Bearer "+tok)

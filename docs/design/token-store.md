@@ -553,16 +553,22 @@ token (question Q1).
    taken from the server-side consent record, never from the request or
    the later upload body. A code cannot exist without consent. At most one live code per `pid`: a new
    code invalidates the previous one. Audit event `link_code_issued`.
-3. The local helper (PR #4 pattern) reads the code from **stdin** (never
-   argv or env), and calls `POST /link/preview` with the code and a fresh
-   MCTL token (below). The answer is the *masked* MCTL identity the code
+   `POST /link/code` takes the same fresh link-audience token as preview and
+   upload (below), so a code is minted only for a principal that has just
+   logged in. An MCP-audience token is refused there.
+3. The local helper (PR #4 pattern) logs in once, requests its own code with
+   that token, and keeps it in memory (never stdin, argv or env, and never
+   printed). It then calls `POST /link/preview` with the code and the same
+   fresh MCTL token (below). The answer is the *masked* MCTL identity the code
    belongs to, as mctl-api builds it (a provider prefix, the first character
    and `***`, for example `github:a***`). The preview first checks, live,
    that the token's principal still holds the consent. The helper asks "Link your Glovo account to this MCTL
    account?" before it captures anything. This defends against the
    phishing case in which an attacker sends the victim *the attacker's*
    code, so that the victim's Glovo account ends up linked to the
-   attacker's `pid` (threat T10).
+   attacker's `pid` (threat T10). Because the helper mints its own code,
+   it no longer accepts a code from anyone else; the confirmation stays as
+   the check that the browser login was the account the user meant.
 4. The helper captures the session locally and calls `POST /link/upload`
    over TLS: `{"schema":"glovo-link-upload/v1","code":...,"session":{...}}`,
    with the same fresh MCTL token.
@@ -602,8 +608,8 @@ token (question Q1).
 6. The response says "linked" and nothing else. No session data, no Glovo
    account details.
 
-**Fresh MCTL login.** `/link/preview` and `/link/upload` do not accept the
-ordinary MCP token. They accept a token minted for the dedicated audience
+**Fresh MCTL login.** `/link/code`, `/link/preview`, `/link/upload` and
+`/link/unlink` do not accept the ordinary MCP token. They accept a token minted for the dedicated audience
 `GLOVO_LINK_RESOURCE` (for example `https://glovo.mctl.ai/link`), which
 mctl-api issues only after a login with `prompt=login`, and which carries
 the ZITADEL `auth_time`. mctl-glovo verifies it with a second
@@ -611,12 +617,16 @@ the ZITADEL `auth_time`. mctl-glovo verifies it with a second
 a whole-second `auth_time` no later than now plus 30 s and no older than
 `GLOVO_LINK_MAX_AUTH_AGE` (default 5 minutes, at most 15), and the `pid`
 claim. A GitHub-derived token, a refresh-derived token or an ordinary
-connector token carries no `auth_time` and is refused; so is a link token on
-`/link/code` and on the MCP data plane. `auth_time` proves ZITADEL saw a
+connector token carries no `auth_time` and is refused on all four routes; so
+is a link token on the MCP data plane. (Until the one-login change, `/link/code`
+took the MCP token and refused the link token; that is reversed, and it is
+stricter: a code now needs a fresh login.) The grant claim of the MCP token is
+not checked at code issuance any more; the allowlist and the live consent
+admission apply, as they already did on preview and upload. `auth_time` proves ZITADEL saw a
 fresh authentication step, not that a person typed a credential at an
 external IdP; it is paired with the code bound to the `pid`, the one-time
 use, the live consent and the human confirmation of the masked label. With
-`GLOVO_LINK_RESOURCE` unset the two routes answer 503 and nothing links.
+`GLOVO_LINK_RESOURCE` unset the four routes answer 503 and nothing links.
 The mctl-api side (the link audience, `prompt=login`, `auth_time` in the
 minted token) and the helper's loopback login are separate slices.
 

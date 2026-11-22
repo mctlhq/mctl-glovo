@@ -95,16 +95,24 @@ cached for at most 60 s (30 s by default), a "no" and a failed read are never
 cached, and a failed read refuses (503), never passes. Withdrawing the
 consent in mctl-api therefore takes effect here within a minute. The same
 gate re-checks the consent on `/link/upload`, after the code is redeemed and
-before the session is validated or stored; `/link/code` reads the consent
+before the session is validated or stored; `/link/code` (which takes the same
+fresh link-audience token as preview and upload, not an MCP token) reads the consent
 uncached. Any future MCP route that acts with a stored session must check
 the same gate on every call.
 
 Until mctl-api serves masked identities (C2-1c), no preview answers, even
 with the flag on.
 
-`cmd/glovo-link` is the local helper. It reads the code from stdin, shows
-the masked MCTL identity, asks y/N, and uploads `~/.glovo/session.json`
-(or `-session -` for stdin) over https.
+`cmd/glovo-link` is the local helper. It does the whole flow with one fresh
+MCTL login: it requests its own one-time code, shows the masked MCTL identity
+the code belongs to, asks y/N, and uploads `~/.glovo/session.json` (or
+`-session -` for stdin: the y/N answer line, then the session JSON) over
+https. There is no code to paste; the code stays in memory and is never
+printed. One link uses three attempts of the per-IP and global rate limits
+(code, preview, upload); the helper never retries a refused request. Its
+session file is checked before the login. The helper and the service must be
+released server first: a new helper against an old server is refused at the
+code step.
 
 ## Image and schema migration
 `Dockerfile` builds one image with three binaries: `mctl-glovo` (default
