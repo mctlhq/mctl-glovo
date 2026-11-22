@@ -58,6 +58,17 @@ type Store interface {
 	Running(ctx context.Context) error
 	// Rewrap rewraps every row to the latest key version (design 2.4).
 	Rewrap(ctx context.Context) (RewrapReport, error)
+	// ListActive returns every link in state active, without decrypting
+	// anything. A listing that failed on any page is an error, never a
+	// shorter list. It is the keepalive's work list (design 4.5).
+	ListActive(ctx context.Context) ([]ActiveLink, error)
+}
+
+// ActiveLink names one active link: the pid to act for, and the link id that
+// is safe to log (the pid is not).
+type ActiveLink struct {
+	PID    PID
+	LinkID string
 }
 
 // Status is a link's state, read without a decrypt.
@@ -104,6 +115,13 @@ type Config struct {
 	// ClientOptions apply to every client a Lease builds (proxy, base URL).
 	ClientOptions []glovoapi.Option
 
+	// KeepaliveDecryptsPerHour bounds the decrypts the hosted keepalive may
+	// make (design 4.5). They are counted in this window and in neither the
+	// per-pid nor the global decrypt cap of Caps, so a keepalive can neither
+	// suspend a pid nor trip the kill switch. Breaching it defers the
+	// keepalive. Zero: DefaultKeepaliveDecryptsPerHour.
+	KeepaliveDecryptsPerHour int
+
 	LeaseTTL        time.Duration // zero: 30 s
 	RefreshDeadline time.Duration // zero: 15 s; must be below LeaseTTL
 	BusyWait        time.Duration // zero: 5 s
@@ -115,6 +133,7 @@ type store struct {
 	kill         *KillSwitch
 	caps         Caps
 	lim          *limiter
+	kaDecrypt    *window // keepalive decrypts, outside the caps of lim
 	log          *slog.Logger
 	validateLink func(context.Context, glovoapi.Session) error
 	maskIdentity func(context.Context, string) (string, error)
@@ -153,6 +172,7 @@ func New(cfg Config) (Store, error) {
 		kill:            cfg.Kill,
 		caps:            caps,
 		lim:             newLimiter(caps),
+		kaDecrypt:       newWindow(orInt(cfg.KeepaliveDecryptsPerHour, DefaultKeepaliveDecryptsPerHour), time.Hour),
 		log:             cfg.Logger,
 		validateLink:    cfg.ValidateLink,
 		maskIdentity:    cfg.MaskIdentity,
@@ -172,6 +192,13 @@ func New(cfg Config) (Store, error) {
 		s.log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return s, nil
+}
+
+func orInt(v, def int) int {
+	if v <= 0 {
+		return def
+	}
+	return v
 }
 
 func orDur(d, def time.Duration) time.Duration {
@@ -261,21 +288,34 @@ func (s *store) decryptRow(ctx context.Context, pid PID, row LinkRow) (glovoapi.
 		return nil, ErrKilled
 	}
 	now := s.now()
-	breach := allowAll(now, capHit{s.lim.globalDecrypt, ""}, capHit{s.lim.pidDecrypt, pid.id})
-	if breach == 0 {
-		// The exfiltration pattern of threat row R: stop everything.
-		_ = s.kill.Trip(ctx, "tokenstore:global_decrypt_cap")
-		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "global_decrypt_cap"})
-		_ = s.audit(ctx, AuditEvent{Event: "kill_on", Outcome: outcomeOK, Reason: "global_decrypt_cap"})
-		return nil, ErrKilled
-	}
-	if breach == 1 {
-		sctx, cancel := detached(ctx)
-		_ = s.db.SetState(sctx, pid.id, row.LinkID, StateSuspended)
-		cancel()
-		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "pid_decrypt_cap"})
-		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "suspend", Outcome: outcomeOK, Reason: "pid_decrypt_cap"})
-		return nil, ErrSuspended
+	reason := "issued"
+	if isKeepalive(ctx) {
+		// The keepalive's decrypts are counted in their own window and in
+		// neither decrypt cap: a bounded background job must not be able to
+		// suspend a pid or trip the global kill switch (design 4.5). When its
+		// own budget is spent it is deferred, never escalated.
+		if allowAll(now, capHit{s.kaDecrypt, ""}) >= 0 {
+			_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "keepalive_decrypt_cap"})
+			return nil, ErrRateLimited
+		}
+		reason = "keepalive"
+	} else {
+		breach := allowAll(now, capHit{s.lim.globalDecrypt, ""}, capHit{s.lim.pidDecrypt, pid.id})
+		if breach == 0 {
+			// The exfiltration pattern of threat row R: stop everything.
+			_ = s.kill.Trip(ctx, "tokenstore:global_decrypt_cap")
+			_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "global_decrypt_cap"})
+			_ = s.audit(ctx, AuditEvent{Event: "kill_on", Outcome: outcomeOK, Reason: "global_decrypt_cap"})
+			return nil, ErrKilled
+		}
+		if breach == 1 {
+			sctx, cancel := detached(ctx)
+			_ = s.db.SetState(sctx, pid.id, row.LinkID, StateSuspended)
+			cancel()
+			_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "cap_exceeded", Outcome: outcomeRefused, Reason: "pid_decrypt_cap"})
+			_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "suspend", Outcome: outcomeOK, Reason: "pid_decrypt_cap"})
+			return nil, ErrSuspended
+		}
 	}
 	if kv, err := keyVersionOf(row.Ciphertext); err != nil || kv != row.KeyVersion {
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "integrity_error", Outcome: outcomeRefused, Reason: "key_version_mismatch"})
@@ -283,7 +323,7 @@ func (s *store) decryptRow(ctx context.Context, pid PID, row LinkRow) (glovoapi.
 	}
 	// The audit row comes first: a decrypt that could not be recorded
 	// does not happen.
-	if err := s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "decrypt", Outcome: outcomeOK, Reason: "issued"}); err != nil {
+	if err := s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "decrypt", Outcome: outcomeOK, Reason: reason}); err != nil {
 		return nil, ErrUnavailable
 	}
 	pt, err := s.transit.Decrypt(ctx, keyContext(pid, row.LinkID), row.Ciphertext)
@@ -872,6 +912,37 @@ func (s *store) Rewrap(ctx context.Context) (RewrapReport, error) {
 				rep.Skipped++
 			default:
 				return RewrapReport{}, ErrUnavailable
+			}
+		}
+	}
+}
+
+// --- active links (the keepalive's work list) --------------------------
+
+// ListActive implements Store. It does not decrypt and does not need Vault.
+// A failed page is ErrUnavailable for the whole listing: a keepalive that
+// read half the table must not conclude the rest is gone.
+func (s *store) ListActive(ctx context.Context) ([]ActiveLink, error) {
+	if err := s.kill.Check(ctx); err != nil {
+		return nil, ErrKilled
+	}
+	var out []ActiveLink
+	after := ""
+	for {
+		rows, err := s.db.ListLinks(ctx, after, 50)
+		if err != nil {
+			return nil, ErrUnavailable
+		}
+		if len(rows) == 0 {
+			return out, nil
+		}
+		for i := range rows {
+			after = rows[i].PID
+			if rows[i].State != StateActive {
+				continue
+			}
+			if pid := pidFromString(rows[i].PID); pid.valid() {
+				out = append(out, ActiveLink{PID: pid, LinkID: rows[i].LinkID})
 			}
 		}
 	}

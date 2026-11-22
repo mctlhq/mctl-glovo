@@ -59,6 +59,17 @@ Hosted C2 does not change a Glovo basket. There is no switch for it:
 No checkout, payment or order tool exists, and the client's mutation
 allowlist has no such endpoint.
 
+`GLOVO_C2_KEEPALIVE_INTERVAL` turns on the hosted session keepalive. Unset or
+`0` (the default) runs none. Otherwise it is a Go duration from `1h` to `24h`
+(for example `24h`); anything else stops the boot. Once per interval and
+active link the service makes one authenticated basket read through the same
+client, refresh lock and audit path as a tool call, so a linked account nobody
+calls does not silently lose its refresh chain. It stops under the kill
+switch, its decrypts are budgeted apart from the decrypt caps, and a refused
+chain is logged as `event=keepalive outcome=needs_relink`. It assumes one
+replica for the read schedule (`docs/design/token-store.md` 4.5). Enabling it
+in production is a gitops change that needs the owner's go-ahead.
+
 `GLOVO_C2_BASKET_WRITES` is only there to be refused: unset or `false` is
 the one working value, and `true` (like any other spelling, `TRUE`, ` true`,
 `1`, `yes`) stops the process at startup. Until an approval gate exists

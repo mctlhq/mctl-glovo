@@ -19,6 +19,12 @@ type Caps struct {
 	RefreshFailuresInARow   int // reaching it sets needs_relink
 }
 
+// DefaultKeepaliveDecryptsPerHour is the keepalive's own decrypt budget (see
+// Config.KeepaliveDecryptsPerHour). Each pid costs at most two decrypts per
+// keepalive (one to build its client, one inside the refresh), the interval
+// is at least an hour, so 80 serves 20 pids with retries to spare.
+const DefaultKeepaliveDecryptsPerHour = 80
+
 // DefaultCaps are the proposals of section 6 for owner-only operation.
 func DefaultCaps() Caps {
 	return Caps{
