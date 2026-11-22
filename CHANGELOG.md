@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0](https://github.com/mctlhq/mctl-glovo/compare/0.3.2...0.4.0) (2026-11-22)
+
+
+### Features
+
+* **glovo-link:** request the link code itself, one login ([3e95ad1](https://github.com/mctlhq/mctl-glovo/commit/3e95ad1a81e6068d1f1e95526e640e273b804e93))
+* **glovo-link:** request the link code itself, one login ([4efebd3](https://github.com/mctlhq/mctl-glovo/commit/4efebd3cba54b0904c3a6ba3fde223b6e15c8475))
+* **landing-worker:** serve the glovo-link client metadata document ([15d0bd8](https://github.com/mctlhq/mctl-glovo/commit/15d0bd8ad3d04e08b344ca90179564cc2b847fb1))
+* **landing-worker:** serve the glovo-link client metadata document ([f385f5e](https://github.com/mctlhq/mctl-glovo/commit/f385f5e6691c97873076b974247d363163c66f47))
+
 ## [0.3.2](https://github.com/mctlhq/mctl-glovo/compare/0.3.1...0.3.2) (2026-11-19)
 
 
