@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/mctlhq/mctl-glovo/compare/0.4.0...0.5.0) (2026-11-22)
+
+
+### Features
+
+* **c2:** hosted session keepalive, dark by default ([5146e88](https://github.com/mctlhq/mctl-glovo/commit/5146e880555e8673ef5ba8f274a34b003505b927))
+* **c2:** hosted session keepalive, dark by default ([b1ebbb2](https://github.com/mctlhq/mctl-glovo/commit/b1ebbb2134e962a6763afadaea746384042795b1))
+* **link:** style the /link pages under a hashed CSP ([8ed54ba](https://github.com/mctlhq/mctl-glovo/commit/8ed54ba1afeb330b570fec53226b9af4fdbdd2bd))
+* **link:** style the /link pages under a hashed CSP ([0466736](https://github.com/mctlhq/mctl-glovo/commit/0466736c26d30e88aa5fe5e2a93195008a53c4b4))
+
+
+### Bug Fixes
+
+* **c2:** keepalive needs_relink cause, start order, shutdown test ([ed6669a](https://github.com/mctlhq/mctl-glovo/commit/ed6669adc433bde43a56a1f2a0ed8d3d3f4bb895))
+
 ## [0.4.0](https://github.com/mctlhq/mctl-glovo/compare/0.3.2...0.4.0) (2026-11-22)
 
 
