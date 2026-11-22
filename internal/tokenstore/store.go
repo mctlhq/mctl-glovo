@@ -567,6 +567,11 @@ func (s *store) updateWith(ctx context.Context, pid PID, linkID string, actor st
 		release(add, state)
 		_ = s.audit(ctx, AuditEvent{PID: pid.id, LinkID: row.LinkID, Event: "refresh", Outcome: outcomeError, Reason: reason, Actor: actor})
 		if state == StateNeedsRelink {
+			// The sentinel stays exact (errors are fixed-text); a keepalive
+			// context also learns the cause the audit row just recorded.
+			if ki := keepaliveInfo(ctx); ki != nil {
+				ki.relinkReason = reason
+			}
 			return nil, 0, nil, ErrNeedsRelink
 		}
 		return nil, 0, nil, publicRefreshErr(ferr, add)

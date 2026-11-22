@@ -409,9 +409,17 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		return nil, noop, err
 	}
 	app := &c2App{link: h, mcp: routes, ready: []health.Checker{verifier.Ready}}
+	if c.control.enabled() {
+		app.control, err = buildControl(ctx, c.control, kill, log, store)
+		if err != nil {
+			closeDB()
+			return nil, noop, err
+		}
+	}
 	if c.keepalive > 0 {
-		// Started last: the store, Vault client, sessions and kill switch
-		// all exist, and the keepalive waits a tick before its first round.
+		// Started after every step that can fail: a failed boot must not leave
+		// this goroutine running on a closed database. It waits a tick before
+		// its first round.
 		ka, err := tokenstore.NewKeepalive(tokenstore.KeepaliveConfig{
 			Store: store, Sessions: sessions, Interval: c.keepalive, Logger: log.With("component", "keepalive"),
 		})
@@ -422,13 +430,6 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 		go ka.Run(ctx)
 		app.keepaliveDone = ka.Done()
 		log.Info("hosted session keepalive on", "interval", c.keepalive.String())
-	}
-	if c.control.enabled() {
-		app.control, err = buildControl(ctx, c.control, kill, log, store)
-		if err != nil {
-			closeDB()
-			return nil, noop, err
-		}
 	}
 	return app, closeDB, nil
 }

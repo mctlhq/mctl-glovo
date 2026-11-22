@@ -152,14 +152,21 @@ func (k *Keepalive) Run(ctx context.Context) {
 // other package can ask for the separate decrypt accounting.
 type keepaliveKey struct{}
 
-func withKeepalive(ctx context.Context) context.Context {
-	return context.WithValue(ctx, keepaliveKey{}, true)
+// kaInfo is the keepalive's per-read scratch: update records there the cause
+// of a needs_relink it just wrote, since the error itself is a fixed sentinel.
+// One read, one goroutine of the keepalive: no locking needed.
+type kaInfo struct{ relinkReason string }
+
+func withKeepalive(ctx context.Context, info *kaInfo) context.Context {
+	return context.WithValue(ctx, keepaliveKey{}, info)
 }
 
-func isKeepalive(ctx context.Context) bool {
-	v, _ := ctx.Value(keepaliveKey{}).(bool)
+func keepaliveInfo(ctx context.Context) *kaInfo {
+	v, _ := ctx.Value(keepaliveKey{}).(*kaInfo)
 	return v
 }
+
+func isKeepalive(ctx context.Context) bool { return keepaliveInfo(ctx) != nil }
 
 func (k *Keepalive) event(ctx context.Context, level slog.Level, link, outcome, reason string, extra ...slog.Attr) {
 	attrs := []slog.Attr{slog.String("event", "keepalive"), slog.String("outcome", outcome)}
@@ -243,7 +250,8 @@ func (k *Keepalive) round(ctx context.Context) {
 
 // one reads for one link and schedules its next read.
 func (k *Keepalive) one(ctx context.Context, l ActiveLink, st *kaState) {
-	cctx, cancel := context.WithTimeout(withKeepalive(WithRequestID(ctx, newID("kal_"))), k.callTimeout)
+	info := &kaInfo{}
+	cctx, cancel := context.WithTimeout(withKeepalive(WithRequestID(ctx, newID("kal_")), info), k.callTimeout)
 	defer cancel()
 
 	client, err := k.sessions.Client(cctx, l.PID)
@@ -266,10 +274,17 @@ func (k *Keepalive) one(ctx context.Context, l ActiveLink, st *kaState) {
 		// Not a failure of the session; the next round re-checks the switch.
 		k.markKilled(ctx, true)
 	case errors.Is(err, ErrNeedsRelink):
-		// Glovo refused the refresh chain (the store already set the state
-		// and audited refresh/glovo_rejected). The pid leaves the schedule;
-		// the user must relink. This line is the one an alert matches.
-		k.event(ctx, slog.LevelWarn, l.LinkID, "needs_relink", "chain_refused", slog.String("alert", "GlovoSessionNeedsRelink"))
+		// The store set the state and audited refresh/<cause>. The cause is
+		// kept in the line: glovo_rejected is Glovo refusing the chain
+		// itself; refresh_failures is the store's count of repeated failed
+		// refreshes (transient refusals included) reaching its limit, which
+		// can be the keepalive's own retries. An alert on a dead chain
+		// matches reason=glovo_rejected. The pid leaves the schedule.
+		reason := info.relinkReason
+		if reason == "" {
+			reason = "state" // already needs_relink when the client was asked for
+		}
+		k.event(ctx, slog.LevelWarn, l.LinkID, "needs_relink", reason, slog.String("alert", "GlovoSessionNeedsRelink"))
 		delete(k.sched, l.PID.id)
 	case errors.Is(err, ErrSuspended):
 		k.event(ctx, slog.LevelInfo, l.LinkID, "suspended", "state")

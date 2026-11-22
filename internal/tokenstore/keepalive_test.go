@@ -350,7 +350,7 @@ func TestKeepaliveRefusedChainIsNeedsRelink(t *testing.T) {
 		t.Fatalf("state %s, want needs_relink", s)
 	}
 	logs := e.h.logs.String()
-	if !strings.Contains(logs, `"event":"keepalive"`) || !strings.Contains(logs, `"outcome":"needs_relink"`) || !strings.Contains(logs, "GlovoSessionNeedsRelink") {
+	if !strings.Contains(logs, `"event":"keepalive"`) || !strings.Contains(logs, `"outcome":"needs_relink"`) || !strings.Contains(logs, "GlovoSessionNeedsRelink") || !strings.Contains(logs, `"reason":"glovo_rejected"`) {
 		t.Fatalf("no distinct keepalive needs_relink line: %s", logs)
 	}
 	if e.auditCount("refresh", outcomeError, "glovo_rejected") != 1 {
@@ -364,6 +364,30 @@ func TestKeepaliveRefusedChainIsNeedsRelink(t *testing.T) {
 	e.k.round(ctx)
 	if e.h.glovo.refreshes.Load() != r {
 		t.Fatal("a pid in needs_relink was refreshed again")
+	}
+}
+
+// Repeated refresh failures that are not a rejection of the chain reach
+// needs_relink through the store's counter; the keepalive line says so, so
+// an alert on a dead chain (reason=glovo_rejected) is not fed by it.
+func TestKeepaliveRepeatedRefusalsAreDistinguishedFromARefusedChain(t *testing.T) {
+	e := newKAEnv(t, Caps{}, 4*time.Hour, nil)
+	e.h.link(pidA, expiredSession("A1"))
+	e.h.glovo.noAccess.Store(true) // 200 without an access token: counted, not a rejection
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		e.k.round(ctx)
+		e.clk.advance(time.Hour)
+	}
+	if s := e.state(pidA); s != StateNeedsRelink {
+		t.Fatalf("state %s, want needs_relink after 3 counted failures", s)
+	}
+	logs := e.h.logs.String()
+	if !strings.Contains(logs, `"outcome":"needs_relink","reason":"refresh_failures"`) {
+		t.Fatalf("the line does not carry the cause: %s", logs)
+	}
+	if strings.Contains(logs, `"reason":"glovo_rejected"`) {
+		t.Fatal("repeated refusals logged as a refused chain")
 	}
 }
 

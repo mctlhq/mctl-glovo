@@ -767,10 +767,13 @@ the R4 legal read):
   after 5 minutes, doubling, capped at min(interval/2, 30 minutes), +-20
   percent jitter.
 - **Outcomes** (one `slog` line per read, `event=keepalive`, with
-  `link_id`, never the `pid`): `ok`; `needs_relink` (Glovo refused the
-  refresh chain; the store already set the state and wrote
-  `refresh`/`glovo_rejected`; the line carries `alert=GlovoSessionNeedsRelink`
-  and the pid leaves the schedule); `transient_error` (busy lease, Vault or
+  `link_id`, never the `pid`): `ok`; `needs_relink` (the store set the
+  state and wrote `refresh` with the same cause; the line carries it as
+  `reason`, plus `alert=GlovoSessionNeedsRelink`, and the pid leaves the
+  schedule. `reason=glovo_rejected` is Glovo refusing the refresh chain, a
+  dead session; `reason=refresh_failures` is the store's counter of repeated
+  failed refreshes reaching its limit, which the keepalive's own retries can
+  reach in about 35 minutes, so it is not proof of a dead chain); `transient_error` (busy lease, Vault or
   database down, the keepalive's own budget, proxy, network, 429, 5xx:
   retried, never a dead session; the store's own counting of repeated
   refresh failures still applies); `auth_rejected` (the read itself was
