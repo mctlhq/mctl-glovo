@@ -37,6 +37,9 @@ type c2Config struct {
 	// (C2-1c). Both unset keeps the fail-closed UnavailableConsent.
 	consentAPI       string
 	consentTokenFile string
+	// requireAccess is GLOVO_C2_REQUIRE_ACCESS: an active consent admits
+	// only together with an approved access request (loadRequireAccess).
+	requireAccess bool
 	// auditKey keys the audit digest of the pid (GLOVO_C2_AUDIT_KEY, a
 	// per-deployment secret from Vault, at least minAuditKeyLen bytes).
 	auditKey []byte
@@ -131,6 +134,28 @@ func loadBasketWrites(getenv func(string) string) (bool, error) {
 	}
 }
 
+// loadRequireAccess reads GLOVO_C2_REQUIRE_ACCESS. Unset, "" and "false"
+// keep today's rule: an active consent admits, and the access field of
+// mctl-api's answer is not looked at. "true" adds the second condition: the
+// same answer must say access "approved" (mctl-api 4.176.0 and later).
+// Anything else (case or whitespace variants, "1", "yes") is a startup
+// error, as a typo must never read as "off" on a gate.
+//
+// Order of switching on: mctl-api's GLOVO_ACCESS_REQUIRED first (its
+// backfill approves the principals who already hold an active consent), this
+// flag second. The reverse refuses everyone, the owner included, until
+// mctl-api has approved them.
+func loadRequireAccess(getenv func(string) string) (bool, error) {
+	switch v := getenv("GLOVO_C2_REQUIRE_ACCESS"); v {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("GLOVO_C2_REQUIRE_ACCESS: %q is not true or false", v)
+	}
+}
+
 // basketWriteOptions is the client layer of the capability: hosted clients
 // refuse basket mutations unless built with glovoapi.WithBasketWrites, so
 // the default config yields none. newMCPRoutes refuses basket writes without
@@ -198,6 +223,14 @@ func loadC2(getenv func(string) string) (c2Config, error) {
 	c.consentAPI, c.consentTokenFile = getenv("GLOVO_CONSENT_API_URL"), getenv("GLOVO_CONSENT_TOKEN_FILE")
 	if (c.consentAPI == "") != (c.consentTokenFile == "") {
 		return c2Config{}, errors.New("GLOVO_CONSENT_API_URL and GLOVO_CONSENT_TOKEN_FILE are set together or not at all")
+	}
+	if c.requireAccess, err = loadRequireAccess(getenv); err != nil {
+		return c2Config{}, err
+	}
+	if c.requireAccess && c.consentAPI == "" {
+		// The access state comes with the consent answer. Without the
+		// route the flag could not be honoured, and must not pass silently.
+		return c2Config{}, errors.New("GLOVO_C2_REQUIRE_ACCESS=true needs GLOVO_CONSENT_API_URL and GLOVO_CONSENT_TOKEN_FILE")
 	}
 	if c.consentAPI != "" {
 		// Validate at boot: scheme, no userinfo/query, absolute token path.
@@ -305,6 +338,7 @@ func buildLink(ctx context.Context, c c2Config, log *slog.Logger) (*c2App, func(
 	if err != nil {
 		return nil, noop, err
 	}
+	log.Info("c2 access gate", "consent_route", admit, "require_access", c.requireAccess)
 	verifier, err := authn.New(verifierConfig(c, gate, admit))
 	if err != nil {
 		return nil, noop, err
@@ -451,17 +485,23 @@ func sweepSessions(ctx context.Context, s *tokenstore.Sessions) {
 
 // c2Access returns the consent source and whether it admits principals at
 // the token verifier. With mctl-api's consent route configured, consent is
-// the gate (the allowlist, if set, narrows it). Without it, the source is
+// the gate (the allowlist, if set, narrows it), and with requireAccess the
+// source reports a consent only together with an approved access request,
+// so the verifier gate, the per-call admitter and the link routes, which all
+// read this one source, honour the flag alike. Without it, the source is
 // the fail-closed UnavailableConsent, the allowlist alone admits, and an
 // empty allowlist is refused here as well as in loadC2.
 func c2Access(c c2Config) (linkflow.ConsentSource, bool, error) {
 	if c.consentAPI == "" {
+		if c.requireAccess {
+			return nil, false, errors.New("c2: GLOVO_C2_REQUIRE_ACCESS is set without GLOVO_CONSENT_API_URL")
+		}
 		if len(c.allowed) == 0 {
 			return nil, false, errors.New("c2: neither GLOVO_CONSENT_API_URL nor GLOVO_C2_ALLOWED_PRINCIPALS is set")
 		}
 		return linkflow.UnavailableConsent{}, false, nil
 	}
-	api, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: c.consentAPI, TokenFile: c.consentTokenFile})
+	api, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{BaseURL: c.consentAPI, TokenFile: c.consentTokenFile, RequireAccess: c.requireAccess})
 	if err != nil {
 		return nil, false, err
 	}

@@ -32,7 +32,10 @@ var errAdmitRefused = errors.New("admit: refused")
 // src is the same source the link flow uses. The pid it receives comes from
 // the verified principal (auditMiddleware), never from a request argument.
 //
-// Only an explicit active consent to linkflow.ConsentVersion admits. A "no",
+// Only an explicit active consent to linkflow.ConsentVersion admits, and with
+// GLOVO_C2_REQUIRE_ACCESS only together with access "approved" in the same
+// answer (src carries the flag: c2Access). A "no", an access state that is
+// not approved, absent or unknown,
 // an unreadable token file, a transport error, a non-200, a malformed body,
 // an answer for another principal and a timeout all refuse. Positive
 // answers are cached per pid for admitTTL; a refusal or a failed read is

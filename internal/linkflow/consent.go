@@ -30,7 +30,9 @@ var ConsentText = []string{
 // server-side: the consent version never comes from the request.
 type ConsentSource interface {
 	// RecordedConsent returns the consent version recorded for pid.
-	// ErrNoConsent is the documented absence (no record); any other error
+	// ErrNoConsent is the documented absence (no record), and
+	// ErrAccessNotApproved (which wraps it) a consent without an approved
+	// access request; any other error
 	// means the record could not be read. Both refuse the code.
 	RecordedConsent(ctx context.Context, pid tokenstore.PID) (string, error)
 }
@@ -39,6 +41,10 @@ var (
 	// ErrNoConsent means mctl-api has no consent record for the principal.
 	// It is consentgate.ErrNoConsent, so the gate reads it as a definite no.
 	ErrNoConsent = consentgate.ErrNoConsent
+	// ErrAccessNotApproved means the consent holds but the principal's
+	// access request is not approved (APIConsentConfig.RequireAccess). It
+	// wraps ErrNoConsent: a definite no, never cached.
+	ErrAccessNotApproved = consentgate.ErrAccessNotApproved
 	// ErrConsentUnavailable means the consent record could not be read.
 	ErrConsentUnavailable = errors.New("linkflow: consent record unavailable")
 )

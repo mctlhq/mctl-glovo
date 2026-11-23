@@ -393,6 +393,10 @@ func (h *Handler) handleCode(w http.ResponseWriter, r *http.Request) {
 	}
 	version, err := h.cfg.Consent.RecordedConsent(r.Context(), pid)
 	switch {
+	case errors.Is(err, ErrAccessNotApproved):
+		// Consent is recorded; recording it again would not help.
+		h.refuse(w, route, refForbidden)
+		return
 	case errors.Is(err, ErrNoConsent):
 		h.refuse(w, route, refNoConsent)
 		return
@@ -447,6 +451,9 @@ func (h *Handler) handlePreview(w http.ResponseWriter, r *http.Request) {
 	// The identity of a principal is shown only while its consent holds now.
 	version, err := h.cfg.Consent.RecordedConsent(r.Context(), pid)
 	switch {
+	case errors.Is(err, ErrAccessNotApproved):
+		h.refuse(w, route, refForbidden)
+		return
 	case errors.Is(err, ErrNoConsent), err == nil && version != ConsentVersion:
 		h.refuse(w, route, refNoConsent)
 		return

@@ -1,5 +1,7 @@
 // Package consentgate answers, per request, whether a principal holds an
-// active glovo:c2 consent, read from mctl-api's consent record.
+// active glovo:c2 consent, read from mctl-api's consent record. When the
+// source also requires approved access (GLOVO_C2_REQUIRE_ACCESS), "holds a
+// consent" below means consent and approval together.
 //
 // It is the C2 access gate: the token verifier admits a principal only
 // through it (authn.Admitter), and /link/upload re-checks it before a
@@ -33,12 +35,21 @@ var (
 	// ErrNoConsent is the documented absence: mctl-api has no active
 	// consent record for the principal. Sources return it (or wrap it).
 	ErrNoConsent = errors.New("consentgate: no consent recorded")
+	// ErrAccessNotApproved is the second definite no: the consent holds,
+	// but mctl-api reports the principal's access request as anything other
+	// than approved (GLOVO_C2_REQUIRE_ACCESS). It wraps ErrNoConsent, so
+	// every caller that only knows ErrNoConsent still refuses and never
+	// caches; callers that tell the two apart name a different cause.
+	ErrAccessNotApproved = fmt.Errorf("%w: access not approved", ErrNoConsent)
 	// ErrUnavailable means the consent could not be read. It refuses.
 	ErrUnavailable = errors.New("consentgate: consent unavailable")
 )
 
 // Source reads the consent version recorded for pid (linkflow.APIConsent).
-// ErrNoConsent is the only "no"; any other error is a failed read.
+// ErrNoConsent (ErrAccessNotApproved wraps it) is the only "no"; any other
+// error is a failed read. A source that also requires approved access
+// returns a version only when both hold, so the gate never caches a consent
+// without the approval.
 type Source interface {
 	RecordedConsent(ctx context.Context, pid tokenstore.PID) (string, error)
 }
@@ -116,6 +127,9 @@ func (g *Gate) check(ctx context.Context, pid tokenstore.PID, useCache bool) err
 	}
 	v, err := g.src.RecordedConsent(ctx, pid)
 	switch {
+	case errors.Is(err, ErrAccessNotApproved):
+		g.forget(id)
+		return ErrAccessNotApproved
 	case errors.Is(err, ErrNoConsent):
 		g.forget(id)
 		return ErrNoConsent
@@ -135,6 +149,8 @@ func (g *Gate) check(ctx context.Context, pid tokenstore.PID, useCache bool) err
 func (g *Gate) Admit(ctx context.Context, principalID string) error {
 	pid := tokenstore.PIDFrom(&authn.Principal{ID: principalID})
 	switch err := g.Check(ctx, pid); {
+	case errors.Is(err, ErrAccessNotApproved):
+		return fmt.Errorf("%w: %w", authn.ErrAccessNotApproved, err)
 	case errors.Is(err, ErrNoConsent):
 		return fmt.Errorf("%w: %w", authn.ErrNotAdmitted, err)
 	case err != nil:

@@ -466,6 +466,12 @@ its Vault commands were not checked against a Vault.
 - Revoke the glovo:c2 grant or consent: a mctl-api action. The next call is
   refused within `admitTTL` (5 s) in consent mode; the verifier gate is at
   most 60 s (CURRENT). Which mechanism a given pilot uses is UNKNOWN.
+- Revoke the access approval: a mctl-api action that takes effect here only
+  with `GLOVO_C2_REQUIRE_ACCESS=true` (default off; whether it is on in a
+  deployment is UNKNOWN), within the same two bounds. With the flag off an
+  approval that is revoked while the consent stays active still admits. The
+  flag is switched on after mctl-api's `GLOVO_ACCESS_REQUIRED`, never before
+  it (README, "Who may use C2").
 - Unlink: `Store.Unlink` (`store.go:750`) works under kill without Vault
   or consent. Two callers exist in the source:
   - user: `POST /link/unlink` on the link routes, behind the same fresh MCTL

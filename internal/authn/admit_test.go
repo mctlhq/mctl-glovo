@@ -88,6 +88,13 @@ func TestAdmitter(t *testing.T) {
 			t.Fatalf("(%q, %d)", reason, status)
 		}
 	})
+	t.Run("consent without approved access: 403 principal_not_allowed", func(t *testing.T) {
+		f := newGated(t, &fakeAdmitter{err: fmt.Errorf("%w: gate", ErrAccessNotApproved)})
+		_, err := f.v.Verify(ctx, f.token(personal))
+		if reason, status := reasonOf(t, err); reason != ReasonNotAllowed || status != 403 {
+			t.Fatalf("(%q, %d)", reason, status)
+		}
+	})
 	t.Run("admitter error: 503, never a pass", func(t *testing.T) {
 		f := newGated(t, &fakeAdmitter{yes: map[string]bool{testPID: true}, err: errors.New("mctl-api down")})
 		_, err := f.v.Verify(ctx, f.token(personal))
