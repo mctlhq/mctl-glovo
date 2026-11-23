@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/mctlhq/mctl-glovo/compare/0.6.0...0.6.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **link:** keep the edge from rewriting the helper install command ([ba7aa78](https://github.com/mctlhq/mctl-glovo/commit/ba7aa786cf87174814eba6b6202941afd9cadbe3))
+* **link:** keep the edge from rewriting the helper install command ([c7d917b](https://github.com/mctlhq/mctl-glovo/commit/c7d917b4cfaaff091ca9f04e959ab36fe418135a))
+
 ## [0.6.0](https://github.com/mctlhq/mctl-glovo/compare/0.5.0...0.6.0) (2026-11-23)
 
 
