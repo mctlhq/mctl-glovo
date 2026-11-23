@@ -222,6 +222,25 @@ this. The cheapest correct place is the ZITADEL callback
   "request access" action that calls the human-only routes with the person's
   own sign-in, the install steps for the helper with the OAuth client id, and
   the requirement that the Glovo account must allow password or code sign-in.
+- What `/link` must say (stage A), because the helper does not log in to
+  Glovo, it uploads a session file that already exists:
+  1. Requirements: a Glovo account that signs in with a password or an email
+     code (not only Google or Facebook), Node.js 18+ and Google Chrome, a Go
+     toolchain.
+  2. Record consent (and, later, request access).
+  3. Create the session file with the third-party `glovo-skill`
+     (github.com/denya/glovo-skill, MIT): clone, `npm ci`, `npm run build`,
+     then `node scripts/login.mjs`, and choose the password or email-code
+     sign-in in the window (Google sign-in is refused in that window).
+  4. Install the helper: `go install
+     github.com/mctlhq/mctl-glovo/cmd/glovo-link@<release>` (tags carry no `v`
+     prefix, so `@latest` does not resolve to a release; the page names the
+     current release).
+  5. Within about twenty minutes of step 3, run `glovo-link -client-id
+     <origin>/glovo-link/client.json`, sign in to MCTL and confirm. The
+     access token lives about twenty minutes and the service never refreshes
+     an uploaded session, so an older file is refused.
+  6. Ask Claude; unlink with `glovo-link -unlink -client-id ...`.
 - Replace the bare "access refused" with a cause; give the kill-switch and
   suspended texts a next step.
 - Unlink: a button on `/link` and a mention in the error texts; let a person
@@ -272,7 +291,7 @@ a receipt; add a Glovo type with two templates.
   helper link); what it can do (read only: basket, order history, nearby
   shops); example commands to say to Claude; how to unlink.
 - Rejected: a short, polite no.
-- The template texts and the sender are decision D6.
+- Sender and texts: D6 (decided), Appendix A.
 
 ### 5.6 Linking: helper first, extension second
 
@@ -337,9 +356,138 @@ Stage B must land before C, and C before any real user is asked to sign up.
 - D4. DECIDED 2026-11-23: the helper for the first wave, the extension second.
 - D5. DECIDED 2026-11-23: Google only on the MCP resource and the link
   resource. The pilot principal is handled from shadow-mode data (section 5.1).
-- D6. OPEN: email sender, wording and example commands.
+- D6. DECIDED 2026-11-23: sender `MCTL <noreply@mctl.ai>` (the existing
+  sender; no reply-to until a monitored support mailbox exists); the texts are
+  in Appendix A. Nothing is sent before stage A makes `/link` self-explanatory.
 - D7. DECIDED 2026-11-23: a request lapses after seven days and the person is
   emailed.
+
+## Appendix A. Email drafts (D6)
+
+Sent from `MCTL <noreply@mctl.ai>` through the existing Worker contract
+(section 5.5). Each mail carries the English text first and the Russian text
+below it. The data paragraph repeats the consent text `c2-link-v2` (the
+Vault-held key, deletion on unlink, the 14-day backup ageing, no revocation at
+Glovo); if that text changes, this paragraph changes with it. The 14 days come
+from the consent text; the actual backup retention is UNVERIFIED.
+
+### A.1 Approved
+
+Subject: `Your Glovo access is approved / Доступ к Glovo одобрен`
+
+```
+Hi,
+
+Your request for access to the MCTL Glovo connector was approved.
+
+Next steps
+1. In Claude, make sure the connector https://glovo.mctl.ai/mcp is added
+   and that you signed in with Google.
+2. Link your Glovo account (one time): open https://glovo.mctl.ai/link,
+   read and accept the terms, then follow the steps there to install
+   glovo-link. Your Glovo account must be able to sign in with a password
+   or an email code. Accounts that only use Google or Facebook sign-in
+   cannot be linked yet.
+3. Ask Claude.
+
+Things you can say (read-only)
+- "Show my Glovo basket."
+- "What did I order last month?"
+- "What do I order most often?"
+- "Plan a repeat of my last order."
+- "Show the menu of <store>." / "Find <item> in <store>."
+- "Which stores are available at my saved address?"
+
+What it does not do: it does not change your basket, check out or pay.
+
+Your data: your Glovo session is stored encrypted with a key held in Vault,
+and only the service can decrypt it, for requests made with your MCTL
+account. Unlinking deletes it at once (encrypted database backups age out
+within 14 days). We cannot revoke the session at Glovo, so after unlinking,
+sign out of other sessions in Glovo. You can unlink at any time
+(glovo-link -unlink), and we can revoke access.
+
+If Claude says your Glovo account is not linked or has expired, link it
+again at https://glovo.mctl.ai/link.
+
+MCTL
+```
+
+```
+Здравствуйте,
+
+Ваш запрос на доступ к коннектору MCTL Glovo одобрен.
+
+Что дальше
+1. В Claude убедитесь, что коннектор https://glovo.mctl.ai/mcp добавлен и
+   вы вошли через Google.
+2. Привяжите аккаунт Glovo (один раз): откройте https://glovo.mctl.ai/link,
+   прочитайте и примите условия, затем следуйте шагам там и установите
+   glovo-link. В Glovo должен работать вход по паролю или коду из письма.
+   Аккаунты, которые входят только через Google или Facebook, пока
+   привязать нельзя.
+3. Спрашивайте Claude.
+
+Что можно сказать (только чтение)
+- «Покажи мою корзину в Glovo.»
+- «Что я заказывал в прошлом месяце?»
+- «Что я заказываю чаще всего?»
+- «Составь план повторного заказа.»
+- «Покажи меню <магазина>.» / «Найди <товар> в <магазине>.»
+- «Какие магазины доступны по моему сохранённому адресу?»
+
+Чего сервис не делает: не меняет корзину, не оформляет и не оплачивает заказ.
+
+Ваши данные: сессия Glovo хранится в зашифрованном виде, ключ находится в
+Vault, расшифровать её может только сервис и только для запросов от вашего
+аккаунта MCTL. Отвязка удаляет её сразу (зашифрованные резервные копии базы
+устаревают в течение 14 дней). Мы не можем отозвать сессию на стороне Glovo,
+поэтому после отвязки выйдите из остальных сессий в Glovo. Отвязать аккаунт
+можно в любой момент (glovo-link -unlink), доступ мы тоже можем отозвать.
+
+Если Claude пишет, что аккаунт Glovo не привязан или истёк, привяжите его
+заново на https://glovo.mctl.ai/link.
+
+MCTL
+```
+
+### A.2 Rejected
+
+Subject: `About your Glovo access request / О вашем запросе на доступ к Glovo`
+
+```
+Thanks for asking. We can't give access to the MCTL Glovo connector right
+now: it is a small private pilot. You are welcome to ask again later at
+https://glovo.mctl.ai/link.
+
+MCTL
+```
+
+```
+Спасибо за запрос. Сейчас мы не можем открыть доступ к коннектору MCTL Glovo:
+это небольшой закрытый пилот. Вы можете подать запрос снова позже на
+https://glovo.mctl.ai/link.
+
+MCTL
+```
+
+### A.3 Lapsed after seven days (D7)
+
+Subject: `Your Glovo access request expired / Запрос на доступ к Glovo истёк`
+
+```
+Your request was not reviewed within 7 days and has expired. If you still
+want access, ask again at https://glovo.mctl.ai/link.
+
+MCTL
+```
+
+```
+Ваш запрос не рассмотрели за 7 дней, и он истёк. Если доступ всё ещё нужен,
+подайте запрос снова на https://glovo.mctl.ai/link.
+
+MCTL
+```
 
 ## 9. Unverified
 
