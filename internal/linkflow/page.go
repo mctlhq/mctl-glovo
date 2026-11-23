@@ -40,7 +40,7 @@ var pageTmpl = template.Must(template.New("link").Parse(`<!doctype html>
 <ol>
 <li>Record your consent to this text in MCTL.</li>
 <li>Create the session file with glovo-skill ({{.SkillURL}}, a third-party tool, MIT licence). It needs Node.js 18 or newer and Google Chrome. Run <code>git clone {{.SkillURL}}.git</code>, then in that folder <code>npm ci</code>, <code>npm run build</code> and <code>node scripts/login.mjs</code>. In the window that opens, sign in to Glovo with your password or an email code, not with the Google button: Google refuses to sign in inside that window. The file is saved to <code>~/.glovo/session.json</code>.</li>
-<li>Install the helper (it needs Go): <code>go install github.com/mctlhq/mctl-glovo/cmd/glovo-link@{{.HelperVersion}}</code></li>
+<li>Install the helper (it needs Go): <code>go install github.com/mctlhq/mctl-glovo/cmd/glovo-link&#64;{{.HelperVersion}}</code></li>
 <li>Within about 20 minutes of step 2, run <code>glovo-link -client-id {{.ClientID}}</code> and sign in to MCTL once when it asks. A Glovo login is only valid for about 20 minutes and an older file is refused.</li>
 <li>The helper requests a one-time code for your account, shows which MCTL account it belongs to and asks you to confirm. There is nothing to paste.</li>
 </ol>
