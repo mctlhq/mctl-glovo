@@ -147,7 +147,11 @@ func TestPagesHaveNoScriptNoInlineStyleNoExternal(t *testing.T) {
 		if handler.MatchString(body) {
 			t.Errorf("%s: contains an inline event handler", name)
 		}
-		for _, bad := range []string{"<link", "<img", "<iframe", "http://", "https://", "@import", "url(", "@font-face"} {
+		// No reference that loads or leads anywhere. An address shown as plain
+		// text in <code> (the install steps name the helper, its client id and
+		// glovo-skill) is not a reference, so "http(s)://" alone is allowed;
+		// anything that could make the browser fetch or follow it is not.
+		for _, bad := range []string{"<link", "<img", "<iframe", "<a ", "<form", "<embed", "<object", "<video", "<audio", "<source", "<base", "href=", "src=", "action=", "@import", "url(", "@font-face"} {
 			if strings.Contains(low, bad) {
 				t.Errorf("%s: contains external reference %q", name, bad)
 			}

@@ -36,11 +36,15 @@ var pageTmpl = template.Must(template.New("link").Parse(`<!doctype html>
 <p>The helper shows the MCTL account the code belongs to. If it is not yours, answer no.</p>
 {{else}}
 <h2>How linking works</h2>
+<p>Linking has two parts: a Glovo session file made on your own computer, and the helper <code>glovo-link</code> that uploads it. Your Glovo account must be able to sign in with a password or an email code. Accounts that only use Google or Facebook sign-in cannot be linked yet.</p>
 <ol>
 <li>Record your consent to this text in MCTL.</li>
-<li>Run <code>glovo-link</code> on the machine that has your Glovo session and sign in to MCTL once when it asks.</li>
+<li>Create the session file with glovo-skill ({{.SkillURL}}, a third-party tool, MIT licence). It needs Node.js 18 or newer and Google Chrome. Run <code>git clone {{.SkillURL}}.git</code>, then in that folder <code>npm ci</code>, <code>npm run build</code> and <code>node scripts/login.mjs</code>. In the window that opens, sign in to Glovo with your password or an email code, not with the Google button: Google refuses to sign in inside that window. The file is saved to <code>~/.glovo/session.json</code>.</li>
+<li>Install the helper (it needs Go): <code>go install github.com/mctlhq/mctl-glovo/cmd/glovo-link@{{.HelperVersion}}</code></li>
+<li>Within about 20 minutes of step 2, run <code>glovo-link -client-id {{.ClientID}}</code> and sign in to MCTL once when it asks. A Glovo login is only valid for about 20 minutes and an older file is refused.</li>
 <li>The helper requests a one-time code for your account, shows which MCTL account it belongs to and asks you to confirm. There is nothing to paste.</li>
 </ol>
+<p>To remove your stored session later, run <code>glovo-link -unlink -client-id {{.ClientID}}</code>.</p>
 {{end}}
 </section>
 </main>
@@ -49,14 +53,18 @@ var pageTmpl = template.Must(template.New("link").Parse(`<!doctype html>
 `))
 
 type pageData struct {
-	Version string
-	Text    []string
-	Code    string
-	Expires string
+	Version       string
+	Text          []string
+	Code          string
+	Expires       string
+	HelperVersion string
+	ClientID      string
+	SkillURL      string
 }
 
 func newPage(code string, expires time.Time) pageData {
-	d := pageData{Version: ConsentVersion, Text: ConsentText, Code: code}
+	d := pageData{Version: ConsentVersion, Text: ConsentText, Code: code,
+		HelperVersion: HelperVersion, ClientID: HelperClientID, SkillURL: SkillURL}
 	if code != "" {
 		d.Expires = expires.UTC().Format(time.RFC3339)
 	}
