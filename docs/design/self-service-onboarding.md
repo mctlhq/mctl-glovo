@@ -141,8 +141,9 @@ person: installs the helper (or, later, the extension) and links
 State per principal, kept in mctl-api next to consent:
 
 `none -> pending -> approved -> (revoked)`, and `pending -> rejected`, with an
-expiry for `pending` (the signup store uses seven days) and an audit row per
-decision (actor, reason, time).
+audit row per decision (actor, reason, time). A `pending` request expires after
+seven days and the person is emailed that it lapsed and that they can ask again
+(D7).
 
 ## 5. Components
 
@@ -163,10 +164,21 @@ this. The cheapest correct place is the ZITADEL callback
   UNVERIFIED, so do not depend on it.
 - Tests both ways: Google passes; GitHub, staff and password sign-ins are
   refused; reverting the guard makes the refusal test fail.
-- Risk to check first: a principal that signed in through GitHub or the staff
-  login is locked out from Glovo. The pilot principal may be one of them; its
-  sign-in method must be checked before the guard goes live, and if needed its
-  Google identity linked to the same principal first.
+- Scope (D5, owner, 2026-11-23): the MCP resource and the link resource, so one
+  identity covers both who links and who reads.
+- Risk: a principal that signed in through GitHub or the staff login is locked
+  out from Glovo, and the pilot principal may be one of them. It cannot be read
+  from the API: mctl-api has no read route for a principal's external
+  identities, only writes (`POST /admin/principals/{from}/merge-into/{into}`
+  and `.../disable`). The owner does not remember which login was used.
+- Therefore ship the guard in **shadow mode** first: it refuses nothing and
+  logs, for every Glovo-resource sign-in, `would_refuse` with the provider and
+  the masked principal. A few days of the owner's own use show whether the
+  pilot principal would be refused. Only then switch it to enforcing. If the
+  pilot principal would be refused, the options (decided from the data, as an
+  owner decision at that time) are to attach the owner's Google identity to it
+  with the existing merge route, or to re-link the owner under the Google
+  principal.
 
 ### 5.2 Access request and approval flag (mctl-api, mctl-glovo)
 
@@ -179,12 +191,24 @@ this. The cheapest correct place is the ZITADEL callback
   `access` field (`approved|none`, absent when unreadable). `state` stays the
   consent state. The service fails closed on absent or unknown, as it does for
   consent today.
-- The static allowlist stops being the day-to-day gate. Keep it only as an
-  owner-only narrowing for break-glass, or remove it in a later PR; decision
-  D3.
-- Slot: reserve the consent slot when access is approved, so an approved
-  person is never refused for capacity afterwards (decision D2). Capacity still
-  bounds the cohort.
+- The static allowlist stops being the day-to-day gate (D3, owner,
+  2026-11-23: keep it as an emergency lock). In consent mode the service already
+  treats it as optional narrowing, so in normal operation it is switched off
+  (the gitops `allowlist` switch false) and consent plus the approval flag are
+  the gates. In an emergency the owner switches it on with only the owner's
+  principal in the Vault value; because it is read at boot, that costs a pod
+  restart, so the fast emergency tools stay the kill switch and `revoked`.
+  If the allowlist is left on, every newly approved person would also have to
+  be added to it by hand, which defeats the flow.
+- Slot (D2, owner, 2026-11-23): reserved when access is approved, so an
+  approved person is never refused for capacity afterwards. Capacity still
+  bounds the cohort. A reserved slot that the person never uses is released
+  when the approval is revoked or expires; the expiry of an unused approval
+  is a follow-up to decide with the first real cohort.
+- A dynamic pilot allowlist already exists at the team-grant level in mctl-api
+  (`PUT/DELETE /glovo/pilot/{tenant}/principals/{principal_id}`). Whether it is a
+  better home for the approval flag than a new table is UNVERIFIED and is the
+  first thing to check when stage B starts.
 
 ### 5.3 Messages that tell the user what to do (mctl-glovo, mctl-api)
 
@@ -252,7 +276,8 @@ a receipt; add a Glovo type with two templates.
 
 ### 5.6 Linking: helper first, extension second
 
-- Wave 1 (a handful of technical users): the helper. This requires publishing
+- Wave 1 (D4, owner, 2026-11-23: a handful of technical users): the helper.
+  This requires publishing
   a release of `glovo-link` with install instructions, which does not exist
   today, and stating the password or code sign-in requirement.
 - Wave 2: a browser extension that watches the same token responses in the
@@ -294,7 +319,7 @@ revocation.
 | A | Messages and `/link` page (5.3), helper release and install text | mctl-glovo |
 | B | Access table, routes and the `access` field (5.2), service reads it | mctl-api, mctl-glovo |
 | C | Telegram card with a decide-page link, the decide page (5.4), email (5.5) | mctl-telegram, mctl-api, mctl-web |
-| D | Google-only guard (5.1), after checking the pilot principal | mctl-api |
+| D | Google-only guard (5.1), shadow mode first, enforcing after the pilot principal is checked from the logs | mctl-api |
 | E | Two principals end to end (#43), then 2-3 trusted users at capacity 3-5 | all |
 | F | Extension (5.6), wider cohort | new |
 
@@ -306,19 +331,21 @@ Stage B must land before C, and C before any real user is asked to sign up.
 
 - D1. DECIDED 2026-11-23: the Telegram card links to a decide page with MFA
   (section 5.4); no exception to `directHumanAdmin`.
-- D2. Reserve the slot at approval, or claim it at consent as today.
-- D3. Keep the static allowlist as an owner-only break-glass narrowing, or
-  remove it once the approval flag is live.
-- D4. Helper only for the first wave, or the extension in the first release.
-- D5. Google-only scope: the MCP resource only, or the link resource too; and
-  how the pilot principal is handled before the guard.
-- D6. Email sender, wording and example commands.
-- D7. Expiry of an unanswered request (seven days is the signup precedent) and
-  whether the person is told.
+- D2. DECIDED 2026-11-23: reserve the slot at approval.
+- D3. DECIDED 2026-11-23: keep the static allowlist as an emergency lock,
+  switched off in normal operation (section 5.2).
+- D4. DECIDED 2026-11-23: the helper for the first wave, the extension second.
+- D5. DECIDED 2026-11-23: Google only on the MCP resource and the link
+  resource. The pilot principal is handled from shadow-mode data (section 5.1).
+- D6. OPEN: email sender, wording and example commands.
+- D7. DECIDED 2026-11-23: a request lapses after seven days and the person is
+  emailed.
 
 ## 9. Unverified
 
-How each Claude client renders a 403 body and a JSON-RPC error; whether a
+How the pilot principal signs in (no read route for external identities);
+whether the team-grant pilot allowlist route is a better home for the approval
+flag; how each Claude client renders a 403 body and a JSON-RPC error; whether a
 CIMD client can pass `?upstream=`; the mapping of tool errors in the MCP
 library for store failures; the consent PUT handler's gating and the
 `capacity_reached` message the page shows; whether `glovo-link` is published;
