@@ -134,7 +134,7 @@ person: /link -> reads the terms, records consent, presses "Request access"
 owner: Telegram card [Approve] [Reject]     (PA bot, one-time token)
   -> approve: access = approved, slot reserved, email "you are connected"
   -> reject: email "not now", request closed
-person: installs the helper (or, later, the extension) and links
+person: installs the helper and links
   -> read tools work; first useful commands are in the email
 ```
 
@@ -293,20 +293,21 @@ a receipt; add a Glovo type with two templates.
 - Rejected: a short, polite no.
 - Sender and texts: D6 (decided), Appendix A.
 
-### 5.6 Linking: helper first, extension second
+### 5.6 Linking: the helper (the extension is parked)
 
 - Wave 1 (D4, owner, 2026-11-23: a handful of technical users): the helper.
   This requires publishing
   a release of `glovo-link` with install instructions, which does not exist
   today, and stating the password or code sign-in requirement.
-- Wave 2: a browser extension that watches the same token responses in the
-  person's own browser and uploads to `/link`. It needs no helper, no
-  Playwright and no Chrome install, and it removes the Google block, because
-  Google sees a normal browser. It is a separate project (build, review,
-  store, privacy statement) and is decision D4.
-- Accounts that only have Google or Facebook sign-in cannot be captured with the
-  automated tool; say so in the consent and `/link` text until the extension
-  exists.
+- PARKED (owner, 2026-11-23): a browser extension that would watch the same
+  token responses in the person's own browser and upload to `/link`. It would
+  need no helper, no Playwright and no Chrome install, and it would remove the
+  Google block, because Google sees a normal browser. The owner judged it not
+  worth building now; it is a separate project (build, review, store, privacy
+  statement) and stays out of scope until the owner reopens it.
+- Consequence of parking it: accounts that only have Google or Facebook
+  sign-in cannot be captured with the automated tool and stay unsupported.
+  Say so in the consent, `/link` and approval-email text (it already does).
 
 ### 5.7 Offboarding
 
@@ -340,7 +341,7 @@ revocation.
 | C | Telegram card with a decide-page link, the decide page (5.4), email (5.5) | mctl-telegram, mctl-api, mctl-web |
 | D | Google-only guard (5.1), shadow mode first, enforcing after the pilot principal is checked from the logs | mctl-api |
 | E | Two principals end to end (#43), then 2-3 trusted users at capacity 3-5 | all |
-| F | Extension (5.6), wider cohort | new |
+| F | Extension (5.6): PARKED by the owner, 2026-11-23 | none |
 
 Each stage is its own PR per repository with a mutation-checked test, ships
 dark behind a switch, and goes live only on the owner's explicit decision.
@@ -353,7 +354,8 @@ Stage B must land before C, and C before any real user is asked to sign up.
 - D2. DECIDED 2026-11-23: reserve the slot at approval.
 - D3. DECIDED 2026-11-23: keep the static allowlist as an emergency lock,
   switched off in normal operation (section 5.2).
-- D4. DECIDED 2026-11-23: the helper for the first wave, the extension second.
+- D4. DECIDED 2026-11-23: the helper. The extension, first planned as a second
+  wave, is PARKED by the owner the same day.
 - D5. DECIDED 2026-11-23: Google only on the MCP resource and the link
   resource. The pilot principal is handled from shadow-mode data (section 5.1).
 - D6. DECIDED 2026-11-23: sender `MCTL <noreply@mctl.ai>` (the existing
