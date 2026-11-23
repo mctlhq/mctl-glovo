@@ -111,6 +111,45 @@ fresh link-audience token as preview and upload, not an MCP token) reads the con
 uncached. Any future MCP route that acts with a stored session must check
 the same gate on every call.
 
+`GLOVO_C2_REQUIRE_ACCESS` adds the owner's approval to that gate
+(`docs/design/self-service-onboarding.md` 5.2, stage B). Unset or `false`
+(the default) changes nothing: an active consent admits, and the `access`
+field of mctl-api's consent answer is not looked at. `true` admits a
+principal only when the same answer carries an active consent to the current
+text **and** `access` is exactly `approved`. Any other value (`TRUE`,
+` true`, `1`, `yes`) stops the process at startup, and so does `true`
+without the consent route, which is where the access state comes from. With
+the flag on:
+
+| mctl-api answer | Result |
+|---|---|
+| consent active, `access: approved` | admitted; the only answer that is cached |
+| consent active, `access` is `none`, `pending`, `rejected` or `revoked` | refused, 403 (`principal_not_allowed` on `/mcp`, `access_denied` on the link routes, "access refused" on a tool call) |
+| consent active, `access` absent, empty or a value this service does not know | refused, 503: the state was not observed, so it is neither approved nor a decision |
+| no consent, whatever `access` says | refused, 403 `not_admitted` / `consent_required`, as without the flag |
+| mctl-api unreachable, non-200 or a malformed body | refused, 503, as without the flag |
+
+The flag is carried by the one consent source that the token verifier gate,
+the per-call admitter (`admit.go`, 5 s) and the link routes all read, so none
+of them can admit on consent alone, and the cache times above are unchanged:
+a positive answer is cached only when both hold, and no refusal or failed
+read is cached. Revoking an approval in mctl-api therefore stops tool calls
+within 5 s and new requests within a minute. mctl-api serves the `access`
+field from 4.176.0, and only while its access store is wired.
+
+Switch it on in this order, never the reverse:
+
+1. mctl-api `GLOVO_ACCESS_REQUIRED=true`. Its backfill approves every
+   principal who already holds an active consent, the owner included.
+2. Check that the consent read of a known principal answers
+   `access: approved`.
+3. `GLOVO_C2_REQUIRE_ACCESS=true` here (a gitops change that needs the
+   owner's go-ahead).
+
+Turning this flag on first refuses everyone, the owner included, until
+mctl-api has approved them; setting it back to `false` restores the consent
+gate.
+
 Until mctl-api serves masked identities (C2-1c), no preview answers, even
 with the flag on.
 

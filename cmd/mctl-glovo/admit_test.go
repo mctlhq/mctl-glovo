@@ -53,6 +53,12 @@ func noneBody(pid string) string { return `{"principal_id":"` + pid + `","state"
 
 func newAdmitEnv(t *testing.T, ttl time.Duration) *admitEnv {
 	t.Helper()
+	return newAdmitEnvAccess(t, ttl, false)
+}
+
+// newAdmitEnvAccess is newAdmitEnv with GLOVO_C2_REQUIRE_ACCESS as given.
+func newAdmitEnvAccess(t *testing.T, ttl time.Duration, requireAccess bool) *admitEnv {
+	t.Helper()
 	e := &admitEnv{clock: &fakeClock{t: time.Unix(1_800_000_000, 0)}}
 	e.answer = func(pid string) (int, string) { return 200, activeBody(pid) }
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +81,7 @@ func newAdmitEnv(t *testing.T, ttl time.Duration) *admitEnv {
 	cl.Timeout = 300 * time.Millisecond
 	src, err := linkflow.NewAPIConsent(linkflow.APIConsentConfig{
 		BaseURL: srv.URL, TokenFile: e.tokenFile,
-		Client: cl,
+		Client: cl, RequireAccess: requireAccess,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -376,5 +382,111 @@ func TestAdmitRefusalCarriesNoDetail(t *testing.T) {
 		if strings.Contains(err.Error(), leak) {
 			t.Fatalf("refusal %q leaks %q", err, leak)
 		}
+	}
+}
+
+// accessBody is an active consent answer with the raw `"access":...` member
+// given, or without the member for "".
+func accessBody(pid, field string) string {
+	if field != "" {
+		field = "," + field
+	}
+	return `{"principal_id":"` + pid + `","state":"active","consent_version":"` + linkflow.ConsentVersion + `"` + field + `}`
+}
+
+// GLOVO_C2_REQUIRE_ACCESS at the per-call admitter. Off, the access field
+// decides nothing. On, only an active consent with access "approved" admits;
+// every other answer refuses, and no refusal is cached as an admission.
+func TestAdmitRequireAccess(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		answer  func(pid string) (int, string)
+		off, on bool
+	}{
+		{"approved", func(pid string) (int, string) { return 200, accessBody(pid, `"access":"approved"`) }, true, true},
+		{"none", func(pid string) (int, string) { return 200, accessBody(pid, `"access":"none"`) }, true, false},
+		{"pending", func(pid string) (int, string) { return 200, accessBody(pid, `"access":"pending"`) }, true, false},
+		{"rejected", func(pid string) (int, string) { return 200, accessBody(pid, `"access":"rejected"`) }, true, false},
+		{"revoked", func(pid string) (int, string) { return 200, accessBody(pid, `"access":"revoked"`) }, true, false},
+		{"absent", func(pid string) (int, string) { return 200, accessBody(pid, ``) }, true, false},
+		{"empty", func(pid string) (int, string) { return 200, accessBody(pid, `"access":""`) }, true, false},
+		{"unknown value", func(pid string) (int, string) { return 200, accessBody(pid, `"access":"granted"`) }, true, false},
+		{"upper case", func(pid string) (int, string) { return 200, accessBody(pid, `"access":"Approved"`) }, true, false},
+		{"approved without consent", func(pid string) (int, string) {
+			return 200, `{"principal_id":"` + pid + `","state":"none","access":"approved"}`
+		}, false, false},
+		{"approved for another principal", func(string) (int, string) { return 200, accessBody(admPidB, `"access":"approved"`) }, false, false},
+		{"upstream 503", func(pid string) (int, string) { return 503, accessBody(pid, `"access":"approved"`) }, false, false},
+	} {
+		for _, require := range []bool{false, true} {
+			want := tc.off
+			if require {
+				want = tc.on
+			}
+			e := newAdmitEnvAccess(t, admitTTL, require)
+			e.set(tc.answer)
+			err := e.admit(context.Background(), admPidA)
+			if (err == nil) != want {
+				t.Errorf("%s (require=%v): admit = %v, want admitted=%v", tc.name, require, err, want)
+				continue
+			}
+			before := e.hits.Load()
+			err = e.admit(context.Background(), admPidA)
+			switch {
+			case want && (err != nil || e.hits.Load() != before):
+				t.Errorf("%s (require=%v): the positive was not cached: %v, hits %d->%d", tc.name, require, err, before, e.hits.Load())
+			case !want && (err == nil || e.hits.Load() == before):
+				t.Errorf("%s (require=%v): a refusal was cached or passed: %v, hits %d->%d", tc.name, require, err, before, e.hits.Load())
+			case !want && !errors.Is(err, errAdmitRefused):
+				t.Errorf("%s (require=%v): refusal = %v", tc.name, require, err)
+			}
+		}
+	}
+}
+
+// With the flag on, a withdrawn approval stops serving within the TTL even
+// though the consent stays active, an unreadable answer after a positive
+// refuses, and neither is cached.
+func TestAdmitRequireAccessRevocationWithinTTL(t *testing.T) {
+	approved := func(pid string) (int, string) { return 200, accessBody(pid, `"access":"approved"`) }
+	e := newAdmitEnvAccess(t, admitTTL, true)
+	e.set(approved)
+	if err := e.admit(context.Background(), admPidA); err != nil {
+		t.Fatal(err)
+	}
+	e.set(func(pid string) (int, string) { return 200, accessBody(pid, `"access":"revoked"`) })
+	e.clock.Advance(admitTTL - time.Millisecond)
+	if err := e.admit(context.Background(), admPidA); err != nil {
+		t.Fatalf("inside the TTL the positive is still served (bounded staleness): %v", err)
+	}
+	e.clock.Advance(time.Millisecond)
+	for i := 0; i < 2; i++ {
+		before := e.hits.Load()
+		if err := e.admit(context.Background(), admPidA); err == nil || e.hits.Load() == before {
+			t.Fatalf("revoked access: err=%v hits %d->%d", err, before, e.hits.Load())
+		}
+	}
+	// Approved again, then mctl-api stops serving the field.
+	e.set(approved)
+	if err := e.admit(context.Background(), admPidA); err != nil {
+		t.Fatalf("did not recover: %v", err)
+	}
+	e.set(func(pid string) (int, string) { return 200, accessBody(pid, ``) })
+	e.clock.Advance(admitTTL)
+	if err := e.admit(context.Background(), admPidA); err == nil {
+		t.Fatal("an answer without the access field admitted from an old positive")
+	}
+	// Principals never share the decision.
+	e.set(func(pid string) (int, string) {
+		if pid == admPidA {
+			return 200, accessBody(pid, `"access":"approved"`)
+		}
+		return 200, accessBody(pid, `"access":"pending"`)
+	})
+	if err := e.admit(context.Background(), admPidA); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.admit(context.Background(), admPidB); err == nil {
+		t.Fatal("a pending principal admitted next to an approved one")
 	}
 }

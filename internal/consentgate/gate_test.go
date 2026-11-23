@@ -3,6 +3,7 @@ package consentgate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -235,5 +236,63 @@ func TestLinkConsentIsUncached(t *testing.T) {
 	src.set(version, errors.New("down"))
 	if err := g.LinkConsent(ctx, pid); err == nil || errors.Is(err, tokenstore.ErrConsentRefused) {
 		t.Fatalf("LinkConsent unreadable = %v, want a non-consent error (failed read)", err)
+	}
+}
+
+// A consent without approved access (the source's ErrAccessNotApproved) is a
+// definite no that keeps its cause, is never cached, and drops an earlier
+// positive; the adapters refuse with the access cause, never with a pass or
+// a failed read.
+func TestAccessNotApprovedIsANoAndNotCached(t *testing.T) {
+	ctx := context.Background()
+	g, src, c := newGate(t)
+	if err := g.Check(ctx, pid()); err != nil {
+		t.Fatal(err)
+	}
+	// Approval withdrawn while the positive is cached: served until the TTL.
+	src.set("", fmt.Errorf("source: %w", ErrAccessNotApproved))
+	c.t = c.t.Add(DefaultTTL - time.Millisecond)
+	if err := g.Check(ctx, pid()); err != nil {
+		t.Fatalf("inside the TTL: %v", err)
+	}
+	c.t = c.t.Add(time.Millisecond)
+	reads := src.reads
+	for i := 0; i < 2; i++ {
+		err := g.Check(ctx, pid())
+		if !errors.Is(err, ErrAccessNotApproved) || !errors.Is(err, ErrNoConsent) || errors.Is(err, ErrUnavailable) {
+			t.Fatalf("Check = %v, want ErrAccessNotApproved", err)
+		}
+	}
+	if src.reads != reads+2 {
+		t.Fatalf("a refusal was cached: %d reads for 2 checks", src.reads-reads)
+	}
+	if err := g.Admit(ctx, pidA); !errors.Is(err, authn.ErrAccessNotApproved) || !errors.Is(err, authn.ErrNotAdmitted) {
+		t.Fatalf("Admit = %v, want authn.ErrAccessNotApproved", err)
+	}
+	if err := g.LinkConsent(ctx, pid()); !errors.Is(err, tokenstore.ErrConsentRefused) {
+		t.Fatalf("LinkConsent = %v, want ErrConsentRefused", err)
+	}
+	// CheckFresh on a refusal evicts a positive cached a moment ago.
+	src.set(version, nil)
+	if err := g.Check(ctx, pid()); err != nil {
+		t.Fatal(err)
+	}
+	src.set("", ErrAccessNotApproved)
+	if err := g.CheckFresh(ctx, pid()); !errors.Is(err, ErrAccessNotApproved) {
+		t.Fatalf("CheckFresh = %v", err)
+	}
+	src.set(version, nil)
+	reads = src.reads
+	if err := g.Check(ctx, pid()); err != nil || src.reads != reads+1 {
+		t.Fatalf("the positive survived a refusal: %v, %d reads", err, src.reads-reads)
+	}
+	// A plain no keeps the plain cause.
+	c.t = c.t.Add(DefaultTTL)
+	src.set("", nil)
+	if err := g.Check(ctx, pid()); !errors.Is(err, ErrNoConsent) || errors.Is(err, ErrAccessNotApproved) {
+		t.Fatalf("no consent = %v", err)
+	}
+	if err := g.Admit(ctx, pidA); !errors.Is(err, authn.ErrNotAdmitted) || errors.Is(err, authn.ErrAccessNotApproved) {
+		t.Fatalf("Admit without consent = %v", err)
 	}
 }

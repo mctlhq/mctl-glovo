@@ -191,6 +191,19 @@ this. The cheapest correct place is the ZITADEL callback
   `access` field (`approved|none`, absent when unreadable). `state` stays the
   consent state. The service fails closed on absent or unknown, as it does for
   consent today.
+- Service side (stage B, mctl-glovo): `GLOVO_C2_REQUIRE_ACCESS`, default
+  off. On, a principal is admitted only with an active consent and
+  `access: approved` in the same answer. mctl-api serves five values
+  (`none|pending|approved|rejected|revoked`); the four that are not
+  `approved` refuse with 403, and an absent or unknown value refuses with
+  503, because it was not observed. The 403 uses the causes that already
+  exist (`principal_not_allowed`, `access_denied`). The answer would let
+  the service tell pending, rejected and not requested apart, but the split
+  codes of 5.3 (`access_not_requested`, `access_pending`, `access_rejected`)
+  are not implemented in the service yet, and this stage adds no new
+  protocol shape; mapping them is a follow-up. Order: mctl-api `GLOVO_ACCESS_REQUIRED` first (its backfill
+  approves existing active consents), this flag second; the reverse locks
+  the owner out.
 - The static allowlist stops being the day-to-day gate (D3, owner,
   2026-11-23: keep it as an emergency lock). In consent mode the service already
   treats it as optional narrowing, so in normal operation it is switched off

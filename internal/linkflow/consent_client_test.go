@@ -308,3 +308,135 @@ func TestAPIConsentMaskedIdentityRefusesAnythingUnexpected(t *testing.T) {
 		t.Fatalf("one non-ASCII letter = %q %v", got, err)
 	}
 }
+
+// accessSource is an APIConsent over a fake mctl-api that answers every read
+// of testPID with (status, body), whatever the query.
+func accessSource(t *testing.T, require bool, status int, body string) *APIConsent {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != readPathPID {
+			http.Error(w, "unexpected request", http.StatusTeapot)
+			return
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	tf := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tf, []byte(testToken+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewAPIConsent(APIConsentConfig{BaseURL: srv.URL, TokenFile: tf, Client: srv.Client(), RequireAccess: require})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.RequiresAccess() != require {
+		t.Fatalf("RequiresAccess = %v, want %v", c.RequiresAccess(), require)
+	}
+	return c
+}
+
+// activeAccess is an active consent answer; field is the raw `"access":...`
+// member, or "" to leave the member out.
+func activeAccess(field string) string {
+	if field != "" {
+		field = "," + field
+	}
+	return `{"principal_id":"` + testPID + `","state":"active","consent_version":"` + ConsentVersion + `","masked_identity":"github:a***"` + field + `}`
+}
+
+// The access field of mctl-api's answer, with GLOVO_C2_REQUIRE_ACCESS off and
+// on. Off, it is not looked at: every row is today's answer. On, only the
+// exact "approved" is a consent; the documented other states are a definite
+// no; an absent, empty or unknown value is unreadable, never approved and
+// never a "no".
+func TestAPIConsentRequireAccess(t *testing.T) {
+	const (
+		ok          = "ok"
+		notApproved = "not approved"
+		noConsent   = "no consent"
+		unreadable  = "unreadable"
+	)
+	noneWith := func(field string) string {
+		return `{"principal_id":"` + testPID + `","state":"none"` + field + `}`
+	}
+	for _, tc := range []struct {
+		name    string
+		status  int
+		body    string
+		off, on string
+	}{
+		{"approved", 200, activeAccess(`"access":"approved"`), ok, ok},
+		{"none", 200, activeAccess(`"access":"none"`), ok, notApproved},
+		{"pending", 200, activeAccess(`"access":"pending"`), ok, notApproved},
+		{"rejected", 200, activeAccess(`"access":"rejected"`), ok, notApproved},
+		{"revoked", 200, activeAccess(`"access":"revoked"`), ok, notApproved},
+		{"absent", 200, activeAccess(""), ok, unreadable},
+		{"empty", 200, activeAccess(`"access":""`), ok, unreadable},
+		{"null", 200, activeAccess(`"access":null`), ok, unreadable},
+		{"unknown value", 200, activeAccess(`"access":"granted"`), ok, unreadable},
+		{"upper case", 200, activeAccess(`"access":"APPROVED"`), ok, unreadable},
+		{"padded", 200, activeAccess(`"access":" approved"`), ok, unreadable},
+		{"prefix of approved", 200, activeAccess(`"access":"approved_pending"`), ok, unreadable},
+		{"boolean", 200, activeAccess(`"access":true`), unreadable, unreadable},
+		{"no consent, approved", 200, noneWith(`,"access":"approved"`), noConsent, noConsent},
+		{"no consent, no access", 200, noneWith(""), noConsent, noConsent},
+		{"upstream 503", 503, activeAccess(`"access":"approved"`), unreadable, unreadable},
+		{"upstream 500", 500, ``, unreadable, unreadable},
+		{"malformed", 200, `{"principal_id":"` + testPID + `","state":"active","access":`, unreadable, unreadable},
+	} {
+		for _, require := range []bool{false, true} {
+			want := tc.off
+			if require {
+				want = tc.on
+			}
+			c := accessSource(t, require, tc.status, tc.body)
+			v, err := c.RecordedConsent(context.Background(), pidOf(testPID))
+			var got string
+			switch {
+			case err == nil && v == ConsentVersion:
+				got = ok
+			case errors.Is(err, ErrAccessNotApproved) && errors.Is(err, ErrNoConsent) && !errors.Is(err, ErrConsentUnavailable):
+				got = notApproved
+			case errors.Is(err, ErrNoConsent) && !errors.Is(err, ErrConsentUnavailable):
+				got = noConsent
+			case errors.Is(err, ErrConsentUnavailable) && !errors.Is(err, ErrNoConsent):
+				got = unreadable
+			default:
+				got = "unclassified"
+			}
+			if got != want || (err != nil && v != "") {
+				t.Errorf("%s (require=%v): = %q, %v: %s, want %s", tc.name, require, v, err, got, want)
+			}
+		}
+	}
+}
+
+// The preview label follows the same rule: with the flag on it is shown only
+// for approved access, and without it the access field changes nothing.
+func TestAPIConsentMaskedIdentityRequireAccess(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		field   string
+		off, on bool
+	}{
+		{"approved", `"access":"approved"`, true, true},
+		{"none", `"access":"none"`, true, false},
+		{"pending", `"access":"pending"`, true, false},
+		{"revoked", `"access":"revoked"`, true, false},
+		{"absent", ``, true, false},
+		{"unknown value", `"access":"granted"`, true, false},
+	} {
+		for _, require := range []bool{false, true} {
+			want := tc.off
+			if require {
+				want = tc.on
+			}
+			c := accessSource(t, require, 200, activeAccess(tc.field))
+			got, err := c.MaskedIdentity(context.Background(), pidOf(testPID))
+			if shown := err == nil && got == "github:a***"; shown != want || (err != nil && (got != "" || !errors.Is(err, ErrConsentUnavailable))) {
+				t.Errorf("%s (require=%v): = %q %v, want shown=%v", tc.name, require, got, err, want)
+			}
+		}
+	}
+}

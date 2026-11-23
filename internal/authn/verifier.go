@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -70,6 +71,13 @@ const GrantKindPersonal = "personal"
 // ErrNotAdmitted is an Admitter's definite no. Any other Admitter error
 // means the decision could not be read and refuses with 503.
 var ErrNotAdmitted = errors.New("authn: principal not admitted")
+
+// ErrAccessNotApproved is an Admitter's definite no for a principal whose
+// consent holds but whose access request is not approved. It wraps
+// ErrNotAdmitted, so a caller that only knows that error still refuses; the
+// verifier answers it with ReasonNotAllowed rather than ReasonNotAdmitted,
+// because "record your consent" would be the wrong next step.
+var ErrAccessNotApproved = fmt.Errorf("%w: access not approved", ErrNotAdmitted)
 
 // Admitter decides, per request, whether a verified principal may proceed
 // (consentgate.Gate: an active glovo:c2 consent). nil is yes; an error
@@ -334,6 +342,8 @@ func (v *Verifier) Verify(ctx context.Context, token string) (*Principal, error)
 	}
 	if v.admit != nil {
 		switch err := v.admit.Admit(ctx, c.PID); {
+		case errors.Is(err, ErrAccessNotApproved):
+			return nil, refuse(ReasonNotAllowed)
 		case errors.Is(err, ErrNotAdmitted):
 			return nil, refuse(ReasonNotAdmitted)
 		case err != nil:

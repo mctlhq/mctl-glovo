@@ -358,6 +358,9 @@ func TestLinkNoConsentNoCode(t *testing.T) {
 		{"no record", func(c *fakeConsent) { delete(c.versions, pidOwner) }, 403, "consent_required"},
 		{"another text", func(c *fakeConsent) { c.versions[pidOwner] = "c2-link-v0" }, 403, "consent_required"},
 		{"unreadable", func(c *fakeConsent) { c.err = errors.New("mctl-api down") }, 503, "unavailable"},
+		// Consent holds, access is not approved: the cause is access, and
+		// "record your consent" would send the person in a circle.
+		{"access not approved", func(c *fakeConsent) { c.err = linkflow.ErrAccessNotApproved }, 403, "access_denied"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1017,6 +1020,7 @@ func TestLinkPreviewNeedsLiveConsent(t *testing.T) {
 		{"withdrawn", func(c *fakeConsent) { delete(c.versions, pidOwner) }, 403, "consent_required"},
 		{"another text", func(c *fakeConsent) { c.versions[pidOwner] = "c2-link-v0" }, 403, "consent_required"},
 		{"unreadable", func(c *fakeConsent) { c.err = errors.New("mctl-api down") }, 503, "unavailable"},
+		{"access not approved", func(c *fakeConsent) { c.err = linkflow.ErrAccessNotApproved }, 403, "access_denied"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, defaultCaps())

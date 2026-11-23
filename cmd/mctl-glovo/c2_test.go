@@ -329,3 +329,56 @@ func TestC2StoreConfigWiresMaskedIdentity(t *testing.T) {
 		t.Fatalf("consent mode: mask=%v linkConsent=%v", with.MaskIdentity != nil, with.LinkConsent != nil)
 	}
 }
+
+// GLOVO_C2_REQUIRE_ACCESS: unset, "" and "false" are off, "true" is on,
+// anything else stops the boot, and "true" without the consent route (which
+// carries the access state) is refused, not ignored.
+func TestC2RequireAccessFlag(t *testing.T) {
+	consentEnv := func() map[string]string {
+		m := fullEnv()
+		m["GLOVO_CONSENT_API_URL"] = "https://api.mctl.ai"
+		m["GLOVO_CONSENT_TOKEN_FILE"] = "/var/run/secrets/mctl-api/token"
+		return m
+	}
+	if c, err := loadC2(env(consentEnv())); err != nil || c.requireAccess {
+		t.Fatalf("unset: requireAccess=%v %v", c.requireAccess, err)
+	}
+	for v, want := range map[string]bool{"": false, "false": false, "true": true} {
+		m := consentEnv()
+		m["GLOVO_C2_REQUIRE_ACCESS"] = v
+		c, err := loadC2(env(m))
+		if err != nil || c.requireAccess != want {
+			t.Errorf("%q: requireAccess=%v %v, want %v", v, c.requireAccess, err, want)
+			continue
+		}
+		// The flag reaches the one source every gate reads.
+		src, admit, err := c2Access(c)
+		if err != nil || !admit {
+			t.Fatalf("%q: c2Access admit=%v %v", v, admit, err)
+		}
+		api, ok := src.(*linkflow.APIConsent)
+		if !ok || api.RequiresAccess() != want {
+			t.Errorf("%q: the consent source requires access = %v, want %v", v, ok && api.RequiresAccess(), want)
+		}
+	}
+	for _, v := range []string{"1", "0", "TRUE", "True", "yes", "on", " true", "true ", "false ", "FALSE", "t"} {
+		m := consentEnv()
+		m["GLOVO_C2_REQUIRE_ACCESS"] = v
+		if _, err := loadC2(env(m)); err == nil || !strings.Contains(err.Error(), "GLOVO_C2_REQUIRE_ACCESS") {
+			t.Errorf("%q accepted: %v", v, err)
+		}
+	}
+	// Allowlist-only mode has no access state to read.
+	m := fullEnv()
+	m["GLOVO_C2_REQUIRE_ACCESS"] = "true"
+	if _, err := loadC2(env(m)); err == nil || !strings.Contains(err.Error(), "GLOVO_C2_REQUIRE_ACCESS") {
+		t.Errorf("the flag without the consent route: %v", err)
+	}
+	if _, _, err := c2Access(c2Config{enabled: true, allowed: []string{"prn_owner"}, requireAccess: true}); err == nil {
+		t.Error("c2Access built an allowlist-only gate with requireAccess set")
+	}
+	m["GLOVO_C2_REQUIRE_ACCESS"] = "false"
+	if c, err := loadC2(env(m)); err != nil || c.requireAccess {
+		t.Errorf("false without the consent route: %v", err)
+	}
+}

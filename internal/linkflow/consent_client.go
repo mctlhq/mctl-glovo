@@ -51,17 +51,24 @@ type APIConsentConfig struct {
 	// timeout. mctl-api traffic never goes through the Glovo egress proxy.
 	// Redirects are never followed, whichever client is given.
 	Client *http.Client
+	// RequireAccess is GLOVO_C2_REQUIRE_ACCESS. False (the default): the
+	// answer's access field is not looked at, and consent alone decides.
+	// True: a consent counts only when the same answer says access
+	// "approved"; see accessDecision.
+	RequireAccess bool
 }
 
 // APIConsent is the ConsentSource that reads mctl-api's consent record.
 // Only mctl-api's documented absence (200, state "none") is ErrNoConsent;
 // every other answer, and every failure to get one, is
-// ErrConsentUnavailable. Nothing from the token or the response body ever
-// reaches an error.
+// ErrConsentUnavailable. With RequireAccess, an active consent whose access
+// is a known state other than approved is ErrAccessNotApproved. Nothing from
+// the token or the response body ever reaches an error.
 type APIConsent struct {
-	base      string
-	tokenFile string
-	client    *http.Client
+	base          string
+	tokenFile     string
+	client        *http.Client
+	requireAccess bool
 }
 
 // dnsLabel is one RFC 1123 label.
@@ -136,14 +143,46 @@ func NewAPIConsent(cfg APIConsentConfig) (*APIConsent, error) {
 	// A 3xx is an answer, not a pointer: it lands on the non-200 path and
 	// fails closed, so a redirect can never supply the consent.
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &APIConsent{base: u.Scheme + "://" + strings.ToLower(u.Host), tokenFile: cfg.TokenFile, client: &c}, nil
+	return &APIConsent{base: u.Scheme + "://" + strings.ToLower(u.Host), tokenFile: cfg.TokenFile, client: &c, requireAccess: cfg.RequireAccess}, nil
 }
+
+// RequiresAccess reports whether a consent counts only with approved access
+// (APIConsentConfig.RequireAccess).
+func (c *APIConsent) RequiresAccess() bool { return c.requireAccess }
 
 type consentAnswer struct {
 	PrincipalID    string `json:"principal_id"`
 	State          string `json:"state"`
 	ConsentVersion string `json:"consent_version"`
 	MaskedIdentity string `json:"masked_identity"`
+	// Access is the principal's access request state, served since mctl-api
+	// 4.176.0 whenever its access store is wired. Read only with
+	// RequireAccess.
+	Access string `json:"access"`
+}
+
+// accessApproved is the one access value that admits.
+const accessApproved = "approved"
+
+// accessDecision reads the access field of an answer whose consent is
+// active. Only the exact value "approved" is nil. The other states mctl-api
+// documents (none, pending, rejected, revoked) are a definite no,
+// ErrAccessNotApproved. Anything else is ErrConsentUnavailable, not a "no":
+// an absent or empty field means mctl-api's access store is not wired or the
+// answer comes from a version that does not serve it, and an unknown value
+// is a state this service cannot interpret. Neither was observed as "not
+// approved", so neither may look like a decision; both still refuse.
+func accessDecision(access string) error {
+	switch access {
+	case accessApproved:
+		return nil
+	case "none", "pending", "rejected", "revoked":
+		return ErrAccessNotApproved
+	case "":
+		return unavailable("access state absent")
+	default:
+		return unavailable("unknown access state")
+	}
 }
 
 // maskedPattern is the only label shape the preview will show: a provider
@@ -168,13 +207,18 @@ func (c *APIConsent) RecordedConsent(ctx context.Context, pid tokenstore.PID) (s
 	if a.State == "none" {
 		return "", ErrNoConsent
 	}
+	if c.requireAccess {
+		if err := accessDecision(a.Access); err != nil {
+			return "", err
+		}
+	}
 	return a.ConsentVersion, nil
 }
 
 // MaskedIdentity returns the masked label mctl-api derives for pid, for the
 // link preview. It needs an active consent and a label of exactly the
-// expected shape; anything else, a "none" state
-// included, is ErrConsentUnavailable, so the preview refuses rather than
+// expected shape (and, with RequireAccess, approved access); anything else,
+// a "none" state included, is ErrConsentUnavailable, so the preview refuses rather than
 // show a blank or an unexpected value.
 func (c *APIConsent) MaskedIdentity(ctx context.Context, pid tokenstore.PID) (string, error) {
 	a, err := c.read(ctx, pid, maskedQuery)
@@ -182,6 +226,10 @@ func (c *APIConsent) MaskedIdentity(ctx context.Context, pid tokenstore.PID) (st
 		return "", err
 	}
 	if a.State != "active" || !maskedPattern.MatchString(a.MaskedIdentity) {
+		return "", unavailable("identity label unavailable")
+	}
+	// The label of a principal is shown only to one who may link.
+	if c.requireAccess && a.Access != accessApproved {
 		return "", unavailable("identity label unavailable")
 	}
 	return a.MaskedIdentity, nil
