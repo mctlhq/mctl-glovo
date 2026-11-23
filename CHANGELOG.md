@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/mctlhq/mctl-glovo/compare/0.5.0...0.6.0) (2026-11-23)
+
+
+### Features
+
+* **link:** say on /link how to create the session and install the helper ([f06ffc8](https://github.com/mctlhq/mctl-glovo/commit/f06ffc8ea0156e2ce9c96f1891f5204fb96b6651))
+* **link:** say on /link how to create the session and install the helper ([0521ce5](https://github.com/mctlhq/mctl-glovo/commit/0521ce53b757e05e7ccb132ce5b2fc11556f4c9b))
+
 ## [0.5.0](https://github.com/mctlhq/mctl-glovo/compare/0.4.0...0.5.0) (2026-11-22)
 
 
