@@ -213,13 +213,30 @@ this. The cheapest correct place is the ZITADEL callback
   carries only an opaque id; mctl-telegram checks the sender against a
   dedicated owner list and calls mctl-api with a service identity; mctl-api
   consumes the token atomically, so a replay is `409`.
-- Conflict with `directHumanAdmin`: a Telegram callback is a service path and
-  cannot pass that rule as written. Two options, decision D1:
-  (a) the button opens a decide page that requires MFA (the DevLoop decide-page
-  model; the rule is intact, one more tap); (b) a deliberate, narrowly scoped
-  exception for this one action, trusting the allowlisted Telegram id plus the
-  one-time token and recording the actor as the Telegram id. (b) is a weakening
-  of the rule and is the owner's call.
+- Decided (D1, owner, 2026-11-23): the Telegram button does not decide
+  anything. It opens a decide page (a link carrying the one-time token), and
+  the decision is taken on that page by the signed-in owner with MFA. The rule
+  `directHumanAdmin` is untouched: agent, service and relay callers still
+  cannot decide, and no exception is added. The cost is one more step than a
+  bare tap.
+  - The page follows the existing precedent: the DevLoop decide page and the
+    release approval page require `amr=mfa` (mctl-api
+    `handlers_devloop_decide.go`, `release_approval_page.go`), and the staff
+    login that the owner uses has a hardware key as its only second factor
+    (`zitadel-iac/iac/login_policy.tf`). A Glovo access decision page should
+    reuse that shape rather than invent a new check.
+  - The Telegram side therefore needs no callback handler and no owner
+    Telegram-id check for the decision itself; the card is a notification with
+    a link. The one-time token is still required: it binds the link to one
+    request, expires, and is consumed on the decision, so a forwarded or
+    replayed link decides nothing without the owner's own MFA session.
+  - The page shows who asked (the masked identity), when, the consent version,
+    the slot count, and the Approve and Reject actions with a mandatory
+    reason, and records the actor and the reason in the audit row.
+  - UNVERIFIED until the page is built: how the page reads the owner's MFA
+    state for a new route (the existing pages are the model, not a shared
+    library), and whether the link can be opened from the Telegram in-app
+    browser or needs the system browser.
 
 ### 5.5 Email (mctl-web Worker)
 
@@ -258,8 +275,9 @@ revocation.
 - Creation of MCTL accounts is open to any Google account, so the Glovo gates
   are approval, consent and capacity, not sign-in. They must stay closed on
   any doubt: an unreadable approval is "none", never "approved".
-- A Telegram callback is attacker-influenced input: opaque ids, owner-only
-  sender check, single-use token, expiry, audit with the decision reason.
+- The decide link is attacker-influenced input if it leaks: a single-use token
+  bound to one request, an expiry, MFA on the page, and an audit row with the
+  actor and the decision reason. The Telegram message decides nothing.
 - The service holds other people's Glovo sessions. The existing token-store
   design (encryption, decrypt caps, audit) applies; the consent text, the
   retention and the deletion path must cover people other than the owner.
@@ -275,7 +293,7 @@ revocation.
 |---|---|---|
 | A | Messages and `/link` page (5.3), helper release and install text | mctl-glovo |
 | B | Access table, routes and the `access` field (5.2), service reads it | mctl-api, mctl-glovo |
-| C | Telegram card and callback (5.4), email (5.5) | mctl-telegram, mctl-api, mctl-web |
+| C | Telegram card with a decide-page link, the decide page (5.4), email (5.5) | mctl-telegram, mctl-api, mctl-web |
 | D | Google-only guard (5.1), after checking the pilot principal | mctl-api |
 | E | Two principals end to end (#43), then 2-3 trusted users at capacity 3-5 | all |
 | F | Extension (5.6), wider cohort | new |
@@ -286,8 +304,8 @@ Stage B must land before C, and C before any real user is asked to sign up.
 
 ## 8. Decisions for the owner
 
-- D1. Telegram tap: open an MFA decide page (a), or a narrow exception to
-  `directHumanAdmin` for this one action (b).
+- D1. DECIDED 2026-11-23: the Telegram card links to a decide page with MFA
+  (section 5.4); no exception to `directHumanAdmin`.
 - D2. Reserve the slot at approval, or claim it at consent as today.
 - D3. Keep the static allowlist as an owner-only break-glass narrowing, or
   remove it once the approval flag is live.
