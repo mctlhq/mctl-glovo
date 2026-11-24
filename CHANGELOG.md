@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/mctlhq/mctl-glovo/compare/0.6.1...0.7.0) (2026-11-24)
+
+
+### Features
+
+* **c2:** require approved access behind GLOVO_C2_REQUIRE_ACCESS ([fc78797](https://github.com/mctlhq/mctl-glovo/commit/fc7879713909afb04136aac73a34b0bf7894f6ac))
+* **c2:** require approved access behind GLOVO_C2_REQUIRE_ACCESS ([f042a39](https://github.com/mctlhq/mctl-glovo/commit/f042a3944f42b98549440e0de74494a156a524f4)), closes [#82](https://github.com/mctlhq/mctl-glovo/issues/82)
+
 ## [0.6.1](https://github.com/mctlhq/mctl-glovo/compare/0.6.0...0.6.1) (2026-11-23)
 
 

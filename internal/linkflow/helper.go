@@ -6,7 +6,7 @@ package linkflow
 // marked line on every release (extra-files in release-please-config.json),
 // and TestHelperVersionIsTheReleaseVersion fails if it ever drifts from the
 // manifest.
-const HelperVersion = "0.6.1" // x-release-please-version
+const HelperVersion = "0.7.0" // x-release-please-version
 
 // HelperClientID is the public OAuth client document of the helper (CIMD),
 // served by the landing worker. It is the value people pass as -client-id.
