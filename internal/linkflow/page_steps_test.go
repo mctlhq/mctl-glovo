@@ -21,7 +21,7 @@ func TestLinkPageSaysHowToLink(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		`<a href="` + AccessURL + `">`,
+		"<code>" + AccessURL + "</code>",
 		"request access",
 		"Wait until the request is approved",
 		"password or an email code",

@@ -38,7 +38,7 @@ var pageTmpl = template.Must(template.New("link").Parse(`<!doctype html>
 <h2>How linking works</h2>
 <p>Linking has two parts: a Glovo session file made on your own computer, and the helper <code>glovo-link</code> that uploads it. Your Glovo account must be able to sign in with a password or an email code. Accounts that only use Google or Facebook sign-in cannot be linked yet.</p>
 <ol>
-<li>Open <a href="{{.AccessURL}}">{{.AccessURL}}</a>, sign in with the Google account you connect your assistant with, record your consent to this text and request access. Wait until the request is approved before you continue.</li>
+<li>Open <code>{{.AccessURL}}</code>, sign in with the Google account you connect your assistant with, record your consent to this text and request access. Wait until the request is approved before you continue.</li>
 <li>Create the session file with glovo-skill ({{.SkillURL}}, a third-party tool, MIT licence). It needs Node.js 18 or newer and Google Chrome. Run <code>git clone {{.SkillURL}}.git</code>, then in that folder <code>npm ci</code>, <code>npm run build</code> and <code>node scripts/login.mjs</code>. In the window that opens, sign in to Glovo with your password or an email code, not with the Google button: Google refuses to sign in inside that window. The file is saved to <code>~/.glovo/session.json</code>.</li>
 <li>Install the helper (it needs Go): <code>go install github.com/mctlhq/mctl-glovo/cmd/glovo-link&#64;{{.HelperVersion}}</code></li>
 <li>Within about 20 minutes of step 2, run <code>glovo-link -client-id {{.ClientID}}</code> and sign in to MCTL once when it asks. A Glovo login is only valid for about 20 minutes and an older file is refused.</li>
