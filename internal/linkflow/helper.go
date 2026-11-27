@@ -15,3 +15,7 @@ const HelperClientID = "https://glovo.mctl.ai/glovo-link/client.json"
 // SkillURL is the third-party tool that signs in to Glovo and writes the
 // session file the helper uploads (MIT).
 const SkillURL = "https://github.com/denya/glovo-skill"
+
+// AccessURL is the mctl-api page where a person records their consent and
+// requests access before linking.
+const AccessURL = "https://api.mctl.ai/glovo/access"
