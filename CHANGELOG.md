@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0](https://github.com/mctlhq/mctl-glovo/compare/0.7.0...0.8.0) (2026-11-27)
+
+
+### Features
+
+* **link:** send people to the access page before linking ([25cf087](https://github.com/mctlhq/mctl-glovo/commit/25cf087d54ca39e59297d9a82d77c68b46c3d662))
+* **link:** send people to the access page before linking ([72d6099](https://github.com/mctlhq/mctl-glovo/commit/72d60994ebea5ab13444cb801879c4725c36be18))
+
+
+### Bug Fixes
+
+* **link:** show the access page address as text ([8c5b636](https://github.com/mctlhq/mctl-glovo/commit/8c5b636624288f255802fb108130797e4d336b80))
+
 ## [0.7.0](https://github.com/mctlhq/mctl-glovo/compare/0.6.1...0.7.0) (2026-11-24)
 
 
